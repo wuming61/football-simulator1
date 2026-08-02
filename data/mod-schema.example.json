@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "packId": "example-background-pack",
+  "name": "Example Community League",
+  "leagues": [
+    {
+      "id": "EXA1",
+      "name": "示例超级联赛",
+      "country": "示例国家",
+      "tier": 3,
+      "simulation": "background"
+    }
+  ],
+  "clubs": [
+    {"id": "exa-alpha", "name": "Alpha FC", "leagueId": "EXA1", "prestige": 72, "averageAbility": 69},
+    {"id": "exa-bravo", "name": "Bravo United", "leagueId": "EXA1", "prestige": 70, "averageAbility": 68},
+    {"id": "exa-charlie", "name": "Charlie City", "leagueId": "EXA1", "prestige": 68, "averageAbility": 66},
+    {"id": "exa-delta", "name": "Delta Athletic", "leagueId": "EXA1", "prestige": 66, "averageAbility": 64}
+  ],
+  "players": [
+    {"id": "exa-player-1", "name": "Example Player", "clubId": "exa-alpha", "position": "ST", "age": 20, "ca": 68, "pa": 82}
+  ]
+}

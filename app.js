@@ -1,0 +1,3501 @@
+(() => {
+  "use strict";
+
+  const APP_VERSION = "v1.0";
+  const SAVE_KEY = "football-simulator-v0-save";
+  const MOD_KEY = "football-simulator-mod-packs";
+  const START_DATE = "2026-08-01";
+  const DQD_DATA = window.DQD_DATA || { meta:{ teamCount:0, playerCount:0 }, leagues:{}, teams:[] };
+  const LEGACY_TEAM_MAP = {
+    mci:"dqd-529", ars:"dqd-513", liv:"dqd-516", mun:"dqd-515", lee:"dqd-534", sun:"dqd-536",
+    rma:"dqd-1755", fcb:"dqd-1756", atm:"dqd-1759", dep:"dqd-1757", bay:"dqd-804", b04:"dqd-806",
+    bvb:"dqd-807", hsv:"dqd-810", int:"dqd-1042", acm:"dqd-1038", juv:"dqd-1040", pal:"dqd-1052",
+    psg:"dqd-731", om:"dqd-735", asm:"dqd-730", ste:"dqd-746"
+  };
+
+  const LEAGUES = {
+    ENG1: { name: "英格兰超级联赛", short: "英超", country: "英格兰", tier: 1, matches: 38, cup: "足总杯", extraCup: "联赛杯" },
+    ENG2: { name: "英格兰冠军联赛", short: "英冠", country: "英格兰", tier: 2, matches: 46, cup: "足总杯", extraCup: "联赛杯" },
+    ESP1: { name: "西班牙甲级联赛", short: "西甲", country: "西班牙", tier: 1, matches: 38, cup: "国王杯" },
+    ESP2: { name: "西班牙乙级联赛", short: "西乙", country: "西班牙", tier: 2, matches: 42, cup: "国王杯" },
+    GER1: { name: "德国甲级联赛", short: "德甲", country: "德国", tier: 1, matches: 34, cup: "德国杯" },
+    GER2: { name: "德国乙级联赛", short: "德乙", country: "德国", tier: 2, matches: 34, cup: "德国杯" },
+    ITA1: { name: "意大利甲级联赛", short: "意甲", country: "意大利", tier: 1, matches: 38, cup: "意大利杯" },
+    ITA2: { name: "意大利乙级联赛", short: "意乙", country: "意大利", tier: 2, matches: 38, cup: "意大利杯" },
+    FRA1: { name: "法国甲级联赛", short: "法甲", country: "法国", tier: 1, matches: 34, cup: "法国杯" },
+    FRA2: { name: "法国乙级联赛", short: "法乙", country: "法国", tier: 2, matches: 34, cup: "法国杯" }
+  };
+
+  const CLUBS = [
+    { id:"mci", name:"Manchester City", code:"MCI", league:"ENG1", prestige:94, budget:185, coach:"Pep Guardiola" },
+    { id:"ars", name:"Arsenal", code:"ARS", league:"ENG1", prestige:91, budget:148, coach:"Mikel Arteta" },
+    { id:"liv", name:"Liverpool", code:"LIV", league:"ENG1", prestige:92, budget:142, coach:"Arne Slot" },
+    { id:"mun", name:"Manchester United", code:"MUN", league:"ENG1", prestige:87, budget:121, coach:"Rúben Amorim" },
+    { id:"lee", name:"Leeds United", code:"LEE", league:"ENG2", prestige:74, budget:44, coach:"Daniel Farke" },
+    { id:"sun", name:"Sunderland", code:"SUN", league:"ENG2", prestige:68, budget:31, coach:"Régis Le Bris" },
+    { id:"rma", name:"Real Madrid", code:"RMA", league:"ESP1", prestige:98, budget:210, coach:"Xabi Alonso" },
+    { id:"fcb", name:"FC Barcelona", code:"BAR", league:"ESP1", prestige:96, budget:102, coach:"Hansi Flick" },
+    { id:"atm", name:"Atlético Madrid", code:"ATM", league:"ESP1", prestige:89, budget:83, coach:"Diego Simeone" },
+    { id:"dep", name:"Deportivo La Coruña", code:"DEP", league:"ESP2", prestige:70, budget:22, coach:"Antonio Hidalgo" },
+    { id:"bay", name:"Bayern München", code:"FCB", league:"GER1", prestige:95, budget:176, coach:"Vincent Kompany" },
+    { id:"b04", name:"Bayer Leverkusen", code:"B04", league:"GER1", prestige:88, budget:92, coach:"Erik ten Hag" },
+    { id:"bvb", name:"Borussia Dortmund", code:"BVB", league:"GER1", prestige:89, budget:105, coach:"Niko Kovač" },
+    { id:"hsv", name:"Hamburger SV", code:"HSV", league:"GER2", prestige:72, budget:27, coach:"Merlin Polzin" },
+    { id:"int", name:"Inter", code:"INT", league:"ITA1", prestige:93, budget:108, coach:"Cristian Chivu" },
+    { id:"acm", name:"AC Milan", code:"MIL", league:"ITA1", prestige:90, budget:97, coach:"Massimiliano Allegri" },
+    { id:"juv", name:"Juventus", code:"JUV", league:"ITA1", prestige:91, budget:99, coach:"Igor Tudor" },
+    { id:"pal", name:"Palermo", code:"PAL", league:"ITA2", prestige:69, budget:24, coach:"Filippo Inzaghi" },
+    { id:"psg", name:"Paris Saint-Germain", code:"PSG", league:"FRA1", prestige:96, budget:196, coach:"Luis Enrique" },
+    { id:"om", name:"Olympique Marseille", code:"OM", league:"FRA1", prestige:85, budget:72, coach:"Roberto De Zerbi" },
+    { id:"asm", name:"AS Monaco", code:"ASM", league:"FRA1", prestige:84, budget:78, coach:"Adi Hütter" },
+    { id:"ste", name:"Saint-Étienne", code:"ASSE", league:"FRA2", prestige:70, budget:20, coach:"Eirik Horneland" }
+  ];
+
+  const REAL_PLAYERS = [
+    { id:"haaland", name:"Erling Haaland", dqdName:"哈兰德", club:"mci", position:"ST", age:26, overall:91, potential:93, value:185, wage:520, pace:89, shooting:94, passing:70, dribbling:82, defending:45, physical:90 },
+    { id:"rodri", name:"Rodri", dqdName:"罗德里", club:"mci", position:"DM", age:30, overall:90, potential:90, value:105, wage:390, pace:66, shooting:76, passing:89, dribbling:84, defending:88, physical:84 },
+    { id:"saka", name:"Bukayo Saka", dqdName:"萨卡", club:"ars", position:"RW", age:24, overall:89, potential:92, value:152, wage:320, pace:88, shooting:86, passing:86, dribbling:90, defending:56, physical:72 },
+    { id:"bellingham", name:"Jude Bellingham", dqdName:"贝林厄姆", club:"rma", position:"CM", age:23, overall:91, potential:94, value:194, wage:410, pace:84, shooting:86, passing:88, dribbling:91, defending:80, physical:86 },
+    { id:"mbappe", name:"Kylian Mbappé", dqdName:"姆巴佩", club:"rma", position:"ST", age:27, overall:92, potential:93, value:205, wage:610, pace:97, shooting:92, passing:83, dribbling:93, defending:38, physical:80 },
+    { id:"yamal", name:"Lamine Yamal", dqdName:"亚马尔", club:"fcb", position:"RW", age:19, overall:89, potential:96, value:190, wage:280, pace:91, shooting:84, passing:88, dribbling:94, defending:40, physical:65 },
+    { id:"pedri", name:"Pedri", dqdName:"佩德里", club:"fcb", position:"CM", age:23, overall:88, potential:92, value:132, wage:280, pace:79, shooting:75, passing:91, dribbling:92, defending:70, physical:66 },
+    { id:"musiala", name:"Jamal Musiala", dqdName:"穆西亚拉", club:"bay", position:"AM", age:23, overall:90, potential:93, value:168, wage:350, pace:89, shooting:84, passing:87, dribbling:94, defending:52, physical:68 },
+    { id:"wirtz", name:"Florian Wirtz", dqdName:"维尔茨", club:"liv", position:"AM", age:23, overall:89, potential:93, value:160, wage:340, pace:82, shooting:84, passing:91, dribbling:92, defending:54, physical:67 },
+    { id:"lautaro", name:"Lautaro Martínez", dqdName:"劳塔罗-马丁内斯", club:"int", position:"ST", age:28, overall:89, potential:89, value:112, wage:310, pace:85, shooting:90, passing:78, dribbling:86, defending:48, physical:82 },
+    { id:"doue", name:"Désiré Doué", dqdName:"杜埃", club:"psg", position:"LW", age:21, overall:86, potential:93, value:118, wage:245, pace:90, shooting:81, passing:82, dribbling:92, defending:51, physical:72 },
+    { id:"vitinha", name:"Vitinha", dqdName:"维蒂尼亚", club:"psg", position:"CM", age:26, overall:89, potential:91, value:124, wage:280, pace:78, shooting:76, passing:92, dribbling:91, defending:74, physical:68 }
+  ];
+
+  const COACHES = [
+    { name:"Pep Guardiola", club:"mci", overall:94, tactics:97, people:88, youth:85, transfers:86 },
+    { name:"Mikel Arteta", club:"ars", overall:90, tactics:92, people:87, youth:91, transfers:84 },
+    { name:"Xabi Alonso", club:"rma", overall:91, tactics:93, people:90, youth:88, transfers:82 },
+    { name:"Hansi Flick", club:"fcb", overall:90, tactics:92, people:86, youth:88, transfers:80 },
+    { name:"Diego Simeone", club:"atm", overall:91, tactics:93, people:91, youth:79, transfers:83 },
+    { name:"Vincent Kompany", club:"bay", overall:86, tactics:88, people:86, youth:87, transfers:79 },
+    { name:"Luis Enrique", club:"psg", overall:93, tactics:94, people:90, youth:87, transfers:84 },
+    { name:"Simone Inzaghi", club:"int", overall:92, tactics:94, people:88, youth:82, transfers:83 }
+  ];
+
+  const OPPONENTS = {
+    ENG1:["Arsenal","Aston Villa","Bournemouth","Brentford","Brighton","Burnley","Chelsea","Crystal Palace","Everton","Fulham","Leeds United","Liverpool","Manchester City","Manchester United","Newcastle United","Nottingham Forest","Sunderland","Tottenham Hotspur","West Ham United","Wolverhampton"],
+    ENG2:["Birmingham City","Blackburn Rovers","Bristol City","Charlton Athletic","Coventry City","Derby County","Hull City","Ipswich Town","Leicester City","Middlesbrough","Millwall","Norwich City","Oxford United","Portsmouth","Preston North End","Queens Park Rangers","Sheffield United","Sheffield Wednesday","Southampton","Stoke City","Swansea City","Watford","West Bromwich Albion","Wrexham"],
+    ESP1:["Athletic Club","Atlético Madrid","Barcelona","Celta Vigo","Deportivo Alavés","Elche","Espanyol","Getafe","Girona","Levante","Mallorca","Osasuna","Rayo Vallecano","Real Betis","Real Madrid","Real Oviedo","Real Sociedad","Sevilla","Valencia","Villarreal"],
+    ESP2:["Albacete","Almería","Burgos","Cádiz","Castellón","Córdoba","Cultural Leonesa","Deportivo La Coruña","Eibar","Granada","Huesca","Las Palmas","Leganés","Málaga","Mirandés","Racing Santander","Real Valladolid","Real Zaragoza","Sporting Gijón","Valladolid Promesas","Ceuta","Andorra"],
+    GER1:["Augsburg","Bayern München","Bayer Leverkusen","Borussia Dortmund","Borussia Mönchengladbach","Eintracht Frankfurt","Freiburg","Hamburger SV","Heidenheim","Hoffenheim","Köln","Mainz 05","RB Leipzig","St. Pauli","Stuttgart","Union Berlin","Werder Bremen","Wolfsburg"],
+    GER2:["Arminia Bielefeld","Bochum","Darmstadt 98","Dynamo Dresden","Elversberg","Fortuna Düsseldorf","Greuther Fürth","Hannover 96","Hertha BSC","Holstein Kiel","Kaiserslautern","Karlsruher SC","Magdeburg","Nürnberg","Paderborn","Preußen Münster","Schalke 04","Südtirol"],
+    ITA1:["Atalanta","Bologna","Cagliari","Como","Cremonese","Fiorentina","Genoa","Hellas Verona","Inter","Juventus","Lazio","Lecce","AC Milan","Napoli","Parma","Pisa","Roma","Sassuolo","Torino","Udinese"],
+    ITA2:["Avellino","Bari","Carrarese","Catanzaro","Cesena","Empoli","Frosinone","Juve Stabia","Mantova","Modena","Monza","Padova","Palermo","Pescara","Reggiana","Sampdoria","Spezia","Südtirol","Venezia","Virtus Entella"],
+    FRA1:["Angers","Auxerre","Brest","Le Havre","Lens","Lille","Lorient","Lyon","Marseille","Metz","Monaco","Nantes","Nice","Paris FC","Paris Saint-Germain","Rennes","Strasbourg","Toulouse"],
+    FRA2:["Amiens","Annecy","Bastia","Boulogne","Clermont","Dunkerque","Grenoble","Guingamp","Laval","Le Mans","Montpellier","Nancy","Pau","Red Star","Reims","Rodez","Saint-Étienne","Troyes"]
+  };
+
+  const CUP_ROUNDS = {
+    "足总杯":["第 3 轮","十六强","八强","半决赛","决赛"],
+    "联赛杯":["第 2 轮","十六强","八强","半决赛","决赛"],
+    "国王杯":["第三轮","十六强","八强","半决赛","决赛"],
+    "德国杯":["第二轮","十六强","八强","半决赛","决赛"],
+    "意大利杯":["第二轮","十六强","八强","半决赛","决赛"],
+    "法国杯":["第九轮","十六强","八强","半决赛","决赛"]
+  };
+  const EUROPEAN_OPPONENTS = ["Benfica","Ajax","Inter","Barcelona","Celtic","Bayer Leverkusen","AS Monaco","Atlético Madrid","PSV","Napoli","Sporting CP","RB Leipzig","Galatasaray","Atalanta","Club Brugge","Olympiacos","Feyenoord","Porto","Fenerbahçe","Rangers","Anderlecht","Slavia Praha","PAOK","Rapid Wien","Fiorentina","Real Betis","Viktoria Plzeň","Ludogorets"];
+  const EUROPEAN_COMPETITIONS = {
+    ucl:{key:"ucl",name:"欧冠",fullName:"欧洲冠军联赛",matches:8,pots:4,perPot:2,offsets:[39,53,74,88,109,123,165,173],fieldTarget:86,fieldSpread:12},
+    uel:{key:"uel",name:"欧联杯",fullName:"欧足联欧洲联赛",matches:8,pots:4,perPot:2,offsets:[39,68,75,89,110,124,166,173],fieldTarget:80,fieldSpread:14},
+    uecl:{key:"uecl",name:"欧协联",fullName:"欧足联欧洲协会联赛",matches:6,pots:6,perPot:1,offsets:[54,75,89,110,124,131],fieldTarget:74,fieldSpread:16}
+  };
+  const EUROPEAN_COMPETITION_BY_NAME=Object.fromEntries(Object.values(EUROPEAN_COMPETITIONS).map(item=>[item.name,item]));
+  const EUROPEAN_NATIONS=new Set(["英格兰","法国","德国","西班牙","意大利","葡萄牙","荷兰","比利时","克罗地亚","丹麦","瑞士","奥地利","挪威","瑞典","波兰","塞尔维亚","土耳其","希腊","苏格兰","爱尔兰","乌克兰","捷克","斯洛伐克","匈牙利","罗马尼亚","斯洛文尼亚","威尔士"]);
+  const SOUTH_AMERICAN_NATIONS=new Set(["阿根廷","巴西","乌拉圭","哥伦比亚","厄瓜多尔","智利","秘鲁","巴拉圭","委内瑞拉","玻利维亚"]);
+  const AFRICAN_NATIONS=new Set(["摩洛哥","塞内加尔","埃及","阿尔及利亚","尼日利亚","喀麦隆","科特迪瓦","加纳","突尼斯","马里","南非","刚果民主共和国"]);
+  const ASIAN_NATIONS=new Set(["日本","韩国","中国","澳大利亚","伊朗","沙特阿拉伯","卡塔尔","乌兹别克斯坦","伊拉克","约旦","阿联酋"]);
+  const NATIONAL_TEAM_STRENGTH={阿根廷:92,法国:92,西班牙:91,英格兰:90,巴西:90,葡萄牙:88,德国:88,荷兰:87,意大利:87,比利时:85,乌拉圭:85,克罗地亚:84,摩洛哥:83,日本:81,美国:80,墨西哥:80,韩国:79,塞内加尔:79,哥伦比亚:84,丹麦:82,瑞士:82,奥地利:81,挪威:81,土耳其:80,尼日利亚:79,喀麦隆:78,埃及:78,澳大利亚:77,伊朗:77,沙特阿拉伯:74,中国:68};
+  const NATIONAL_OPPONENTS={
+    europe:["法国","西班牙","英格兰","德国","葡萄牙","荷兰","意大利","比利时","克罗地亚","丹麦","瑞士","奥地利","挪威","土耳其","瑞典","波兰","塞尔维亚","乌克兰"],
+    southAmerica:["阿根廷","巴西","乌拉圭","哥伦比亚","厄瓜多尔","智利","秘鲁","巴拉圭","委内瑞拉","玻利维亚"],
+    africa:["摩洛哥","塞内加尔","埃及","阿尔及利亚","尼日利亚","喀麦隆","科特迪瓦","加纳","突尼斯","马里","南非"],
+    asia:["日本","韩国","澳大利亚","伊朗","沙特阿拉伯","卡塔尔","乌兹别克斯坦","伊拉克","约旦","阿联酋","中国"],
+    other:["美国","墨西哥","加拿大","哥斯达黎加","牙买加","巴拿马","新西兰"]
+  };
+  const BACKGROUND_LEAGUES = [
+    {id:"BRA1",name:"巴西甲级联赛",country:"巴西",tier:2,clubs:[["Flamengo",84,81],["Palmeiras",85,82],["Botafogo",81,79],["Corinthians",80,77],["São Paulo",81,78],["Fluminense",78,76],["Internacional",78,76],["Grêmio",77,75]]},
+    {id:"USA1",name:"美国职业足球大联盟",country:"美国",tier:3,clubs:[["Inter Miami",82,78],["LAFC",79,76],["Columbus Crew",77,75],["Seattle Sounders",78,75],["Atlanta United",75,72],["New York City",75,73],["LA Galaxy",77,74],["FC Cincinnati",76,74]]},
+    {id:"KSA1",name:"沙特职业联赛",country:"沙特阿拉伯",tier:2,clubs:[["Al Hilal",86,83],["Al Nassr",84,81],["Al Ittihad",83,81],["Al Ahli",82,80],["Al Ettifaq",75,73],["Al Shabab",75,73],["Al Qadsiah",76,74],["Al Taawoun",72,71]]},
+    {id:"JPN1",name:"日本 J1 联赛",country:"日本",tier:3,clubs:[["Kashima Antlers",75,73],["Urawa Red Diamonds",76,73],["Vissel Kobe",76,74],["Yokohama F. Marinos",75,73],["Kawasaki Frontale",75,72],["Sanfrecce Hiroshima",74,73],["FC Tokyo",72,70],["Gamba Osaka",73,71]]},
+    {id:"NED1",name:"荷兰甲级联赛",country:"荷兰",tier:2,clubs:[["PSV",85,82],["Ajax",83,80],["Feyenoord",84,81],["AZ Alkmaar",78,76],["FC Twente",77,75],["Utrecht",74,73],["Heerenveen",71,69],["Groningen",70,68]]},
+    {id:"POR1",name:"葡萄牙超级联赛",country:"葡萄牙",tier:2,clubs:[["Benfica",86,82],["Sporting CP",85,82],["Porto",84,81],["Braga",79,77],["Vitória SC",75,73],["Famalicão",72,70],["Boavista",69,67],["Rio Ave",70,68]]}
+  ];
+  const DQD_TEAM_INDEX = new Map(DQD_DATA.teams.map(team => [`dqd-${team.id}`, team]));
+  const DQD_BADGE_INDEX = new Map();
+  DQD_DATA.teams.forEach(team => {
+    [team.name, team.englishName].filter(Boolean).forEach(name => DQD_BADGE_INDEX.set(comparableClubName(name), team));
+  });
+
+  function comparableClubName(name) {
+    return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(fc|cf|as|ac|sv|olympique)\b/g, "").replace(/[^\p{L}\p{N}]/gu, "");
+  }
+
+  function applyDongqiudiData() {
+    if (!DQD_DATA.teams.length) return;
+    const clubs = DQD_DATA.teams.map(team => {
+      const market = team.marketValueM || (LEAGUES[team.leagueId].tier === 1 ? 180 : 45);
+      const prestige = clamp(Math.round(68 + 18 * Math.log10(Math.max(8, market) / 80)), 58, 96);
+      const sourceName = team.englishName || team.name;
+      const words = sourceName.replace(/[^\p{L}\p{N}\s]/gu, " ").trim().split(/\s+/).filter(Boolean);
+      const code = (words.length > 1 ? words.map(word => word[0]).join("") : String(team.id)).slice(0,4).toUpperCase();
+      return {
+        id:`dqd-${team.id}`, name:team.name, englishName:team.englishName, code, league:team.leagueId,
+        prestige, budget:Math.max(8, Math.round(market * (LEAGUES[team.leagueId].tier === 1 ? .11 : .08))),
+        coach:"未导入", city:team.city, stadium:team.stadium, marketValueM:team.marketValueM,
+        dataStatus:"dongqiudi-2026-07-31", source:team.source
+      };
+    });
+    CLUBS.splice(0, CLUBS.length, ...clubs);
+    Object.keys(OPPONENTS).forEach(leagueId => {
+      OPPONENTS[leagueId] = DQD_DATA.teams.filter(team => team.leagueId === leagueId).map(team => team.name);
+    });
+    REAL_PLAYERS.forEach(player => { player.club = LEGACY_TEAM_MAP[player.club] || player.club; });
+    COACHES.forEach(coach => { coach.club = LEGACY_TEAM_MAP[coach.club] || coach.club; });
+    const featured=[...REAL_PLAYERS];
+    const allPlayers=DQD_DATA.teams.flatMap(team => {
+      const club=clubs.find(item=>item.id===`dqd-${team.id}`);
+      return team.players.map((sourcePlayer,index)=>{
+        const position=sourcePlayer.positionGroup==="DF"?"CB":sourcePlayer.positionGroup;
+        const overall=estimatedRating(sourcePlayer,club);
+        const potential=clamp(overall+(sourcePlayer.age<=20?8:sourcePlayer.age<=23?5:sourcePlayer.age<=26?2:0),overall,95);
+        const base={id:`dqd-real-${team.id}-${index}`,name:sourcePlayer.name,dqdName:sourcePlayer.name,club:club.id,position,age:sourcePlayer.age||24,overall,potential,value:sourcePlayer.marketValueM??Math.max(1,overall-64),wage:Math.round(overall*club.prestige*.014),nationality:sourcePlayer.nationality,pace:clamp(overall+(position==="ST"?4:0),45,96),shooting:clamp(overall+(position==="ST"?3:-5),40,96),passing:clamp(overall+(position==="CM"?3:-2),40,96),dribbling:clamp(overall+(position==="ST"||position==="CM"?2:-3),40,96),defending:clamp(overall+(position==="CB"?4:-18),30,96),physical:clamp(overall+(position==="CB"?3:0),40,96),dataStatus:"dongqiudi-2026-07-31",ratingSource:"game-estimate-v0"};
+        const curated=featured.find(player=>player.club===club.id&&comparableClubName(player.dqdName||player.name)===comparableClubName(sourcePlayer.name));
+        return curated?{...base,...curated,dqdName:sourcePlayer.name,club:club.id,nationality:sourcePlayer.nationality}:base;
+      });
+    }).sort((a,b)=>b.overall-a.overall||a.name.localeCompare(b.name,"zh-CN"));
+    REAL_PLAYERS.splice(0,REAL_PLAYERS.length,...allPlayers);
+  }
+
+  function completeClubDirectory() {
+    Object.entries(OPPONENTS).forEach(([leagueId,names]) => {
+      names.forEach((name,index) => {
+        if (CLUBS.some(club => comparableClubName(club.name) === comparableClubName(name))) return;
+        const tier=LEAGUES[leagueId].tier;
+        const prestige=clamp((tier===1?76:64)+((names.length-index)%7),58,86);
+        CLUBS.push({
+          id:`${leagueId.toLowerCase()}-${index+1}`,
+          name,
+          code:name.split(/\s+/).map(part=>part[0]).join("").slice(0,4).toUpperCase(),
+          league:leagueId,
+          prestige,
+          budget:Math.round((tier===1?38:13)+(prestige-60)*1.7),
+          coach:"人员数据待授权导入",
+          dataStatus:"club-directory"
+        });
+      });
+    });
+  }
+
+  applyDongqiudiData();
+  if (!DQD_DATA.teams.length) completeClubDirectory();
+
+  const FIRST = ["Alex","Mateo","Luca","Noah","Daniel","João","Theo","Elias","Samuel","Nico","Leo","Tom","Milan","Iker","Hugo","Ben","Adam","Oscar","Julian","Rafael","Marco","Felix","David","Yanis"];
+  const LAST = ["Martin","Silva","Costa","Meyer","Rossi","Bernard","Wilson","Santos","Garcia","Novak","Diallo","Murphy","Keller","Lopez","Marin","Andersson","Ricci","Bauer","Fernandes","Moreau","Taylor","Pereira","Schmidt","Romero"];
+  const POSITIONS = ["GK","RB","CB","CB","LB","DM","CM","CM","AM","RW","LW","ST","CB","CM","ST","GK","FB","WG","ST","DM","CB","AM"];
+
+  let setup = { role:"coach", origin:"real", identity:COACHES[0].name, clubId:COACHES[0].club, leagueId:clubById(COACHES[0].club).league, customName:"", customAge:35, customPosition:"CM" };
+  let state = loadState();
+  let modal = null;
+  let playerProfileRegistry = new Map();
+  let playerProfileSequence = 0;
+  let clubProfileRegistry = new Map();
+  let clubProfileSequence = 0;
+  let matchTimer = null;
+  let matchCanvasFrame = null;
+
+  const app = document.getElementById("app");
+
+  function esc(value) {
+    return String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
+  }
+
+  function icon(name) { return `<i data-lucide="${name}" class="icon" aria-hidden="true"></i>`; }
+  function clubById(id) { return CLUBS.find(c => c.id === id) || CLUBS[0]; }
+  function leagueOf(club) { return LEAGUES[club.league]; }
+  function rand(min, max) { return Math.random() * (max - min) + min; }
+  function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+  function money(n) { return `€${Number(n).toFixed(n >= 10 ? 1 : 2)}m`; }
+  function formatDate(value, withYear = true) {
+    const d = new Date(`${value}T12:00:00`);
+    return new Intl.DateTimeFormat("zh-CN", { month:"short", day:"numeric", ...(withYear ? {year:"numeric"} : {}) }).format(d);
+  }
+  function matchClockLabel(minute) { const value=Number(minute)||0;return value>90?`90+${value-90}'`:`${value}'`; }
+  function eventMinuteLabel(minute) { return matchClockLabel(minute); }
+
+  function playerTransferRecords(save,player) {
+    if(!save||!player)return [];
+    const records=[...(save.transferHistory||[]),...(save.transferMarket?.records||[])],unique=new Map();records.forEach(record=>{if(sameTransferPlayer(record,player))unique.set(record.id,record);});
+    return [...unique.values()].sort((a,b)=>a.date.localeCompare(b.date)||String(a.id).localeCompare(String(b.id)));
+  }
+
+  function mergePlayerCareerStats(player,records) {
+    const rows=[...(Array.isArray(player.careerStats)?player.careerStats:[])];
+    records.forEach(record=>{
+      if(Array.isArray(record.careerHistory))rows.push(...record.careerHistory);
+      if(record.careerSegment)rows.push(record.careerSegment);
+    });
+    const unique=new Map();
+    rows.forEach((row,index)=>{
+      const key=row.id||`${row.season}|${row.clubId||row.club}|${row.endDate||row.startDate||"full"}|${row.appearances||0}|${row.goals||0}|${row.assists||0}`;
+      if(!unique.has(key))unique.set(key,{...row,_order:index});
+    });
+    return [...unique.values()].sort((a,b)=>Number(b.season||0)-Number(a.season||0)||String(b.endDate||"").localeCompare(String(a.endDate||""))||b._order-a._order).map(({_order,...row})=>row);
+  }
+
+  function playerProfileData(player,context={}) {
+    const raw={...player,name:player.name||player.playerName,...context};
+    const local=state?.squad?.find(item=>item.id===raw.id||comparableClubName(item.name)===comparableClubName(raw.name));
+    const opponent=state?.activeMatch?.opponentPlayers?.find(item=>item.id===raw.id||comparableClubName(item.name)===comparableClubName(raw.name));
+    const real=REAL_PLAYERS.find(item=>item.id===raw.id||comparableClubName(item.name)===comparableClubName(raw.name)||comparableClubName(item.dqdName)===comparableClubName(raw.name));
+    const merged={...(real||{}),...(opponent||{}),...(local||{}),...raw},records=playerTransferRecords(state,merged),latestTransfer=records.at(-1);
+    merged.name||="未知球员";merged.position||="CM";merged.age=Number(merged.age)||24;
+    merged.overall=Number(merged.overall||merged.ca)||65;merged.potential=Math.max(merged.overall,Number(merged.potential||merged.pa)||merged.overall);
+    const canonicalClubId=latestTransfer?.toId||(local?state.clubId:real?currentPlayerClubId(state,real):merged.clubId),canonicalClub=canonicalClubId?clubById(canonicalClubId):null;
+    merged.clubId=canonicalClub?.id||merged.clubId;merged.clubName=canonicalClub?.name||merged.clubName||(resolveClub(merged.club)?.name)||merged.club||"未知俱乐部";
+    merged.transferHistory=records;merged.latestTransfer=latestTransfer||null;merged.careerStats=mergePlayerCareerStats(merged,records);
+    if(latestTransfer?.contract)merged.contract={...(merged.contract||{}),...latestTransfer.contract};
+    merged.contractEnd=merged.contract?.endSeason||merged.contractEnd;
+    return merged;
+  }
+
+  function playerNameLink(player,context={}) {
+    const profile=playerProfileData(player,context),token=`player-profile-${++playerProfileSequence}`;
+    playerProfileRegistry.set(token,profile);
+    return `<button type="button" class="player-profile-link" data-player-profile="${token}">${esc(profile.name)}</button>`;
+  }
+
+  function resolveClub(value) {
+    if (!value) return null;
+    if (typeof value === "object" && value.id) return CLUBS.find(item=>item.id===value.id) || null;
+    const raw=String(value),byId=CLUBS.find(item=>item.id===raw);
+    const target=comparableClubName(raw),exact=byId || findClubByName(raw) || CLUBS.find(item=>comparableClubName(item.englishName||"")===target);
+    if(exact)return exact;
+    const partial=target.length>=4?CLUBS.filter(item=>{const names=[item.name,item.englishName].filter(Boolean).map(comparableClubName);return names.some(name=>name.includes(target)||target.includes(name));}):[];
+    return partial.length===1?partial[0]:null;
+  }
+
+  function clubProfileData(value) {
+    const club=resolveClub(value)||clubById(state?.clubId);
+    const league=club?leagueOf(club):null;
+    const source=club?DQD_TEAM_INDEX.get(club.id):null;
+    const roster=club?aiClubPlayers(state,club.id):[];
+    return {club,league,source,roster};
+  }
+
+  function clubNameLink(value,context={}) {
+    const club=resolveClub(value);if(!club)return esc(context.label||value||"球队");
+    const token=`club-profile-${++clubProfileSequence}`;clubProfileRegistry.set(token,club);
+    return `<button type="button" class="club-profile-link" data-club-profile="${token}">${esc(context.label||club.name)}</button>`;
+  }
+
+  function clubHonors(club) {
+    const league=leagueOf(club), honors=[];
+    if (!club) return honors;
+    const seed=String(club.id).split("").reduce((sum,ch)=>sum+ch.charCodeAt(0),0);
+    const top=Number(club.prestige||0)>=86;
+    if (top) honors.push({name:`${league?.name||"国内顶级联赛"}冠军`,count:1+(seed%5),asset:trophyAsset(`${league?.name||"联赛"}冠军`)});
+    if (Number(club.prestige||0)>=80) honors.push({name:league?.cup||"国内杯赛",count:1+(seed%3),asset:trophyAsset(league?.cup||"国内杯赛")});
+    if (Number(club.prestige||0)>=92) honors.push({name:"洲际赛事冠军",count:1+(seed%2),asset:"continental-cup.png"});
+    return honors;
+  }
+  function addDays(value, days) {
+    const d = new Date(`${value}T12:00:00`); d.setDate(d.getDate() + days); return d.toISOString().slice(0,10);
+  }
+  function daysBetween(a,b) { return Math.round((new Date(`${b}T12:00:00`) - new Date(`${a}T12:00:00`)) / 86400000); }
+  function initials(name) { return name.split(/\s+/).map(x => x[0]).slice(0,2).join("").toUpperCase(); }
+  function badgeTeam(value) {
+    const club = typeof value === "object" ? value : CLUBS.find(item => item.id === value || comparableClubName(item.name) === comparableClubName(String(value || "")) || comparableClubName(item.englishName || "") === comparableClubName(String(value || "")));
+    const directId = String(club?.id || value || "").match(/^dqd-(\d+)$/)?.[1];
+    const source = directId ? DQD_DATA.teams.find(team => String(team.id) === directId) : DQD_BADGE_INDEX.get(comparableClubName(club?.name || String(value || ""))) || DQD_BADGE_INDEX.get(comparableClubName(club?.englishName || ""));
+    return { id:directId || (source ? String(source.id) : ""), name:club?.name || source?.name || String(value || ""), code:club?.code || initials(source?.englishName || source?.name || String(value || "")) };
+  }
+  function clubBadge(value, className="") {
+    const team=badgeTeam(value),label=team.name||"球队";
+    return `<span class="club-badge ${esc(className)}" title="${esc(label)}"><span class="club-badge-fallback" aria-hidden="true">${esc(team.code||"FC")}</span>${team.id?`<img src="assets/badges/${team.id}.png" alt="${esc(label)}队徽" loading="lazy" onerror="this.remove()">`:""}</span>`;
+  }
+  function playerRoleLabel(pos) { return ({GK:"门将",RB:"右后卫",LB:"左后卫",FB:"边后卫",DF:"后卫",CB:"中后卫",DM:"后腰",CM:"中场",AM:"前腰",RW:"右边锋",LW:"左边锋",WG:"边锋",ST:"前锋"})[pos] || pos; }
+  function positionSortRank(pos) { return ({GK:0,RB:10,CB:11,DF:12,FB:13,LB:14,DM:20,CM:21,AM:22,RW:30,WG:31,LW:32,ST:33})[pos]??99; }
+  function averageRating(player) { return player?.appearances ? Number(player.ratingTotal||0)/player.appearances : 0; }
+
+  function notificationId(prefix="notice") { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`; }
+  function notificationTypeFromTitle(title="") {
+    if(title.includes("赛后")||title.includes("取胜")||title.includes("战平")||title.includes("告负"))return "match";
+    if(title.includes("医疗")||title.includes("伤"))return "medical";
+    if(title.includes("董事会")||title.includes("目标"))return "board";
+    if(title.includes("赛程"))return "schedule";
+    if(title.includes("欧冠"))return "competition";
+    if(title.includes("引援")||title.includes("转会"))return "transfer";
+    return "general";
+  }
+  function normalizeNotification(item,index=0,save=state) {
+    if(item&&typeof item==="object")return {
+      id:item.id||notificationId("notice"),title:item.title||"俱乐部通知",type:item.type||notificationTypeFromTitle(item.title),date:item.date||save?.date||START_DATE,
+      read:Boolean(item.read),detail:item.detail||"该事项已归档，可在这里查看处理结果。",facts:Array.isArray(item.facts)?item.facts:[],reportId:item.reportId||null
+    };
+    const title=String(item||"俱乐部通知"),type=notificationTypeFromTitle(title);
+    const details={
+      match:"这条赛后通知来自旧版本存档，当时尚未保存详细比赛数据。之后完成的比赛会保留完整技术统计、球员评分与换人记录。",
+      medical:"医疗组已完成检查或恢复评估。该通知来自旧版本存档，因此没有可追溯的个人医学明细。",
+      board:"董事会已经确认当前赛季目标，将根据联赛成绩、杯赛进度和球队发展持续评估你的表现。",
+      schedule:"赛程办公室已经生成本赛季日程，后续杯赛轮次会在前一轮结束后实时确定。",
+      competition:"该项赛事进度已经更新。后续轮次只会在晋级结果确定后生成。",
+      transfer:"这项建议已经交给球探与管理层评估，最终决定取决于预算、阵容需求和球员意愿。",
+      general:"该事项已归档，可在这里查看处理结果。"
+    };
+    return {id:`legacy-${index}-${Math.abs(title.split("").reduce((sum,char)=>sum+char.charCodeAt(0),0))}`,title,type,date:save?.date||START_DATE,read:false,detail:details[type],facts:[],reportId:null};
+  }
+  function addNotification(payload) {
+    state.notifications ||= [];
+    state.notifications.unshift(normalizeNotification({...payload,id:payload.id||notificationId(payload.type||"notice"),read:false},0,state));
+    state.notifications=state.notifications.slice(0,20);
+    state.inboxUnread=state.notifications.filter(item=>!item.read).length;
+  }
+  function initialNotifications(club,schedule) {
+    const league=leagueOf(club),next=schedule[0];
+    return [
+      {id:"initial-board",title:"董事会：新赛季目标已确认",type:"board",date:START_DATE,read:false,detail:`董事会要求球队在 ${league.name} 保持竞争力，并根据俱乐部声望争取合理的联赛排名。杯赛表现、阵容发展和财政健康也会纳入评估。`,facts:[`联赛目标：争取前 ${club.prestige>=90?4:club.prestige>=80?8:14} 名`,`杯赛目标：至少进入中后段轮次`,`转会预算：${money(club.budget)}`]},
+      {id:"initial-medical",title:"医疗组：全队体检完成",type:"medical",date:START_DATE,read:false,detail:"一线队季前体检已经完成。医疗组会根据体能、伤病和赛程密度动态调整恢复建议。",facts:["当前无新增伤病","密集赛程将提高轮换与恢复权重"]},
+      {id:"initial-schedule",title:"赛程办公室：新赛季日程已生成",type:"schedule",date:START_DATE,read:false,detail:"联赛和已确定的杯赛日程已经生成。淘汰赛后续轮次不会预先锁定，只有上一轮结束并确认晋级后才会生成日期和对手。",facts:[`已确定 ${schedule.length} 场比赛`,next?`首场：${formatDate(next.date,false)} 对阵 ${next.opponent}`:"暂无待赛比赛","正式比赛间隔至少 72 小时"]}
+    ];
+  }
+
+  function estimatedRating(sourcePlayer, club) {
+    const value = sourcePlayer.marketValueM ?? Math.max(1, club.marketValueM / 28);
+    return clamp(Math.round(65 + 10 * Math.log10(value + 1) + (club.prestige - 75) * .08), 58, 92);
+  }
+
+  function createSquad(club, controlled) {
+    const sourceTeam = DQD_TEAM_INDEX.get(club.id);
+    if (sourceTeam?.players?.length) {
+      const squad = sourceTeam.players.map((sourcePlayer, index) => {
+        const overall = estimatedRating(sourcePlayer, club);
+        const youthGrowth = sourcePlayer.age <= 20 ? 8 : sourcePlayer.age <= 23 ? 5 : sourcePlayer.age <= 26 ? 2 : 0;
+        return {
+          id:`dqd-player-${sourceTeam.id}-${index}`, name:sourcePlayer.name, number:sourcePlayer.number,
+          position:sourcePlayer.positionGroup === "DF" ? "CB" : sourcePlayer.positionGroup,
+          nationality:sourcePlayer.nationality, age:sourcePlayer.age || 24, overall,
+          potential:clamp(overall + youthGrowth, overall, 95), value:sourcePlayer.marketValueM ?? Math.max(1, overall - 64),
+          sourceValueLabel:sourcePlayer.marketValueLabel, wage:Math.round(overall * club.prestige * .014),
+          fitness:Math.round(rand(84,100)), morale:Math.round(rand(68,95)), form:0, lastRating:null,
+          ratingTotal:0, appearances:0, goals:0, assists:0, injured:0, injury:null,
+          dataStatus:"dongqiudi-2026-07-31", ratingSource:"game-estimate-v0"
+        };
+      });
+      if (controlled && controlled.club === club.id) {
+        const sourceName = controlled.dqdName || controlled.name;
+        let existing = squad.findIndex(player => comparableClubName(player.name) === comparableClubName(sourceName));
+        if (existing < 0) existing = squad.findIndex(player => player.position === controlled.position);
+        const base = existing >= 0 ? squad[existing] : {};
+        const controlledRecord = { ...base, ...controlled, id:"controlled", fitness:96, morale:88, form:0, lastRating:null, ratingTotal:0, appearances:0, goals:0, assists:0, injured:0, injury:null, consecutiveStarts:0, lastMatchMinutes:0, lastMatchDate:null };
+        if (existing >= 0) squad[existing] = controlledRecord; else squad.push(controlledRecord);
+      }
+      return squad.sort((a,b) => POSITIONS.indexOf(a.position)-POSITIONS.indexOf(b.position));
+    }
+    const squad = [];
+    for (let i=0; i<22; i++) {
+      const base = clamp(Math.round(club.prestige - 20 + rand(-7,8)), 61, 91);
+      const age = Math.round(rand(18,34));
+      squad.push({
+        id:`p-${i}`, name:`${FIRST[(i*5 + club.code.length)%FIRST.length]} ${LAST[(i*7 + club.name.length)%LAST.length]}`,
+        position:POSITIONS[i], age, overall:base, potential:clamp(base + Math.round(rand(age < 23 ? 3 : 0, age < 23 ? 12 : 3)),base,95),
+        value:Math.max(1, Math.round((base-58)*(base-58)*0.08*(age>30?.65:1)*10)/10),
+        wage:Math.round(base*club.prestige*.014), fitness:Math.round(rand(84,100)), morale:Math.round(rand(68,95)),
+        form:0, lastRating:null, ratingTotal:0, appearances:0, goals:0, assists:0, injured:0, injury:null,
+        dataStatus:"generated-v0"
+      });
+    }
+    if (controlled && controlled.club === club.id) {
+      const existing = squad.findIndex(p => p.position === controlled.position);
+      squad[existing] = { ...controlled, id:"controlled", fitness:96, morale:88, form:0, lastRating:null, ratingTotal:0, appearances:0, goals:0, assists:0, injured:0, injury:null, consecutiveStarts:0, lastMatchMinutes:0, lastMatchDate:null };
+    }
+    return squad.sort((a,b) => POSITIONS.indexOf(a.position)-POSITIONS.indexOf(b.position));
+  }
+
+  function ensurePlayerContract(player,season=2026) {
+    const unit=stableScoutingUnit(`${player.id||player.name}|contract-v1`),wage=Math.max(4,Number(player.wage)||Math.round((player.overall||65)*1.5));
+    player.contract||={weeklyWage:wage,signingBonus:Number(Math.max(.1,wage*.035).toFixed(1)),appearanceFee:Math.round(wage*.08),releaseClause:Number(Math.max(1,(player.value||2)*(1.65+unit*.7)).toFixed(1)),role:(player.overall||0)>=85?"核心主力":(player.overall||0)>=76?"常规主力":"轮换球员",endSeason:season+2+Math.floor(unit*3)};
+    player.contract.weeklyWage??=wage;player.contract.signingBonus??=Number(Math.max(.1,wage*.035).toFixed(1));player.contract.appearanceFee??=Math.round(wage*.08);player.contract.releaseClause??=Number(Math.max(1,(player.value||2)*1.8).toFixed(1));player.contract.role||="轮换球员";player.contract.endSeason??=season+2;
+    player.listed??=false;player.transferRequestStatus??="none";
+    return player.contract;
+  }
+
+  function seededShuffle(items,key) {
+    return [...items].map((item,index)=>({item,order:stableScoutingUnit(`${key}|${String(item)}|${index}`)})).sort((a,b)=>a.order-b.order).map(entry=>entry.item);
+  }
+
+  function leagueRoundDates(leagueId,season,count) {
+    const start=`${season}-08-08`,targetMonthDay=({ENG1:"05-23",ENG2:"05-08",ESP1:"05-23",ESP2:"05-29",GER1:"05-22",GER2:"05-08",ITA1:"05-23",ITA2:"05-15",FRA1:"05-22",FRA2:"05-08"})[leagueId]||"05-22";
+    const target=`${season+1}-${targetMonthDay}`,gaps=Array.from({length:Math.max(0,count-1)},()=>7),reserved=new Set();
+    const setLongGap=(index,value)=>{if(index>=0&&index<gaps.length){gaps[index]=Math.max(gaps[index],value);reserved.add(index);}};
+    [3,7,11,Math.max(15,count-11)].forEach(index=>setLongGap(index,14));
+    if(["GER1","GER2"].includes(leagueId))setLongGap(Math.min(15,gaps.length-1),28);
+    else if(["ESP1","ESP2","ITA1","ITA2","FRA1","FRA2"].includes(leagueId))setLongGap(Math.min(16,gaps.length-1),14);
+    const midweekCount=({ENG1:6,ENG2:12,ESP1:6,ESP2:8,GER1:4,GER2:6,ITA1:6,ITA2:6,FRA1:4,FRA2:5})[leagueId]||4,midweekGaps=new Set();
+    for(let slot=1;slot<=midweekCount;slot++){
+      const ideal=Math.round(slot*(gaps.length-2)/(midweekCount+1));let chosen=-1;
+      for(let distance=0;distance<gaps.length&&chosen<0;distance++){
+        for(const candidate of [ideal+distance,ideal-distance]){
+          if(candidate<0||candidate+1>=gaps.length||reserved.has(candidate)||reserved.has(candidate+1)||midweekGaps.has(candidate-1)||midweekGaps.has(candidate)||midweekGaps.has(candidate+1))continue;
+          chosen=candidate;break;
+        }
+      }
+      if(chosen>=0){gaps[chosen]=3;gaps[chosen+1]=4;midweekGaps.add(chosen);midweekGaps.add(chosen+1);}
+    }
+    const totalDays=()=>gaps.reduce((sum,value)=>sum+value,0);let remaining=daysBetween(addDays(start,totalDays()),target);
+    const pauseCandidates=seededShuffle(gaps.map((_,index)=>index).filter(index=>!reserved.has(index)&&!midweekGaps.has(index)),`league-pauses|${leagueId}|${season}`);
+    let cursor=0;while(remaining>=7&&pauseCandidates.length){gaps[pauseCandidates[cursor%pauseCandidates.length]]+=7;remaining-=7;cursor++;}
+    if(remaining!==0&&gaps.length)gaps[gaps.length-1]+=remaining;
+    const dates=[start];for(const gap of gaps)dates.push(addDays(dates.at(-1),gap));
+    return dates;
+  }
+
+  function leagueHomePattern(opponents,key) {
+    const pattern=[];let previous=null,run=0,homes=0;
+    opponents.forEach((opponent,index)=>{
+      let home=stableScoutingUnit(`${key}|${opponent}|${index}`)>=.5;
+      if(home===previous&&run>=2)home=!home;
+      const remaining=opponents.length-index;if(home&&homes>=Math.ceil(opponents.length/2))home=false;
+      if(!home&&remaining<=Math.ceil(opponents.length/2)-homes)home=true;
+      run=home===previous?run+1:1;previous=home;if(home)homes++;pattern.push(home);
+    });
+    return pattern;
+  }
+
+  function qualifiedEuropeanCompetition(club,season) {
+    if(leagueOf(club).tier!==1)return null;
+    const rank={ucl:1,uel:2,uecl:3},honors=state?.honors||[];
+    let titleQualification=null;
+    if(honors.some(item=>item.season===season-1&&[`${EUROPEAN_COMPETITIONS.ucl.fullName}冠军`,`${EUROPEAN_COMPETITIONS.uel.fullName}冠军`].includes(item.name)))titleQualification=EUROPEAN_COMPETITIONS.ucl;
+    else if(honors.some(item=>item.season===season-1&&item.name===`${EUROPEAN_COMPETITIONS.uecl.fullName}冠军`))titleQualification=EUROPEAN_COMPETITIONS.uel;
+    let domesticQualification=null;
+    if(!state||season===2026){
+      const leagueRank=[...CLUBS].filter(item=>item.league===club.league&&leagueOf(item)?.tier===1).sort((a,b)=>b.prestige-a.prestige||a.name.localeCompare(b.name,"zh-CN")).findIndex(item=>item.id===club.id)+1;
+      const uclPlaces=club.league==="FRA1"?3:4;
+      if(leagueRank>0&&leagueRank<=uclPlaces)domesticQualification=EUROPEAN_COMPETITIONS.ucl;
+      else if(leagueRank>0&&leagueRank<=uclPlaces+2)domesticQualification=EUROPEAN_COMPETITIONS.uel;
+      else if(leagueRank===uclPlaces+3)domesticQualification=EUROPEAN_COMPETITIONS.uecl;
+      return [domesticQualification,titleQualification].filter(Boolean).sort((a,b)=>rank[a.key]-rank[b.key])[0]||null;
+    }
+    const previous=(state.history||[]).find(item=>item.season===season-1);if(!previous)return titleQualification;
+    const uclPlaces=club.league==="FRA1"?3:4;
+    if(previous.position<=uclPlaces)domesticQualification=EUROPEAN_COMPETITIONS.ucl;
+    else if(previous.position<=uclPlaces+2)domesticQualification=EUROPEAN_COMPETITIONS.uel;
+    else if(previous.position===uclPlaces+3)domesticQualification=EUROPEAN_COMPETITIONS.uecl;
+    return [domesticQualification,titleQualification].filter(Boolean).sort((a,b)=>rank[a.key]-rank[b.key])[0]||null;
+  }
+
+  function qualifiedForChampionsLeague(club,season) { return qualifiedEuropeanCompetition(club,season)?.key==="ucl"; }
+
+  function europeanCompetitionPool(club) {
+    const externalAssociations={Benfica:"POR",Ajax:"NED",Celtic:"SCO",PSV:"NED","Sporting CP":"POR",Galatasaray:"TUR","Club Brugge":"BEL",Olympiacos:"GRE"},externalStrength={Benfica:86,Ajax:83,Celtic:79,PSV:85,"Sporting CP":85,Galatasaray:82,"Club Brugge":78,Olympiacos:77},entries=new Map();
+    CLUBS.filter(item=>leagueOf(item)?.tier===1&&item.id!==club.id&&item.league!==club.league).forEach(item=>entries.set(`club:${item.id}`,{name:item.name,association:item.league,prestige:item.prestige}));
+    EUROPEAN_OPPONENTS.forEach(name=>{
+      const imported=CLUBS.find(item=>comparableClubName(item.name)===comparableClubName(name)||comparableClubName(item.englishName||"")===comparableClubName(name));
+      if(imported){if(imported.id!==club.id&&imported.league!==club.league)entries.set(`club:${imported.id}`,{name:imported.name,association:imported.league,prestige:imported.prestige});return;}
+      entries.set(`external:${comparableClubName(name)}`,{name,association:externalAssociations[name]||name,prestige:externalStrength[name]||80});
+    });
+    return [...entries.values()];
+  }
+
+  function europeanCompetitionField(club,season,config) {
+    const pool=europeanCompetitionPool(club).map(item=>({...item,fit:Math.abs(item.prestige-config.fieldTarget),qualifyingScore:item.prestige+stableScoutingUnit(`${config.key}-field|${season}|${item.name}`)*config.fieldSpread}));
+    if(config.key==="ucl")return pool.sort((a,b)=>b.qualifyingScore-a.qualifyingScore||b.prestige-a.prestige).slice(0,35);
+    return pool.sort((a,b)=>a.fit-b.fit||b.qualifyingScore-a.qualifyingScore).slice(0,35).sort((a,b)=>b.prestige-a.prestige);
+  }
+
+  function championsLeagueField(club,season) { return europeanCompetitionField(club,season,EUROPEAN_COMPETITIONS.ucl); }
+
+  function drawEuropeanLeagueOpponents(club,season,config=EUROPEAN_COMPETITIONS.ucl) {
+    const pool=europeanCompetitionField(club,season,config).sort((a,b)=>b.prestige-a.prestige||a.name.localeCompare(b.name)),potSize=Math.ceil(pool.length/config.pots),selected=[],associationCounts=new Map();
+    for(let pot=0;pot<config.pots;pot++){
+      const candidates=seededShuffle(pool.slice(pot*potSize,(pot+1)*potSize).map(item=>item.name),`${config.key}-pot-${pot}|${season}|${club.id}`).map(name=>pool.find(item=>item.name===name)).filter(Boolean);
+      for(const candidate of candidates){
+        if(selected.filter(item=>item.pot===pot).length>=config.perPot)break;
+        if((associationCounts.get(candidate.association)||0)>=2)continue;
+        selected.push({...candidate,pot});associationCounts.set(candidate.association,(associationCounts.get(candidate.association)||0)+1);
+      }
+      for(const candidate of candidates){
+        if(selected.filter(item=>item.pot===pot).length>=config.perPot)break;
+        if(selected.some(item=>item.name===candidate.name))continue;
+        selected.push({...candidate,pot});associationCounts.set(candidate.association,(associationCounts.get(candidate.association)||0)+1);
+      }
+    }
+    return seededShuffle(selected,`${config.key}-order|${season}|${club.id}`).map(item=>item.name).slice(0,config.matches);
+  }
+
+  function primaryNationality(player) { return String(player?.nationality||"").split("/")[0].trim(); }
+  function nationalConfederation(nation) {
+    if(EUROPEAN_NATIONS.has(nation))return "europe";if(SOUTH_AMERICAN_NATIONS.has(nation))return "southAmerica";if(AFRICAN_NATIONS.has(nation))return "africa";if(ASIAN_NATIONS.has(nation))return "asia";return "other";
+  }
+  function nationalCompetitionFor(nation,season) {
+    const confederation=nationalConfederation(nation),summer=season+1;
+    if(season===2026&&confederation!=="europe")return "国际A级赛";
+    if(summer%4===2)return "世界杯";
+    if(confederation==="europe"&&summer%4===0)return "欧洲杯";
+    if(confederation==="southAmerica"&&summer%4===0)return "美洲杯";
+    if(confederation==="africa"&&summer%2===1)return "非洲杯";
+    if(confederation==="asia"&&summer%4===3)return "亚洲杯";
+    if(confederation==="other"&&summer%2===1)return "洲际国家杯";
+    if(confederation==="europe"&&season%2===0)return "欧国联";
+    return "世界杯预选赛";
+  }
+  function eligibleForNationalTeam(player,nation) {
+    if(!player||!nation)return false;const strength=NATIONAL_TEAM_STRENGTH[nation]||74,threshold=clamp(strength-10,66,83);
+    return Number(player.overall||0)>=threshold&&Number(player.age||25)<=38;
+  }
+  function generateInternationalSchedule(player,season) {
+    const nation=primaryNationality(player);if(!eligibleForNationalTeam(player,nation))return [];
+    const competition=nationalCompetitionFor(nation,season),confederation=nationalConfederation(nation),pool=(NATIONAL_OPPONENTS[confederation]||NATIONAL_OPPONENTS.other).filter(item=>item!==nation),tournament=["世界杯","欧洲杯","美洲杯","非洲杯","亚洲杯","洲际国家杯"].includes(competition);
+    const count=tournament?3:competition==="欧国联"?6:competition==="国际A级赛"?4:8,offsets=tournament?[313,319,325]:competition==="国际A级赛"?[39,67,95,228]:[35,39,63,67,91,95,224,228],opponents=seededShuffle(pool,`national|${competition}|${nation}|${season}`).slice(0,count),homes=leagueHomePattern(opponents,`national-home|${nation}|${season}`);
+    return opponents.map((opponent,index)=>({id:`nat-${season}-${index}`,date:addDays(`${season}-08-01`,offsets[index]),competition,round:tournament?`小组赛第 ${index+1} 轮`:competition==="国际A级赛"?`国际比赛日第 ${index+1} 场`:`${competition==="欧国联"?"联赛阶段":"预选赛"}第 ${index+1} 轮`,stageIndex:index,phase:tournament?"group":"league",knockout:false,international:true,teamName:nation,opponent,opponentStrength:NATIONAL_TEAM_STRENGTH[opponent]||74,home:tournament?index%2===0:homes[index],neutral:tournament,status:"upcoming",score:null}));
+  }
+
+  function cupRoundTargetDate(competition,stage,season) {
+    const calendars={"足总杯":[154,182,210,245,281],"联赛杯":[18,46,81,130,204],"国王杯":[80,158,186,242,288],"德国杯":[74,123,193,249,287],"意大利杯":[109,158,200,249,287],"法国杯":[151,179,207,242,280]},offsets=calendars[competition]||[28,56,91,133,189],base=offsets[Math.min(stage,offsets.length-1)]??(28+stage*28),jitter=Math.round(stableScoutingUnit(`cup-date|${competition}|${season}|${stage}`)*2)-1;
+    return addDays(`${season}-08-08`,base+jitter);
+  }
+
+  function fixtureCalendarPriority(fixture,leagueShort) {
+    if(fixture.international)return 4;
+    if(EUROPEAN_COMPETITION_BY_NAME[fixture.competition])return 3;
+    if(fixture.knockout)return 2;
+    return fixture.competition===leagueShort?1:0;
+  }
+
+  function resolveFixtureSpacing(fixtures,leagueShort) {
+    const protectedFixtures=fixtures.filter(fixture=>fixture.competition!==leagueShort);
+    for(let attempt=0;attempt<30;attempt++){
+      protectedFixtures.sort((a,b)=>a.date.localeCompare(b.date)||fixtureCalendarPriority(b,leagueShort)-fixtureCalendarPriority(a,leagueShort));let changed=false;
+      for(let index=1;index<protectedFixtures.length;index++){
+        const previous=protectedFixtures[index-1],current=protectedFixtures[index];if(daysBetween(previous.date,current.date)>=3)continue;
+        if(fixtureCalendarPriority(previous,leagueShort)<fixtureCalendarPriority(current,leagueShort))previous.date=addDays(current.date,-3);
+        else current.date=addDays(previous.date,3);
+        changed=true;break;
+      }
+      if(!changed)break;
+    }
+    const occupied=[...protectedFixtures],leagueFixtures=fixtures.filter(fixture=>fixture.competition===leagueShort).sort((a,b)=>Number(a.stageIndex??a.id.split("-").at(-1))-Number(b.stageIndex??b.id.split("-").at(-1)));let previousLeagueDate=null;
+    leagueFixtures.forEach(fixture=>{
+      const original=fixture.date,candidates=[];for(let distance=0;distance<=14;distance++){candidates.push(addDays(original,-distance));if(distance)candidates.push(addDays(original,distance));}
+      let chosen=candidates.find(date=>(!previousLeagueDate||daysBetween(previousLeagueDate,date)>=3)&&occupied.every(item=>Math.abs(daysBetween(item.date,date))>=3));
+      if(!chosen){chosen=previousLeagueDate?addDays(previousLeagueDate,3):original;while(occupied.some(item=>Math.abs(daysBetween(item.date,chosen))<3))chosen=addDays(chosen,1);}
+      fixture.date=chosen;previousLeagueDate=chosen;occupied.push(fixture);
+    });
+    fixtures.sort((a,b)=>a.date.localeCompare(b.date));
+  }
+
+  function generateSchedule(club, season = 2026, careerPlayer=null) {
+    const league = leagueOf(club);
+    const opponents = (OPPONENTS[club.league] || []).filter(n => comparableClubName(n)!==comparableClubName(club.name));
+    const firstLeg=seededShuffle(opponents,`league-first|${season}|${club.id}`),homePattern=leagueHomePattern(firstLeg,`league-home|${season}|${club.id}`),homeByOpponent=new Map(firstLeg.map((name,index)=>[name,homePattern[index]]));
+    const secondLeg=seededShuffle(firstLeg,`league-second|${season}|${club.id}`),ordered=[...firstLeg,...secondLeg],dates=leagueRoundDates(club.league,season,league.matches);
+    const fixtures = [],start = `${season}-08-08`;
+    for (let i=0; i<league.matches; i++) {
+      const opponent=ordered[i%Math.max(1,ordered.length)]||"联赛对手",secondHalf=i>=firstLeg.length,firstHome=homeByOpponent.get(opponent)??true;
+      fixtures.push({ id:`l-${season}-${i}`, date:dates[i]||addDays(start,i*7), competition:league.short, round:`第 ${i+1} 轮`, opponent, home:secondHalf?!firstHome:firstHome, status:"upcoming", score:null });
+    }
+    fixtures.push({ id:`c-${season}-0`, date:cupRoundTargetDate(league.cup,0,season), competition:league.cup, round:CUP_ROUNDS[league.cup][0], stageIndex:0, phase:"knockout", knockout:true, opponent:drawDomesticOpponent(club,[]), home:Math.random()<.58, status:"upcoming", score:null });
+    if (league.extraCup) fixtures.push({ id:`e-${season}-0`, date:cupRoundTargetDate(league.extraCup,0,season), competition:league.extraCup, round:CUP_ROUNDS[league.extraCup][0], stageIndex:0, phase:"knockout", knockout:true, opponent:drawDomesticOpponent(club,[]), home:Math.random()<.5, status:"upcoming", score:null });
+    const european=qualifiedEuropeanCompetition(club,season);
+    if (european) {
+      const opponents=drawEuropeanLeagueOpponents(club,season,european),homes=leagueHomePattern(opponents,`${european.key}-home|${season}|${club.id}`);
+      european.offsets.forEach((offset,i) => fixtures.push({ id:`${european.key}-${season}-${i}`, date:addDays(start,offset), competition:european.name, competitionKey:european.key, round:`联赛阶段第 ${i+1} 轮`, stageIndex:i, phase:"league", knockout:false, opponent:opponents[i]||`${european.name}联赛阶段对手`, home:homes[i], status:"upcoming", score:null }));
+    }
+    const internationalPlayer=careerPlayer||(state?.role==="player"?controlledPlayer():null);
+    if(internationalPlayer)fixtures.push(...generateInternationalSchedule(internationalPlayer,season));
+    resolveFixtureSpacing(fixtures,league.short);
+    return fixtures;
+  }
+
+  function repairCompetitionCalendar(save) {
+    const club=clubById(save.clubId),league=leagueOf(club),season=Number(save.season)||2026,leagueDates=leagueRoundDates(club.league,season,league.matches),seasonStart=`${season}-08-08`;
+    (save.schedule||[]).filter(fixture=>fixture.competition===league.short).forEach(fixture=>{
+      if(fixture.status!=="upcoming")return;const roundIndex=Math.max(0,Number(fixture.id?.split("-").at(-1)??String(fixture.round).match(/\d+/)?.[0]??1)-(fixture.id?.startsWith("l-")?0:1));fixture.date=leagueDates[Math.min(roundIndex,leagueDates.length-1)]||fixture.date;
+    });
+    (save.schedule||[]).filter(fixture=>fixture.status==="upcoming"&&[league.cup,league.extraCup].includes(fixture.competition)).forEach(fixture=>{fixture.date=cupRoundTargetDate(fixture.competition,Number(fixture.stageIndex)||0,season);});
+    Object.values(EUROPEAN_COMPETITIONS).forEach(config=>{
+      const leaguePhase=(save.schedule||[]).filter(fixture=>fixture.competition===config.name&&fixture.phase==="league").sort((a,b)=>(a.stageIndex||0)-(b.stageIndex||0));
+      leaguePhase.forEach((fixture,index)=>{fixture.competitionKey||=config.key;if(fixture.status==="upcoming")fixture.date=addDays(seasonStart,config.offsets[fixture.stageIndex??index]??config.offsets[index]??config.offsets.at(-1));});
+      const pool=europeanCompetitionPool(club),associationOf=name=>pool.find(item=>item.name===name)?.association||name,used=new Set(),associationCounts=new Map();
+      leaguePhase.filter(fixture=>fixture.status==="played").forEach(fixture=>{used.add(comparableClubName(fixture.opponent));const association=associationOf(fixture.opponent);associationCounts.set(association,(associationCounts.get(association)||0)+1);});
+      const candidates=drawEuropeanLeagueOpponents(club,season,config).filter(name=>!used.has(comparableClubName(name)));
+      leaguePhase.filter(fixture=>fixture.status==="upcoming").forEach(fixture=>{
+        const index=candidates.findIndex(name=>!used.has(comparableClubName(name))&&(associationCounts.get(associationOf(name))||0)<2),fallback=candidates.findIndex(name=>!used.has(comparableClubName(name))),chosen=candidates[index>=0?index:fallback];if(!chosen)return;
+        fixture.opponent=chosen;used.add(comparableClubName(chosen));const association=associationOf(chosen);associationCounts.set(association,(associationCounts.get(association)||0)+1);
+      });
+    });
+    resolveFixtureSpacing((save.schedule||[]).filter(fixture=>fixture.status==="upcoming"),league.short);
+    enforceCalendarIntegrity(save,league.short);
+    save.schedule?.sort((a,b)=>a.date.localeCompare(b.date));
+  }
+
+  function enforceCalendarIntegrity(save,leagueShort) {
+    const played=(save.schedule||[]).filter(item=>item.status==="played").sort((a,b)=>a.date.localeCompare(b.date)),upcoming=(save.schedule||[]).filter(item=>item.status==="upcoming"),locked=played.map(item=>item.date),current=save.date||START_DATE;
+    const priority=fixture=>fixture.international?4:EUROPEAN_COMPETITION_BY_NAME[fixture.competition]?3:fixture.knockout?2:fixture.competition===leagueShort?1:0;
+    upcoming.sort((a,b)=>priority(b)-priority(a)||a.date.localeCompare(b.date)).forEach(fixture=>{
+      let date=fixture.date<current?current:fixture.date,guard=0;while(locked.some(value=>Math.abs(daysBetween(value,date))<3)&&guard++<40)date=addDays(date,1);fixture.date=date;locked.push(date);
+    });
+  }
+
+  function drawDomesticOpponent(club, excluded) {
+    const pool=(OPPONENTS[club.league]||[]).filter(name=>comparableClubName(name)!==comparableClubName(club.name)&&!excluded.includes(name));
+    return pool[Math.floor(rand(0,pool.length))]||"待定对手";
+  }
+
+  function findAvailableFixtureDate(preferred) {
+    let date=preferred;
+    for (let attempts=0; attempts<30; attempts++) {
+      const conflict=state.schedule.some(f=>Math.abs(daysBetween(f.date,date))<3);
+      if (!conflict) return date;
+      date=addDays(date,1);
+    }
+    return date;
+  }
+
+  function poisson(lambda) {
+    const limit=Math.exp(-lambda);let product=1,count=0;
+    do {count++;product*=Math.random();} while(product>limit && count<12);
+    return count-1;
+  }
+
+  function loadModPacks() {
+    try {const parsed=JSON.parse(localStorage.getItem(MOD_KEY)||"[]");return Array.isArray(parsed)?parsed:[];} catch {return [];}
+  }
+
+  function backgroundLeagueCatalog() {
+    const builtIn=BACKGROUND_LEAGUES.map(league=>({...league,source:"background-generated"}));
+    const imported=loadModPacks().flatMap(pack=>(pack.leagues||[]).filter(league=>league.simulation==="background").map(league=>({
+      id:league.id,name:league.name,country:league.country||"社区数据",tier:Number(league.tier)||3,source:`mod:${pack.packId}`,
+      clubs:(pack.clubs||[]).filter(club=>club.leagueId===league.id).map(club=>[club.name,clamp(Number(club.prestige)||68,40,99),clamp(Number(club.averageAbility)||65,35,99)])
+    }))).filter(league=>league.clubs.length>=4);
+    return [...builtIn,...imported].filter((league,index,all)=>all.findIndex(item=>item.id===league.id)===index);
+  }
+
+  function createBackgroundWorld(season=2026) {
+    const leagues={};
+    backgroundLeagueCatalog().forEach(league=>{
+      const clubs=league.clubs.map((club,index)=>({id:`${league.id}-${index+1}`,name:club[0],reputation:club[1],ability:club[2],p:0,w:0,d:0,l:0,gf:0,ga:0,gd:0,pts:0}));
+      leagues[league.id]={id:league.id,name:league.name,country:league.country,tier:league.tier,source:league.source,round:0,clubs,results:[],scorers:[]};
+    });
+    return {season,currentDate:`${season}-08-01`,nextRoundDate:`${season}-08-08`,leagues};
+  }
+
+  function simulateBackgroundMatch(home,away) {
+    const gap=Number(home.ability||65)-Number(away.ability||65),homeGoals=poisson(clamp(1.36*Math.exp(gap/22)+.16,.18,5.4)),awayGoals=poisson(clamp(1.08*Math.exp(-gap/22),.12,4.8));
+    home.p++;away.p++;home.gf+=homeGoals;home.ga+=awayGoals;away.gf+=awayGoals;away.ga+=homeGoals;
+    if(homeGoals>awayGoals){home.w++;away.l++;home.pts+=3;}else if(homeGoals<awayGoals){away.w++;home.l++;away.pts+=3;}else{home.d++;away.d++;home.pts++;away.pts++;}
+    home.gd=home.gf-home.ga;away.gd=away.gf-away.ga;
+    return {home:home.name,away:away.name,homeGoals,awayGoals};
+  }
+
+  function simulateBackgroundRound(league,date) {
+    const clubs=league.clubs,rotation=league.round%Math.max(1,clubs.length-1),matches=[];
+    for(let i=0;i<Math.floor(clubs.length/2);i++){
+      const home=clubs[(i+rotation)%clubs.length],away=clubs[(clubs.length-1-i+rotation)%clubs.length];
+      if(home===away)continue;
+      const result=simulateBackgroundMatch(home,away);matches.push(result);
+      const goals=result.homeGoals+result.awayGoals;
+      for(let g=0;g<goals;g++){
+        const scoringClub=g<result.homeGoals?home:away;
+        const scorerName=`${FIRST[Math.floor(rand(0,FIRST.length))]} ${LAST[Math.floor(rand(0,LAST.length))]}`;
+        const scorer=league.scorers.find(item=>item.name===scorerName&&item.club===scoringClub.name);
+        if(scorer)scorer.goals++;else league.scorers.push({name:scorerName,club:scoringClub.name,goals:1,generated:true});
+      }
+    }
+    league.round++;league.results.unshift({date,round:league.round,matches});league.results=league.results.slice(0,8);
+    league.scorers.sort((a,b)=>b.goals-a.goals||a.name.localeCompare(b.name));league.scorers=league.scorers.slice(0,20);
+  }
+
+  function simulateBackgroundWorld(targetDate) {
+    if(!state.backgroundWorld)state.backgroundWorld=createBackgroundWorld(state.season);
+    const world=state.backgroundWorld;
+    while(world.nextRoundDate<=targetDate){Object.values(world.leagues).forEach(league=>simulateBackgroundRound(league,world.nextRoundDate));world.nextRoundDate=addDays(world.nextRoundDate,7);}
+    if(world.currentDate<targetDate)world.currentDate=targetDate;
+  }
+
+  function standings(league) {
+    return [...league.clubs].sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name));
+  }
+
+  const MAJOR_LEAGUE_IDS=["ENG1","ESP1","GER1","ITA1","FRA1"];
+
+  function createMajorLeagueWorld(season=2026,userClubId) {
+    const userLeague=clubById(userClubId).league,leagueIds=[...new Set([userLeague,...MAJOR_LEAGUE_IDS])],leagues={};
+    leagueIds.forEach(leagueId=>{
+      const clubs=CLUBS.filter(club=>club.league===leagueId).map(club=>({
+        id:club.id,name:club.name,code:club.code,sourceId:club.id,prestige:club.prestige,ability:club.prestige,
+        p:0,w:0,d:0,l:0,gf:0,ga:0,gd:0,pts:0,form:[]
+      }));
+      leagues[leagueId]={id:leagueId,name:LEAGUES[leagueId].name,short:LEAGUES[leagueId].short,country:LEAGUES[leagueId].country,tier:LEAGUES[leagueId].tier,round:0,roundDates:leagueRoundDates(leagueId,season,LEAGUES[leagueId].matches),clubs,results:[],scorers:[],totalGoals:0,processedFixtureIds:[]};
+    });
+    return {season,currentDate:`${season}-08-01`,nextRoundDate:`${season}-08-08`,leagues};
+  }
+
+  function majorStandings(league) {
+    return [...league.clubs].sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name,"zh-CN"));
+  }
+
+  function pairLeagueClubs(clubs,round) {
+    if(clubs.length<2)return [];
+    const ordered=[...clubs].sort((a,b)=>a.id.localeCompare(b.id)),fixed=ordered[0],rest=ordered.slice(1),rotation=round%Math.max(1,rest.length);
+    const rotated=[fixed,...rest.slice(rotation),...rest.slice(0,rotation)],pairs=[];
+    for(let index=0;index<Math.floor(rotated.length/2);index++){
+      const first=rotated[index],second=rotated[rotated.length-1-index];
+      if(first&&second&&first!==second)pairs.push((round+index)%2?[second,first]:[first,second]);
+    }
+    return pairs;
+  }
+
+  function pickLeagueScorer(club) {
+    const source=DQD_TEAM_INDEX.get(club.sourceId),players=source?.players||[];
+    const preferred=players.filter(player=>player.positionGroup==="ST"),secondary=players.filter(player=>player.positionGroup==="CM"),pool=preferred.length?preferred:secondary.length?secondary:players;
+    if(pool.length){const player=pool[Math.floor(rand(0,pool.length))];return {name:player.name,generated:false};}
+    return {name:`${FIRST[Math.floor(rand(0,FIRST.length))]} ${LAST[Math.floor(rand(0,LAST.length))]}`,generated:true};
+  }
+
+  function addMajorScorer(league,club,scorerInfo) {
+    const existing=league.scorers.find(item=>item.name===scorerInfo.name&&item.club===club.name);
+    if(existing)existing.goals++;else league.scorers.push({name:scorerInfo.name,club:club.name,clubId:club.id,goals:1,generated:Boolean(scorerInfo.generated)});
+  }
+
+  function applyMajorLeagueMatch(league,home,away,options={}) {
+    const gap=Number(home.ability||65)-Number(away.ability||65),homeGoals=options.homeGoals??poisson(clamp(1.4*Math.exp(gap/22)+.16,.18,5.5)),awayGoals=options.awayGoals??poisson(clamp(1.08*Math.exp(-gap/22),.12,4.9));
+    home.p++;away.p++;home.gf+=homeGoals;home.ga+=awayGoals;away.gf+=awayGoals;away.ga+=homeGoals;
+    let homeForm="D",awayForm="D";
+    if(homeGoals>awayGoals){home.w++;away.l++;home.pts+=3;homeForm="W";awayForm="L";}else if(homeGoals<awayGoals){away.w++;home.l++;away.pts+=3;homeForm="L";awayForm="W";}else{home.d++;away.d++;home.pts++;away.pts++;}
+    home.gd=home.gf-home.ga;away.gd=away.gf-away.ga;home.form=[homeForm,...home.form].slice(0,5);away.form=[awayForm,...away.form].slice(0,5);league.totalGoals+=homeGoals+awayGoals;
+    for(let goal=0;goal<homeGoals;goal++)addMajorScorer(league,home,options.homeScorers?.[goal]||pickLeagueScorer(home));
+    for(let goal=0;goal<awayGoals;goal++)addMajorScorer(league,away,options.awayScorers?.[goal]||pickLeagueScorer(away));
+    return {home:home.name,away:away.name,homeId:home.id,awayId:away.id,homeGoals,awayGoals,fixtureId:options.fixtureId||null};
+  }
+
+  function finishMajorLeagueRound(league,date,matches) {
+    league.round++;league.results.unshift({date,round:league.round,matches});league.results=league.results.slice(0,12);
+    league.scorers.sort((a,b)=>b.goals-a.goals||a.name.localeCompare(b.name,"zh-CN"));league.scorers=league.scorers.slice(0,30);
+  }
+
+  function simulateMajorLeagueRound(league,date) {
+    const matches=pairLeagueClubs(league.clubs,league.round).map(([home,away])=>applyMajorLeagueMatch(league,home,away));
+    finishMajorLeagueRound(league,date,matches);
+  }
+
+  function simulateMajorLeagueWorld(save,targetDate) {
+    save.majorLeagueWorld||=createMajorLeagueWorld(save.season||2026,save.clubId);
+    const world=save.majorLeagueWorld,userLeague=clubById(save.clubId).league;
+    const pending=[];Object.entries(world.leagues).forEach(([leagueId,league])=>{
+      league.roundDates||=leagueRoundDates(leagueId,save.season||2026,LEAGUES[leagueId]?.matches||38);if(leagueId===userLeague)return;
+      while(league.round<league.roundDates.length&&league.roundDates[league.round]<=targetDate)simulateMajorLeagueRound(league,league.roundDates[league.round]);
+      if(league.roundDates[league.round])pending.push(league.roundDates[league.round]);
+    });
+    world.nextRoundDate=pending.sort()[0]||addDays(targetDate,7);
+    if(world.currentDate<targetDate)world.currentDate=targetDate;
+  }
+
+  function eventScorerList(m,ours) {
+    if(!m)return [];
+    const players=ours?state.squad:(m.opponentPlayers||[]),events=ours?m.playerEvents:m.opponentEvents,names=[];
+    Object.entries(events||{}).forEach(([id,event])=>{const player=players.find(item=>item.id===id);for(let goal=0;goal<(event.goals||0);goal++)names.push({name:player?.name||"未知球员",generated:Boolean(player?.generated)});});
+    return names;
+  }
+
+  function recordUserLeagueRound(save,fixture,match=null) {
+    const userClub=clubById(save.clubId),league=save.majorLeagueWorld?.leagues[userClub.league];
+    if(!league||fixture.competition!==LEAGUES[userClub.league].short||league.processedFixtureIds.includes(fixture.id))return;
+    const ours=league.clubs.find(club=>club.id===save.clubId),opponent=league.clubs.find(club=>comparableClubName(club.name)===comparableClubName(fixture.opponent));
+    if(!ours||!opponent||!fixture.score)return;
+    const home=fixture.home?ours:opponent,away=fixture.home?opponent:ours,ourScorers=eventScorerList(match,true),opponentScorers=eventScorerList(match,false);
+    const actual=applyMajorLeagueMatch(league,home,away,{homeGoals:fixture.score.home,awayGoals:fixture.score.away,homeScorers:fixture.home?ourScorers:opponentScorers,awayScorers:fixture.home?opponentScorers:ourScorers,fixtureId:fixture.id});
+    const remaining=league.clubs.filter(club=>club!==ours&&club!==opponent),matches=[actual,...pairLeagueClubs(remaining,league.round).map(([homeClub,awayClub])=>applyMajorLeagueMatch(league,homeClub,awayClub))];
+    league.processedFixtureIds.push(fixture.id);finishMajorLeagueRound(league,fixture.date,matches);
+    const table=majorStandings(league),userRow=table.find(club=>club.id===save.clubId);save.points=userRow?.pts||0;save.leaguePosition=Math.max(1,table.findIndex(club=>club.id===save.clubId)+1);
+    if(save.majorLeagueWorld.currentDate<fixture.date)save.majorLeagueWorld.currentDate=fixture.date;
+  }
+
+  function rebuildMajorLeagueWorld(save) {
+    save.majorLeagueWorld=createMajorLeagueWorld(save.season||2026,save.clubId);simulateMajorLeagueWorld(save,save.date||START_DATE);
+    const leagueShort=LEAGUES[clubById(save.clubId).league].short;
+    (save.schedule||[]).filter(fixture=>fixture.status==="played"&&fixture.competition===leagueShort&&fixture.score).sort((a,b)=>a.date.localeCompare(b.date)).forEach(fixture=>recordUserLeagueRound(save,fixture));
+  }
+
+  function validateModPack(pack) {
+    if(!pack||pack.schemaVersion!==1||typeof pack.packId!=="string"||!pack.packId.trim())throw new Error("缺少有效的 schemaVersion 或 packId");
+    if(!Array.isArray(pack.leagues)||!Array.isArray(pack.clubs)||!Array.isArray(pack.players))throw new Error("leagues、clubs、players 必须是数组");
+    const leagueIds=new Set(pack.leagues.map(item=>item.id));
+    if(leagueIds.size!==pack.leagues.length||[...leagueIds].some(id=>!id))throw new Error("联赛 ID 缺失或重复");
+    if(pack.clubs.some(club=>!club.id||!club.name||!leagueIds.has(club.leagueId)))throw new Error("俱乐部缺少 ID、名称或关联了不存在的联赛");
+    const clubIds=new Set(pack.clubs.map(item=>item.id));
+    if(clubIds.size!==pack.clubs.length)throw new Error("俱乐部 ID 重复");
+    if(pack.players.some(player=>!player.id||!player.name||!clubIds.has(player.clubId)||Number(player.ca)<1||Number(player.ca)>99||Number(player.pa)<Number(player.ca)||Number(player.pa)>99))throw new Error("球员字段或 CA/PA 范围无效");
+    return {...pack,name:pack.name||pack.packId,importedAt:new Date().toISOString()};
+  }
+
+  function createState() {
+    const club = clubById(setup.clubId);
+    let controlled = null;
+    let person;
+    if (setup.role === "player") {
+      controlled = setup.origin === "real"
+        ? { ...REAL_PLAYERS.find(p => p.id === setup.identity) }
+        : { id:"custom", name:setup.customName || "新星球员", club:club.id, position:setup.customPosition, age:Number(setup.customAge)||18, nationality:leagueOf(club).country, overall:68, potential:88, value:5.8, wage:28, pace:72, shooting:68, passing:70, dribbling:73, defending:60, physical:69 };
+      person = controlled.name;
+    } else {
+      const selected = COACHES.find(c => c.name === setup.identity);
+      person = setup.origin === "real" ? selected.name : (setup.customName || "新任主教练");
+    }
+    const squad = createSquad(club, controlled);
+    squad.forEach(player=>{ensurePlayerDevelopment(player,2026);ensurePlayerContract(player,2026);});
+    const coachProfile = setup.role === "coach" && setup.origin === "real"
+      ? { ...COACHES.find(c => c.name === setup.identity) }
+      : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
+    const schedule=generateSchedule(club,2026,controlled);
+    const created={
+      version:25, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
+      squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
+      schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
+      training:"balanced", tactic:"balanced", transferRequests:0, inboxUnread:3, continueStatus:null,
+      competitionProgress:{ europe:createEuropeanProgress(club,2026), cups:{}, international:{} },
+      backgroundWorld:createBackgroundWorld(2026), worldLeague:"BRA1",majorLeagueWorld:createMajorLeagueWorld(2026,club.id),majorLeagueId:club.league,
+      media:[
+        { source:"Football Daily", title:`${person} 正式开启 ${club.name} 生涯`, body:`新赛季从 2026 年 8 月 1 日开始。外界将密切关注这段生涯的第一步。`, date:START_DATE, type:"career" },
+        { source:"The Tactical Room", title:`${club.name} 季前展望：稳定性将决定上限`, body:`球队需要在密集赛程中管理体能，并在两个转会窗口做出准确判断。`, date:START_DATE, type:"analysis" }
+      ],
+      honors:[], history:[], notifications:initialNotifications(club,schedule),matchReports:[],squadSort:{key:"position",direction:"asc"},squadSearch:"",fixtureFilter:"all",
+      activeMatch:null, selectedTransfer:null, transferNegotiations:[],transferRequestsLog:[],transferHistory:[],retired:false
+    };
+    created.transferMarket=createTransferMarket(created.season);
+    simulateTransferMarket(created,START_DATE);
+    return created;
+  }
+
+  function loadState() {
+    try { const raw = localStorage.getItem(SAVE_KEY); return raw ? migrateState(JSON.parse(raw)) : null; } catch (error) { console.error("存档加载失败",error);return null; }
+  }
+  function migrateState(saved) {
+    if (!saved) return null;
+    const previousVersion=saved.version||1;
+    saved.clubId = LEGACY_TEAM_MAP[saved.clubId] || saved.clubId;
+    saved.competitionProgress ||= { cups:{} };
+    const legacyUcl=saved.competitionProgress.ucl;
+    saved.competitionProgress.europe ||= legacyUcl?{ucl:{...legacyUcl}}:createEuropeanProgress(clubById(saved.clubId),saved.season||2026);
+    Object.values(saved.competitionProgress.europe).forEach(progress=>{progress.played??=0;progress.points??=0;progress.gf??=0;progress.ga??=0;progress.position??=null;progress.eliminated??=false;progress.knockoutStage??=-1;});
+    saved.competitionProgress.international ||= {};
+    saved.competitionProgress.cups ||= {};
+    saved.squad ||= [];
+    saved.squad.forEach(player => {
+      player.lastRating ??= Number(player.form) || null;
+      player.ratingTotal ??= player.appearances ? Number(player.form || 6) * player.appearances : 0;
+      player.appearances ??= 0; player.goals ??= 0; player.assists ??= 0;
+      player.consecutiveStarts??=0;player.lastMatchMinutes??=0;player.lastMatchDate??=null;
+      player.careerStats=Array.isArray(player.careerStats)?player.careerStats:[];
+      player.development||={season:saved.season||2026,startOverall:Number(player.overall||65),minutes:Math.round(Number(player.appearances||0)*75),injuryDays:0};
+      ensurePlayerContract(player,saved.season||2026);
+    });
+    if(previousVersion<6&&saved.played>0){
+      const keepers=saved.squad.filter(player=>player.position==="GK");
+      if(keepers.length&&keepers.every(player=>!player.appearances)){
+        const firstChoice=[...keepers].sort((a,b)=>(b.overall||0)-(a.overall||0))[0];
+        firstChoice.appearances=saved.played;firstChoice.ratingTotal=Number((saved.played*6).toFixed(2));firstChoice.lastRating=6;firstChoice.form=6;
+        saved.notifications=[{id:"v6-goalkeeper-repair",title:"数据修复：门将出场统计已校正",type:"general",date:saved.date,read:false,detail:`旧版本的首发选择遗漏了门将。系统已将此前 ${saved.played} 场比赛的出场记录校正到当时能力最高的门将 ${firstChoice.name}，历史评分按中性基准 6.00 计入；新比赛将记录实际首发门将与实时评分。`,facts:[`校正球员：${firstChoice.name}`,`补录出场：${saved.played} 场`,`历史基准评分：6.00`]},...(saved.notifications||[])];
+      }
+    }
+    saved.notifications=(saved.notifications||[]).map((item,index)=>normalizeNotification(item,index,saved));
+    saved.matchReports=Array.isArray(saved.matchReports)?saved.matchReports:[];
+    saved.squadSort||={key:"position",direction:"asc"};
+    saved.squadSearch||="";
+    saved.fixtureFilter||="all";
+    saved.transferNegotiations=Array.isArray(saved.transferNegotiations)?saved.transferNegotiations:[];
+    saved.transferRequestsLog=Array.isArray(saved.transferRequestsLog)?saved.transferRequestsLog:[];
+    saved.continueStatus||=null;
+    saved.inboxUnread=saved.notifications.filter(item=>!item.read).length;
+    if (saved.activeMatch) {
+      saved.activeMatch.tactic ||= saved.role === "coach" ? saved.tactic : "balanced";
+      saved.activeMatch.lastDecisionMinute ??= -10;
+      saved.activeMatch.decisionBonus ??= 0;
+      saved.activeMatch.decisionRisk ??= 0;
+      saved.activeMatch.decisionEvent = null;
+      saved.activeMatch.lineupIds ||= saved.squad.filter(player=>!player.injured).slice(0,11).map(player=>player.id);
+      saved.activeMatch.playerEvents ||= {};
+      saved.activeMatch.speed??=1;saved.activeMatch.paused??=true;saved.activeMatch.pauseReason||="resume";saved.activeMatch.halfTimeTalkDone??=saved.activeMatch.minute>45;saved.activeMatch.postMatchTalkDone??=false;saved.activeMatch.pendingTalk??=saved.activeMatch.minute===45?"halfTime":null;saved.activeMatch.heatmap||={};saved.activeMatch.visualTick??=0;saved.activeMatch.stoppageTime??=null;saved.activeMatch.aiNextTacticalMinute||={ours:Math.round(rand(24,38)),opponent:Math.round(rand(24,38))};
+      if(saved.activeMatch.pauseReason==="decision"){saved.activeMatch.pauseReason=null;saved.activeMatch.paused=false;}
+      ensureMatchRuntime(saved,saved.activeMatch);
+      repairMatchLineups(saved,saved.activeMatch);
+      if(saved.role==="player"&&!saved.activeMatch.controlledSelection){
+        const starter=(saved.activeMatch.initialLineupIds||[]).includes(saved.controlledId),bench=(saved.activeMatch.initialBenchIds||[]).includes(saved.controlledId);
+        saved.activeMatch.controlledSelection={status:starter?"starter":bench?"bench":"rest",label:starter?"本场首发":bench?"替补待命":"本场轮休",reason:starter?"本场阵容已在旧版本中确定":bench?"本场替补名单已在旧版本中确定":"本场名单已在旧版本中确定"};
+      }
+      if(!(saved.activeMatch.lineupIds||[]).includes(saved.activeMatch.selectedHeatmapPlayer))saved.activeMatch.selectedHeatmapPlayer=saved.activeMatch.lineupIds?.[0]||null;
+    }
+    if ((saved.version || 1) < 3) {
+      saved.schedule = (saved.schedule || []).filter(fixture => !(fixture.knockout && fixture.stageIndex > 0 && fixture.status === "upcoming"));
+      saved.version = 3;
+    }
+    if ((saved.version || 1) < 4) {
+      saved.backgroundWorld ||= createBackgroundWorld(saved.season||2026);
+      saved.worldLeague ||= Object.keys(saved.backgroundWorld.leagues)[0]||"BRA1";
+      saved.version=4;
+    }
+    if ((saved.version || 1) < 5) saved.version=5;
+    if ((saved.version || 1) < 6) saved.version=6;
+    if(previousVersion<7||!saved.majorLeagueWorld)rebuildMajorLeagueWorld(saved);else simulateMajorLeagueWorld(saved,saved.date||START_DATE);
+    saved.majorLeagueId=saved.majorLeagueWorld.leagues[saved.majorLeagueId]?saved.majorLeagueId:clubById(saved.clubId).league;
+    if(previousVersion<8||!saved.transferMarket){saved.transferMarket=createTransferMarket(saved.season||2026);simulateTransferMarket(saved,saved.date||START_DATE);}
+    else if(previousVersion<10)rebuildTransferMarketFromPostOpeningActivity(saved);
+    else simulateTransferMarket(saved,saved.date||START_DATE);
+    const historicalTransfers=[...(Array.isArray(saved.transferHistory)?saved.transferHistory:[]),...(saved.transferMarket?.records||[])],uniqueTransfers=new Map();historicalTransfers.forEach(record=>uniqueTransfers.set(record.id,record));saved.transferHistory=[...uniqueTransfers.values()].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,500);
+    saved.transferHistory.forEach(record=>{record.careerHistory=Array.isArray(record.careerHistory)?record.careerHistory:[];record.careerSegment||={id:`career-legacy-transfer-${record.id}`,season:record.season||saved.season,club:clubById(record.fromId).name,clubId:record.fromId,appearances:0,goals:0,assists:0,average:0,overallStart:record.overall,overallEnd:record.overall,change:0,partialSeason:true,endDate:record.date,dataUnavailable:true};});
+    if(previousVersion<17&&saved.role==="player"){
+      const player=saved.squad.find(item=>item.id===saved.controlledId);saved.schedule=(saved.schedule||[]).filter(item=>!item.international||item.status==="played");
+      if(player){const additions=generateInternationalSchedule(player,saved.season||2026).filter(item=>item.date>=saved.date);saved.schedule.push(...additions);}
+      resolveFixtureSpacing((saved.schedule||[]).filter(item=>item.status==="upcoming"),LEAGUES[clubById(saved.clubId).league].short);
+    }
+    if((previousVersion<17||saved.calendarRepairPending)&&!saved.activeMatch){repairCompetitionCalendar(saved);delete saved.calendarRepairPending;}
+    else if(previousVersion<17&&saved.activeMatch)saved.calendarRepairPending=true;
+    if(previousVersion<18){
+      (saved.matchReports||[]).forEach(normalizeLegacyReportHeatmaps);
+      if(saved.activeMatch&&!saved.activeMatch.heatmapNormalized){
+        const ourIds=new Set([...(saved.activeMatch.initialLineupIds||[]),...(saved.activeMatch.initialBenchIds||[]),...(saved.activeMatch.lineupIds||[]),...(saved.activeMatch.benchIds||[])]);
+        if(!saved.activeMatch.fixture?.home)ourIds.forEach(id=>{if(saved.activeMatch.heatmap?.[id])saved.activeMatch.heatmap[id]=saved.activeMatch.heatmap[id].map(([x,y])=>[Number((100-x).toFixed(1)),y]);});
+        saved.activeMatch.heatmapNormalized=true;
+      }
+    }
+    if(previousVersion<20&&saved.activeMatch?.fixture?.international&&Number(saved.activeMatch.minute||0)===0)saved.activeMatch=null;
+    saved.schedule?.sort((a,b)=>a.date.localeCompare(b.date));
+    saved.version=25;
+    return saved;
+  }
+  function saveState() { if (state) localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }
+  function resetSave() { localStorage.removeItem(SAVE_KEY); state = null; modal = null; render(); }
+  function controlledPlayer() { return state?.squad.find(p => p.id === state.controlledId); }
+  function nextFixture() { return state?.schedule.filter(f=>f.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date))[0]; }
+
+  function weekdayLabel(date) {
+    return new Date(`${date}T12:00:00`).toLocaleDateString("zh-CN",{weekday:"short"});
+  }
+
+  function ensurePlayerDevelopment(player,season=state?.season||2026) {
+    player.careerStats=Array.isArray(player.careerStats)?player.careerStats:[];
+    if(!player.development||player.development.season!==season)player.development={season,startOverall:Number(player.overall||65),minutes:0,injuryDays:0};
+    player.development.startOverall??=Number(player.overall||65);player.development.minutes??=0;player.development.injuryDays??=0;
+    return player.development;
+  }
+
+  function recordPlayerDevelopment(player,minutes) {
+    const development=ensurePlayerDevelopment(player,state.season);
+    development.minutes=Math.round(Number(development.minutes||0)+Number(minutes||0));
+  }
+
+  function toast(message) {
+    const el = document.createElement("div"); el.className="toast"; el.textContent=message;
+    document.getElementById("toast-region").appendChild(el);
+    setTimeout(() => el.remove(), 3200);
+  }
+
+  function renderIcons() { if (window.lucide) window.lucide.createIcons(); }
+  function render() {
+    stopMatchClock();
+    if(state?.activeMatch?.finished&&state.activeMatch.postMatchTalkDone&&!state.activeMatch.pendingTalk){finishMatch();return;}
+    playerProfileRegistry=new Map();playerProfileSequence=0;
+    app.innerHTML = !state ? renderSetup() : state.activeMatch ? `${renderMatch()}${renderModal()}` : renderShell();
+    bindEvents(); renderIcons();
+    if(state?.activeMatch){drawMatchCanvas();startMatchClock();}
+  }
+
+  function setupIdentityId(item) { return setup.role==="coach"?item.name:item.id; }
+  function setupIdentities() { return setup.role==="coach"?COACHES:REAL_PLAYERS; }
+  function normalizeSetupSelection() {
+    const identities=setupIdentities(),current=identities.find(item=>setupIdentityId(item)===setup.identity);
+    if(setup.origin==="real"&&current){setup.clubId=current.club;setup.leagueId=clubById(current.club).league;return;}
+    const eligibleClubIds=setup.origin==="real"?new Set(identities.map(item=>item.club)):new Set(CLUBS.map(club=>club.id));
+    const eligibleClubs=CLUBS.filter(club=>eligibleClubIds.has(club.id));
+    if(!LEAGUES[setup.leagueId]||!eligibleClubs.some(club=>club.league===setup.leagueId))setup.leagueId=eligibleClubs[0]?.league||"ENG1";
+    if(!eligibleClubs.some(club=>club.id===setup.clubId&&club.league===setup.leagueId))setup.clubId=eligibleClubs.find(club=>club.league===setup.leagueId)?.id||eligibleClubs[0]?.id;
+    if(setup.origin==="real")setup.identity=setupIdentityId(identities.find(item=>item.club===setup.clubId)||identities[0]);
+  }
+
+  function renderSetupBrowser(includeIdentity) {
+    normalizeSetupSelection();
+    const identities=setupIdentities(),eligibleClubIds=setup.origin==="real"?new Set(identities.map(item=>item.club)):new Set(CLUBS.map(club=>club.id));
+    const leagueIds=Object.keys(LEAGUES).filter(id=>CLUBS.some(club=>club.league===id&&eligibleClubIds.has(club.id)));
+    const clubs=CLUBS.filter(club=>club.league===setup.leagueId&&eligibleClubIds.has(club.id));
+    const people=identities.filter(item=>item.club===setup.clubId),selected=people.find(item=>setupIdentityId(item)===setup.identity)||people[0],club=clubById(setup.clubId);
+    const identityField=includeIdentity?`<div class="field setup-person-field"><label for="identity">选择${setup.role==="coach"?"教练":"球员"}</label><select class="select" id="identity" name="identity">${people.map(item=>`<option value="${esc(setupIdentityId(item))}" ${setupIdentityId(item)===setup.identity?"selected":""}>${esc(item.name)} · ${setup.role==="player"?`${playerRoleLabel(item.position)} · ${item.age} 岁 · `:""}能力 ${item.overall}</option>`).join("")}</select></div>`:"";
+    const preview=includeIdentity&&selected?`<div class="setup-selection-preview">${clubBadge(club,"club-badge-setup")}<div><strong>${esc(selected.name)}</strong><span>${esc(club.name)} · ${LEAGUES[club.league].short}${setup.role==="player"?` · ${playerRoleLabel(selected.position)} · ${selected.age} 岁`:""}</span></div><b>${selected.overall}</b></div>`:"";
+    return `<div class="setup-browser ${includeIdentity?"with-person":""}"><div class="field"><label for="setup-league">联赛</label><select class="select" id="setup-league" name="leagueId">${leagueIds.map(id=>`<option value="${id}" ${id===setup.leagueId?"selected":""}>${esc(LEAGUES[id].name)}</option>`).join("")}</select></div><div class="field"><label for="setup-club">球队</label><select class="select" id="setup-club" name="clubId">${clubs.map(item=>`<option value="${item.id}" ${item.id===setup.clubId?"selected":""}>${esc(item.name)}</option>`).join("")}</select></div>${identityField}</div>${preview}`;
+  }
+
+  function renderSetup() {
+    normalizeSetupSelection();
+    return `<main class="setup">
+      <section class="setup-visual">
+        <div class="brand">${icon("circle-dot")}<span class="brand-name">Football Simulator</span><span class="version-tag">${APP_VERSION}</span></div>
+        <div class="setup-copy"><h1>书写你的<br>足球人生</h1><p>从 2026 年 8 月 1 日开始，以教练或球员身份经历比赛、转会、伤病、舆论与荣誉。每一个决定都会留在你的生涯里。</p></div>
+      </section>
+      <section class="setup-panel">
+        <form class="setup-form" id="setup-form">
+          <div class="eyebrow">创建新生涯</div><h2>选择你的身份</h2><p class="setup-step">存档会保存在当前浏览器中，可随时继续。</p>
+          <div class="field"><span class="field-label">游戏视角</span><div class="segmented">
+            <button type="button" class="choice ${setup.role==="coach"?"active":""}" data-setup="role" data-value="coach">${icon("clipboard-list")}<strong>主教练</strong><small>管理阵容、战术、转会与球队目标</small></button>
+            <button type="button" class="choice ${setup.role==="player"?"active":""}" data-setup="role" data-value="player">${icon("shirt")}<strong>职业球员</strong><small>专注表现、成长、合同与个人选择</small></button>
+          </div></div>
+          <div class="field"><span class="field-label">角色来源</span><div class="segmented">
+            <button type="button" class="choice ${setup.origin==="real"?"active":""}" data-setup="origin" data-value="real">${icon("database")}<strong>代表性真实角色</strong><small>使用真实球队阵容与游戏估算评级</small></button>
+            <button type="button" class="choice ${setup.origin==="custom"?"active":""}" data-setup="origin" data-value="custom">${icon("user-round-plus")}<strong>创建虚拟角色</strong><small>自定义姓名与起始球队</small></button>
+          </div></div>
+          ${setup.origin === "real" ? renderSetupBrowser(true) : `
+            <div class="grid grid-2"><div class="field"><label for="custom-name">姓名</label><input class="input" id="custom-name" name="customName" maxlength="30" value="${esc(setup.customName)}" placeholder="输入角色姓名" required></div>
+            ${setup.role === "player" ? `<div class="field"><label for="custom-age">起始年龄</label><input class="input" id="custom-age" name="customAge" type="number" min="16" max="40" value="${setup.customAge}"></div>` : `<div class="field"><label for="custom-age">起始年龄</label><input class="input" id="custom-age" name="customAge" type="number" min="25" max="75" value="${setup.customAge}"></div>`}</div>
+            ${setup.role === "player" ? `<div class="field"><label for="custom-position">场上位置</label><select class="select" id="custom-position" name="customPosition">${["GK","CB","FB","DM","CM","AM","WG","ST"].map(p=>`<option ${setup.customPosition===p?"selected":""}>${p}</option>`).join("")}</select></div>`:""}
+            ${renderSetupBrowser(false)}`}
+          <div class="data-note"><strong>数据快照：</strong>已导入懂球帝 2026-07-31 公开页面中的 ${DQD_DATA.meta.teamCount} 支球队和 ${DQD_DATA.meta.playerCount} 名球员，覆盖五大联赛一、二级。球员能力与潜力为游戏模型估算，不是懂球帝评分。</div>
+          <div class="setup-actions"><button class="btn btn-primary" type="submit">${icon("play")}开始生涯</button>${localStorage.getItem(SAVE_KEY)?`<button class="btn" type="button" id="continue-save">继续已有存档</button>`:""}</div>
+        </form>
+      </section>
+    </main>`;
+  }
+
+  const NAV = [
+    ["home","layout-dashboard","总览"],["squad","users","阵容"],["fixtures","calendar-days","赛程"],["world","chart-no-axes-column-increasing","联赛"],["transfers","repeat-2","转会"],["media","newspaper","媒体"],["career","trophy","生涯"],["profile","user-round","角色"]
+  ];
+
+  function navButton(item) { return `<button class="nav-btn ${state.view===item[0]?"active":""}" data-view="${item[0]}">${icon(item[1])}<span>${item[2]}</span></button>`; }
+  function viewTitle() { return ({home:"生涯中心",squad:"一线队",fixtures:"赛程与结果",world:"联赛中心",transfers:"转会中心",media:"媒体中心",career:"生涯档案",profile:"角色发展"})[state.view]; }
+
+  function renderShell() {
+    const club=clubById(state.clubId),next=nextFixture(),matchReady=Boolean(next&&next.date<=state.date),continueNote=matchReady?`${next.competition} · ${next.opponent}`:(state.continueStatus?.title||"推进至下一重要事件");
+    return `<div class="shell">
+      <aside class="sidebar"><div class="brand">${icon("circle-dot")}<span class="brand-name">FS 26</span><span class="version-tag">${APP_VERSION}</span></div><nav class="nav" aria-label="主导航">${NAV.map(navButton).join("")}</nav><div class="nav-spacer"></div><div class="profile-mini">${clubBadge(club,"club-badge-profile")}<div><strong>${esc(state.person)}</strong><span>${state.role==="coach"?"主教练":"职业球员"} · ${esc(club.name)}</span></div></div></aside>
+      <main class="main"><header class="topbar"><div class="topbar-club">${clubBadge(club,"club-badge-topbar")}<div class="topbar-title"><h1>${viewTitle()}</h1><p>${esc(club.name)} · ${LEAGUES[club.league].short}</p></div></div><div class="topbar-actions"><div class="continue-date"><strong>${formatDate(state.date,false)}</strong><span>${weekdayLabel(state.date)}</span></div><button class="continue-button" id="continue-game" aria-label="${matchReady?"进入比赛":"继续时间"}" ${!next||state.retired?"disabled":""}><span class="continue-copy"><b>${matchReady?"进入比赛":"继续"}</b><small><span class="continue-note">${esc(continueNote)}</span><span class="continue-mobile-date">${formatDate(state.date,false)} · ${weekdayLabel(state.date)}</span></small></span>${icon(matchReady?"play":"chevrons-right")}</button></div></header><div class="content">${renderView()}</div></main>
+      <nav class="mobile-nav" aria-label="移动端主导航">${NAV.slice(0,3).map(navButton).join("")}${navButton(NAV[3])}<button class="nav-btn ${["transfers","media","career","profile"].includes(state.view)?"active":""}" id="open-mobile-menu">${icon("menu")}<span>更多</span></button></nav>
+      ${renderModal()}
+    </div>`;
+  }
+
+  function renderView() {
+    return ({ home:renderHome, squad:renderSquad, fixtures:renderFixtures, world:renderWorld, transfers:renderTransfers, media:renderMedia, career:renderCareer, profile:renderProfile })[state.view]();
+  }
+
+  function notificationIcon(type) { return ({match:"clipboard-list",medical:"briefcase-medical",board:"landmark",schedule:"calendar-days",competition:"trophy",transfer:"arrow-right-left"})[type]||"bell"; }
+
+  function renderHome() {
+    const club=clubById(state.clubId), next=nextFixture(), p=controlledPlayer();
+    const nextOurTeam=next?.teamName||club;
+    const played=state.schedule.filter(fixture=>fixture.status==="played"&&fixture.competition===leagueOf(club).short).length;
+    const unread=state.notifications.filter(item=>!item.read).length;
+    return `<div class="page-heading"><span class="eyebrow">${state.season}/${String(state.season+1).slice(2)} 赛季</span><h2>${greeting()}，${esc(state.person)}</h2><p>${state.retired?"你的职业生涯已经结束，所有记录已归档。":"这里是今天最需要你处理的事项。"}</p></div>
+      <section class="stats" aria-label="赛季关键数据">
+        <div class="stat"><div class="stat-label">联赛排名</div><div class="stat-value">${played?state.leaguePosition:"—"}<small> / ${OPPONENTS[club.league].length}</small></div><div class="stat-context">${state.points} 分 · ${played} 场</div></div>
+        <div class="stat"><div class="stat-label">${state.role==="coach"?"执教评分":"当前能力"}</div><div class="stat-value">${state.role==="coach"?state.coachProfile.overall:p.overall}</div><div class="stat-context">声望 ${state.reputation}</div></div>
+        <div class="stat"><div class="stat-label">${state.role==="coach"?"转会预算":"赛季评分"}</div><div class="stat-value">${state.role==="coach"?money(state.funds):(averageRating(p)||6).toFixed(2)}</div><div class="stat-context">${state.role==="coach"?"工资预算健康":`${p.goals} 球 · ${p.assists} 助`}</div></div>
+        <div class="stat"><div class="stat-label">球队状态</div><div class="stat-value">${Math.round(state.squad.reduce((s,x)=>s+x.fitness,0)/state.squad.length)}%</div><div class="stat-context">${state.squad.filter(x=>x.injured>0).length} 名伤员</div></div>
+      </section>
+      <div class="grid grid-main">
+        <div class="grid">
+          ${next ? `<section class="panel fixture-hero"><div class="fixture-inner"><div class="fixture-meta"><span>${esc(next.competition)} · ${esc(next.round)}</span><span>${formatDate(next.date)} · 20:00</span></div><div class="fixture-teams"><div class="team-block">${clubBadge(next.home?nextOurTeam:next.opponent,"club-badge-hero")}<div class="team-name">${clubNameLink(next.home?nextOurTeam:next.opponent)}</div></div><div class="versus">VS</div><div class="team-block away">${clubBadge(next.home?next.opponent:nextOurTeam,"club-badge-hero")}<div class="team-name">${clubNameLink(next.home?next.opponent:nextOurTeam)}</div></div></div><div class="fixture-actions">${state.role==="coach"?`<div class="form-inline"><label for="tactic">赛前方案</label><select class="select" id="tactic"><option value="balanced" ${state.tactic==="balanced"?"selected":""}>平衡控制</option><option value="press" ${state.tactic==="press"?"selected":""}>高位逼抢</option><option value="counter" ${state.tactic==="counter"?"selected":""}>快速反击</option><option value="defensive" ${state.tactic==="defensive"?"selected":""}>稳守阵型</option></select></div>`:`<div class="form-inline"><label>球队战术</label><span class="tag">由主教练决定</span></div>`}<button class="btn btn-primary" id="start-match">${icon(next.date<=state.date?"play":"chevrons-right")}${next.date<=state.date?"进入比赛":"推进时间"}</button></div></div></section>` : `<section class="panel"><div class="empty">${icon("calendar-check")}<h3>赛季赛程已结束</h3><p>结算本赛季并生成下一赛季赛程。</p><button class="btn btn-primary" id="new-season">开始新赛季</button></div></section>`}
+          <section class="panel"><div class="panel-header"><h3>最近动态</h3><span class="meta">实时</span></div><div class="list">${state.media.slice(0,3).map(m=>`<div class="list-row"><span class="status-dot ${m.type==="injury"?"red":m.type==="transfer"?"amber":""}"></span><div class="list-row-main"><div class="list-row-title">${esc(m.title)}</div><div class="list-row-sub">${esc(m.source)} · ${formatDate(m.date,false)}</div></div></div>`).join("")}</div></section>
+        </div>
+        <div class="grid">
+          <section class="panel"><div class="panel-header"><h3>${state.role==="coach"?"球队焦点":"个人状态"}</h3></div><div class="panel-body">${state.role==="coach"?renderCoachFocus():renderPlayerFocus(p)}</div></section>
+          <section class="panel"><div class="panel-header"><h3>待办</h3><span class="meta">${unread?`${unread} 项未读`:`${state.notifications.length} 项`}</span></div><div class="list">${state.notifications.slice(0,6).map(n=>`<button class="list-row notification-row ${n.read?"":"unread"}" data-notification="${esc(n.id)}"><div class="avatar">${icon(notificationIcon(n.type))}</div><div class="list-row-main"><div class="list-row-title">${esc(n.title)}</div><div class="list-row-sub">${n.read?"已查看":"需要查看"} · ${formatDate(n.date,false)}</div></div>${icon("chevron-right")}</button>`).join("")||`<div class="empty compact">暂无待办事项</div>`}</div></section>
+        </div>
+      </div>`;
+  }
+
+  function greeting() { const h=new Date().getHours(); return h<11?"早上好":h<18?"下午好":"晚上好"; }
+  function renderCoachFocus() {
+    const fit=[...state.squad].sort((a,b)=>a.fitness-b.fitness).slice(0,3);
+    return `<div class="timeline">${fit.map(p=>`<div class="timeline-item"><span class="timeline-mark"></span><time>体能 ${p.fitness}%</time><strong>${esc(p.name)}</strong><p>${p.injured?`${esc(p.injury)} · 预计缺阵 ${p.injured} 天`:"体能偏低，下一场建议控制出场时间。"}</p></div>`).join("")}</div>`;
+  }
+  function renderPlayerFocus(p) {
+    return `<div class="attribute-grid">${[["当前能力",p.overall],["潜力",p.potential],["体能",p.fitness],["士气",p.morale]].map(([k,v])=>`<div class="attribute"><label>${k}</label><strong>${k==="体能"||k==="士气"?`${Math.round(v)}%`:v}</strong><div class="meter ${v<60?"danger":v<78?"warn":""}"><span style="width:${v}%"></span></div></div>`).join("")}</div>`;
+  }
+
+  const SQUAD_SORT_OPTIONS=[["position","位置"],["name","姓名"],["age","年龄"],["overall","当前能力"],["potential","潜力"],["appearances","出场"],["goals","进球"],["assists","助攻"],["average","场均评分"],["fitness","体能"],["value","身价"]];
+  function squadSortValue(player,key) {
+    if(key==="average")return averageRating(player);
+    if(key==="position")return ({GK:0,RB:1,LB:1,FB:1,DF:1,CB:1,DM:2,CM:2,AM:2,RW:3,LW:3,WG:3,ST:3})[player.position]??4;
+    if(key==="name")return player.name||"";
+    return Number(player[key]||0);
+  }
+  function sortedSquad() {
+    const sort=state.squadSort||{key:"position",direction:"asc"},direction=sort.direction==="desc"?-1:1;
+    return [...state.squad].sort((a,b)=>{
+      const left=squadSortValue(a,sort.key),right=squadSortValue(b,sort.key);
+      const result=typeof left==="string"?left.localeCompare(right,"zh-CN"):(left-right);
+      return result*direction||a.name.localeCompare(b.name,"zh-CN");
+    });
+  }
+  function sortHeader(label,key,className="") {
+    const active=state.squadSort?.key===key,direction=state.squadSort?.direction||"asc";
+    return `<button class="sort-button ${active?"active":""} ${className}" data-squad-sort="${key}" aria-label="按${label}排序">${label}${active?icon(direction==="asc"?"arrow-up":"arrow-down"):""}</button>`;
+  }
+
+  function renderSquad() {
+    const query=(state.squadSearch||"").trim().toLowerCase(),players=sortedSquad(),visibleCount=players.filter(player=>!query||player.name.toLowerCase().includes(query)).length;
+    const sort=state.squadSort||{key:"position",direction:"asc"};
+    return `<div class="page-heading"><span class="eyebrow">球队管理</span><h2>${state.role==="coach"?"一线队阵容":"队友与竞争"}</h2><p>能力、体能、状态和伤病会共同影响教练的用人。</p></div>
+      <div class="filterbar"><input class="input" id="squad-search" placeholder="搜索球员" value="${esc(state.squadSearch||"")}"><select class="select" id="training"><option value="recovery" ${state.training==="recovery"?"selected":""}>恢复训练</option><option value="balanced" ${state.training==="balanced"?"selected":""}>平衡训练</option><option value="intense" ${state.training==="intense"?"selected":""}>高强度训练</option></select><div class="squad-sort-controls"><select class="select" id="squad-sort-select" aria-label="阵容排序字段">${SQUAD_SORT_OPTIONS.map(([key,label])=>`<option value="${key}" ${sort.key===key?"selected":""}>按${label}排序</option>`).join("")}</select><button class="btn btn-icon" id="squad-sort-direction" aria-label="切换排序方向" title="切换排序方向">${icon(sort.direction==="asc"?"arrow-up":"arrow-down")}</button></div></div>
+      <section class="panel"><div class="panel-header"><h3>注册阵容</h3><span class="meta" id="squad-count">${visibleCount===state.squad.length?`${state.squad.length} 名球员`:`显示 ${visibleCount} / ${state.squad.length}`}</span></div><div class="table-wrap"><table><thead><tr><th>${sortHeader("球员","name")}</th><th>${sortHeader("位置","position")}</th><th class="num">${sortHeader("年龄","age","num")}</th><th class="num"><span class="sort-pair">${sortHeader("能力","overall","num")}<span>/</span>${sortHeader("潜力","potential","num")}</span></th><th class="num">${sortHeader("出场","appearances","num")}</th><th class="num">${sortHeader("进球","goals","num")}</th><th class="num">${sortHeader("助攻","assists","num")}</th><th class="num">${sortHeader("场均评分","average","num")}</th><th>${sortHeader("体能","fitness")}</th><th class="num hide-mobile">${sortHeader("身价","value","num")}</th><th>情况</th></tr></thead><tbody id="squad-body">${players.map(player=>playerRow(player,Boolean(query&&!player.name.toLowerCase().includes(query)))).join("")}</tbody></table></div></section>`;
+  }
+  function playerRow(p,hidden=false) {
+    const average = p.appearances ? averageRating(p).toFixed(2) : "—";
+    return `<tr data-player-name="${esc(p.name.toLowerCase())}" ${hidden?"hidden":""}><td class="player-name"><strong>${p.id==="controlled"?"★ ":""}${playerNameLink(p,{clubId:state.clubId,clubName:clubById(state.clubId).name})}</strong><span>${p.number?`#${p.number} · `:""}${esc(p.nationality||"一线队")}</span></td><td><span class="tag">${playerRoleLabel(p.position)}</span></td><td class="num">${p.age}</td><td class="num"><span class="rating">${p.overall}</span> / ${p.potential}</td><td class="num">${p.appearances}</td><td class="num">${p.goals}</td><td class="num">${p.assists}</td><td class="num">${average}</td><td><div class="fitness-cell"><div class="meter ${p.fitness<60?"danger":p.fitness<78?"warn":""}"><span style="width:${p.fitness}%"></span></div><strong>${Math.round(p.fitness)}%</strong></div></td><td class="num hide-mobile">${money(p.value)}</td><td>${p.injured?`<span class="tag red">${esc(p.injury)}</span>`:`<span class="tag green">可出场</span>`}</td></tr>`;
+  }
+
+  function renderFixtures() {
+    const competitions=[...new Set(state.schedule.map(fixture=>fixture.competition))],validFilter=state.fixtureFilter==="all"||competitions.includes(state.fixtureFilter);if(!validFilter)state.fixtureFilter="all";
+    const filter=state.fixtureFilter||"all",allUpcoming=state.schedule.filter(f=>f.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date)),allPlayed=state.schedule.filter(f=>f.status==="played").sort((a,b)=>b.date.localeCompare(a.date)),upcoming=filter==="all"?allUpcoming:allUpcoming.filter(f=>f.competition===filter),played=filter==="all"?allPlayed:allPlayed.filter(f=>f.competition===filter),selectedFixtures=state.schedule.filter(f=>filter==="all"||f.competition===filter),homeCount=selectedFixtures.filter(f=>f.home).length,awayCount=selectedFixtures.length-homeCount,displayLimit=filter==="all"?12:60;
+    return `<div class="page-heading"><span class="eyebrow">${state.season}/${String(state.season+1).slice(2)}</span><h2>赛程与结果</h2><p>赛程引擎保证任意两场正式比赛至少间隔 72 小时，并按联赛与杯赛规则生成。</p></div>
+      <div class="filterbar"><label for="fixture-filter">赛事</label><select class="select" id="fixture-filter" aria-label="筛选赛事"><option value="all" ${filter==="all"?"selected":""}>全部赛事 (${state.schedule.length})</option>${competitions.map(name=>`<option value="${esc(name)}" ${filter===name?"selected":""}>${esc(name)} (${state.schedule.filter(f=>f.competition===name).length})</option>`).join("")}</select><span class="tag">${filter==="all"?"全部赛事":esc(filter)} · ${selectedFixtures.length} 场 · 主 ${homeCount} / 客 ${awayCount}</span></div>
+      <div class="grid grid-2"><section class="panel"><div class="panel-header"><h3>接下来</h3><span class="meta">${upcoming.length} 场</span></div><div class="list">${upcoming.slice(0,displayLimit).map(f=>fixtureRow(f)).join("")||`<div class="empty">赛程已完成</div>`}</div></section><section class="panel"><div class="panel-header"><h3>比赛结果</h3><span class="meta">${played.length} 场</span></div><div class="list">${played.slice(0,displayLimit).map(f=>fixtureRow(f)).join("")||`<div class="empty">尚未进行比赛</div>`}</div></section></div>`;
+  }
+  function fixtureRow(f) {
+    const club=clubById(state.clubId); return `<div class="list-row">${clubBadge(f.opponent,"club-badge-list")}<div class="list-row-main"><div class="list-row-title">${f.home?"vs":"@"} ${clubNameLink(f.opponent)}</div><div class="list-row-sub">${esc(f.competition)} · ${esc(f.round)} · ${formatDate(f.date,false)}</div></div><div class="list-row-value">${f.status==="played"?`<strong>${f.score.home} - ${f.score.away}</strong><div class="list-row-sub">${resultLabel(f,club)}</div>`:`<span class="tag">${f.home?"主场":"客场"}</span>`}</div></div>`;
+  }
+  function resultLabel(f) { const ours=f.home?f.score.home:f.score.away, theirs=f.home?f.score.away:f.score.home; if(f.penalties)return f.penalties.winner==="us"?"点球胜":"点球负"; return ours>theirs?"胜":ours===theirs?"平":"负"; }
+
+  function leaguePositionZone(league,index,total) {
+    if(league.tier===2){if(index<2)return {className:"promotion",label:"直接升级"};if(index<6)return {className:"playoff",label:"升级附加赛"};if(index>=total-3)return {className:"relegation",label:"降级区"};return null;}
+    if(index===0)return {className:"champion",label:"榜首"};if(index<4)return {className:"continental",label:"欧冠区"};if(index>=total-3)return {className:"relegation",label:"降级区"};return null;
+  }
+
+  function renderLeagueForm(form=[]) {
+    return `<div class="form-strip">${[...form].reverse().map(result=>`<span class="${result.toLowerCase()}">${result}</span>`).join("")||`<span class="empty-form">—</span>`}</div>`;
+  }
+
+  function renderWorld() {
+    state.majorLeagueWorld||=createMajorLeagueWorld(state.season,state.clubId);
+    const world=state.majorLeagueWorld,userClub=clubById(state.clubId),leagueIds=[...new Set([userClub.league,...MAJOR_LEAGUE_IDS])].filter(id=>world.leagues[id]);
+    if(!world.leagues[state.majorLeagueId])state.majorLeagueId=userClub.league;
+    const league=world.leagues[state.majorLeagueId],table=majorStandings(league),latest=league.results[0],matchesPlayed=Math.round(league.clubs.reduce((sum,club)=>sum+club.p,0)/2),leader=table[0],averageGoals=matchesPlayed?league.totalGoals/matchesPlayed:0;
+    const background=state.backgroundWorld||createBackgroundWorld(state.season),backgroundIds=Object.keys(background.leagues),packs=loadModPacks();
+    if(!background.leagues[state.worldLeague])state.worldLeague=backgroundIds[0];
+    const selectedBackground=background.leagues[state.worldLeague];
+    return `<div class="league-page">
+      <section class="league-banner"><img src="assets/trophies/${leagueTrophyAsset(league.id)}" alt="${esc(league.short)}冠军奖杯"><div><span class="eyebrow">${state.season}/${String(state.season+1).slice(2)} · ${esc(league.country)}</span><h2>${esc(league.name)}</h2><p>${league.id===userClub.league?`${esc(userClub.name)} 所在联赛`:"五大联赛实时追踪"} · 更新至 ${formatDate(world.currentDate)}</p></div><div class="league-live">${icon("radio")}游戏内实时</div></section>
+      <nav class="league-tabs" role="tablist" aria-label="选择联赛">${leagueIds.map(id=>`<button role="tab" aria-selected="${id===league.id}" class="league-tab ${id===league.id?"active":""}" data-major-league="${id}"><span>${LEAGUES[id].short}</span>${id===userClub.league?`<small>我的联赛</small>`:""}</button>`).join("")}</nav>
+      <section class="stats league-stats" aria-label="联赛关键数据"><div class="stat"><div class="stat-label">领头羊</div><div class="stat-value league-team-value">${esc(leader?.name||"待定")}</div><div class="stat-context">${leader?.pts||0} 分 · 净胜 ${leader?.gd>0?"+":""}${leader?.gd||0}</div></div><div class="stat"><div class="stat-label">已完成轮次</div><div class="stat-value">${league.round}</div><div class="stat-context">共 ${matchesPlayed} 场比赛</div></div><div class="stat"><div class="stat-label">联赛进球</div><div class="stat-value">${league.totalGoals}</div><div class="stat-context">场均 ${averageGoals.toFixed(2)} 球</div></div><div class="stat"><div class="stat-label">射手榜首</div><div class="stat-value league-team-value">${league.scorers[0]?playerNameLink(league.scorers[0],{position:"ST",clubName:league.scorers[0].club}):"待定"}</div><div class="stat-context">${league.scorers[0]?.goals||0} 球${league.scorers[0]?` · ${esc(league.scorers[0].club)}`:""}</div></div></section>
+      <div class="league-layout"><section class="panel league-table-panel"><div class="panel-header"><h3>实时积分榜</h3><span class="meta">胜负关系依次按积分、净胜球、进球数排列</span></div><div class="table-wrap"><table class="league-table"><thead><tr><th class="num">排名</th><th>俱乐部</th><th>近况</th><th class="num">赛</th><th class="num">胜</th><th class="num">平</th><th class="num">负</th><th class="num league-goals-col">进/失</th><th class="num">净胜</th><th class="num">积分</th></tr></thead><tbody>${table.map((club,index)=>{const zone=leaguePositionZone(league,index,table.length),isUser=club.id===state.clubId;return `<tr class="${isUser?"user-club-row":""}"><td class="num position-cell"><span class="position-mark ${zone?.className||""}" title="${zone?.label||""}">${index+1}</span></td><td class="league-club-cell">${clubBadge(club,"club-badge-table")}<div class="player-name"><strong>${isUser?"★ ":""}${esc(club.name)}</strong><span>${zone?.label||`俱乐部战力 ${club.ability}`}</span></div></td><td>${renderLeagueForm(club.form)}</td><td class="num">${club.p}</td><td class="num">${club.w}</td><td class="num">${club.d}</td><td class="num">${club.l}</td><td class="num league-goals-col">${club.gf}/${club.ga}</td><td class="num">${club.gd>0?"+":""}${club.gd}</td><td class="num"><span class="rating league-points">${club.pts}</span></td></tr>`;}).join("")}</tbody></table></div><div class="league-legend"><span><i class="champion"></i>榜首</span><span><i class="continental"></i>${league.tier===1?"欧冠区":"直接升级"}</span>${league.tier===2?`<span><i class="playoff"></i>附加赛</span>`:""}<span><i class="relegation"></i>降级区</span></div></section>
+        <aside class="league-sidebar"><section class="panel"><div class="panel-header"><h3>最近赛果</h3><span class="meta">${latest?`${formatDate(latest.date,false)} · 第 ${latest.round} 轮`:"等待首轮"}</span></div>${latest?`<div class="league-results">${latest.matches.map(match=>`<div class="league-result ${match.homeId===state.clubId||match.awayId===state.clubId?"user-result":""}"><span class="league-result-team">${clubBadge(match.homeId||match.home,"club-badge-result")}<b>${esc(match.home)}</b></span><strong>${match.homeGoals} - ${match.awayGoals}</strong><span class="league-result-team away">${clubBadge(match.awayId||match.away,"club-badge-result")}<b>${esc(match.away)}</b></span></div>`).join("")}</div>`:`<div class="empty">首轮比赛完成后显示赛果</div>`}</section>
+        <section class="panel"><div class="panel-header"><h3>射手榜</h3><span class="meta">前 8 名</span></div><div class="league-scorers">${league.scorers.slice(0,8).map((scorer,index)=>`<div class="league-scorer"><span class="scorer-rank">${index+1}</span><div><strong>${playerNameLink(scorer,{position:"ST",clubName:scorer.club})}</strong><small>${esc(scorer.club)}${scorer.generated?" · 模拟球员":""}</small></div><b>${scorer.goals}</b></div>`).join("")||`<div class="empty">尚无进球记录</div>`}</div></section></aside></div>
+      <details class="panel league-extension"><summary>${icon("globe-2")}<span>扩展联赛与社区 MOD</span><small>${backgroundIds.length} 个后台联赛 · ${packs.length} 个 MOD</small>${icon("chevron-down")}</summary><div class="panel-body"><div class="filterbar"><select class="select" id="world-league">${backgroundIds.map(id=>`<option value="${esc(id)}" ${id===state.worldLeague?"selected":""}>${esc(background.leagues[id].name)} · ${esc(background.leagues[id].country)}</option>`).join("")}</select><button class="btn" id="import-mod">${icon("upload")}导入 MOD</button><button class="btn" id="export-mod">${icon("download")}导出数据包</button><button class="btn btn-danger" id="clear-mods" ${packs.length?"":"disabled"}>${icon("trash-2")}清除 MOD</button><input id="mod-file" type="file" accept="application/json,.json" hidden></div><div class="extension-summary"><span>${esc(selectedBackground?.name||"扩展联赛")}</span><strong>第 ${selectedBackground?.round||0} 轮</strong><small>后台模拟，不影响五大联赛正式积分榜</small></div></div></details>
+      <div class="data-note"><strong>数据口径：</strong>俱乐部和球员名称来自 2026-07-31 数据快照；积分、赛果、进球及排名是当前存档内随日期实时更新的模拟数据。</div>
+    </div>`;
+  }
+
+  const TRANSFER_ROLE_TARGETS={GK:2,CB:5,FB:3,DM:2,CM:4,AM:2,WG:3,ST:3};
+  const AI_TRANSFER_TARGETS={goalkeeper:2,defence:7,midfield:7,attack:5};
+  const AI_TRANSFER_MINIMUMS={goalkeeper:2,defence:5,midfield:5,attack:3};
+  const AI_SQUAD_LIMITS={ideal:27,soft:29,hard:32};
+
+  function transferRole(position) {
+    if(position==="GK")return "GK";
+    if(["CB","DF"].includes(position))return "CB";
+    if(["RB","LB","FB"].includes(position))return "FB";
+    if(position==="DM")return "DM";
+    if(["CM","MF"].includes(position))return "CM";
+    if(position==="AM")return "AM";
+    if(["RW","LW","WG"].includes(position))return "WG";
+    return "ST";
+  }
+
+  function stableScoutingUnit(value) {
+    let hash=2166136261;
+    for(let i=0;i<value.length;i++){hash^=value.charCodeAt(i);hash=Math.imul(hash,16777619);}
+    return (hash>>>0)/4294967295;
+  }
+
+  function coachDecisionProfile(identity,attributes={}) {
+    const name=String(identity||"AI 教练"),unit=key=>stableScoutingUnit(`${name}|${key}`);
+    const tactics=Number(attributes.tactics||attributes.overall||72),people=Number(attributes.people||attributes.overall||72),youth=Number(attributes.youth||70),transfers=Number(attributes.transfers||72);
+    return {
+      name,tactics,people,youth,transfers,
+      risk:clamp(.28+unit("risk")*.48+(tactics-72)/260,.18,.86),
+      rotation:clamp(.22+unit("rotation")*.46+(people-72)/300,.16,.82),
+      substitutionActivity:clamp(.32+unit("substitutions")*.42+(tactics-70)/300,.22,.9),
+      youthTrust:clamp(.2+unit("youth")*.34+(youth-65)/150,.16,.86),
+      budgetDiscipline:clamp(.38+unit("budget")*.4+(transfers-70)/260,.28,.9),
+      formationSeed:unit("formation")
+    };
+  }
+
+  function aiCoachProfile(save,clubId,identity=null) {
+    const club=CLUBS.find(item=>item.id===clubId)||{id:String(clubId),name:String(clubId),prestige:78,coach:identity||String(clubId)},isUserCoach=clubId===save.clubId&&save.role==="coach",source=isUserCoach?save.coachProfile:COACHES.find(coach=>coach.club===clubId);
+    return coachDecisionProfile(identity||source?.name||club.coach||club.name,source||{overall:club.prestige-8,tactics:club.prestige-7,people:club.prestige-10,youth:70,transfers:70});
+  }
+
+  function transferWindow(date,season=state?.season||2026) {
+    const summerStart=`${season}-06-15`,summerEnd=`${season}-09-01`,winterStart=`${season+1}-01-01`,winterEnd=`${season+1}-02-02`;
+    if(date>=summerStart&&date<=summerEnd)return {key:`summer-${season}`,label:`${season} 夏季转会窗`,start:summerStart,end:summerEnd,open:true};
+    if(date>=winterStart&&date<=winterEnd)return {key:`winter-${season+1}`,label:`${season+1} 冬季转会窗`,start:winterStart,end:winterEnd,open:true};
+    if(date>winterEnd)return {key:`winter-${season+1}`,label:`${season+1} 冬季转会窗`,start:winterStart,end:winterEnd,open:false};
+    return {key:`summer-${season}`,label:`${season} 夏季转会窗`,start:summerStart,end:summerEnd,open:false};
+  }
+
+  function transferTickDelay(date,season) {
+    const windowInfo=transferWindow(date,season);if(!windowInfo.open)return Math.round(rand(7,13));
+    const daysLeft=daysBetween(date,windowInfo.end);if(daysLeft<=7)return Math.round(rand(1,2.5));if(daysLeft<=21)return Math.round(rand(2,4));return Math.round(rand(3,6));
+  }
+
+  function createTransferMarket(season=2026) {
+    const openingDate=transferSeasonOpening(season);
+    return {season,currentDate:openingDate,nextTickDate:addDays(openingDate,transferTickDelay(openingDate,season)),records:[],rumors:[],clubOverrides:{},budgets:Object.fromEntries(CLUBS.map(club=>[club.id,Number(club.budget)||10])),sequence:0};
+  }
+
+  function transferSeasonOpening(season=2026) {
+    return `${season}-08-01`;
+  }
+
+  function rebuildTransferMarketFromPostOpeningActivity(save) {
+    const market=ensureTransferMarket(save),openingDate=transferSeasonOpening(market.season||save.season||2026),oldRumors=[...market.rumors];
+    const generatedBeforeOpening=oldRumors.filter(rumor=>(rumor.createdDate||"")<openingDate);
+    const cameFromPreOpeningRumor=record=>generatedBeforeOpening.some(rumor=>
+      rumor.playerId===record.playerId&&rumor.fromId===record.fromId&&rumor.toId===record.toId&&
+      Number(rumor.fee)===Number(record.fee)&&(rumor.completedDate||record.date)===record.date
+    );
+    market.records=market.records.filter(record=>record.date>=transferSeasonOpening(record.season||market.season)&&!cameFromPreOpeningRumor(record));
+    market.rumors=oldRumors.filter(rumor=>(rumor.createdDate||"")>=transferSeasonOpening(rumor.season||market.season));
+    market.clubOverrides={};
+    market.budgets=Object.fromEntries(CLUBS.map(club=>[club.id,Number(club.budget)||10]));
+    [...market.records].sort((a,b)=>a.date.localeCompare(b.date)).forEach(record=>{
+      market.clubOverrides[record.playerId]=record.toId;
+      market.budgets[record.toId]=Number(Math.max(0,Number(market.budgets[record.toId]||0)-Number(record.fee||0)).toFixed(1));
+      market.budgets[record.fromId]=Number((Number(market.budgets[record.fromId]||0)+Number(record.fee||0)*.82).toFixed(1));
+    });
+    const validUserSignings=new Set(market.records.filter(record=>record.toId===save.clubId).map(record=>record.playerId));
+    save.squad=(save.squad||[]).filter(player=>!String(player.id||"").startsWith("ai-signing-")||validUserSignings.has(player.sourcePlayerId));
+    save.funds=Number((market.records.reduce((funds,record)=>funds+(record.fromId===save.clubId?Number(record.fee||0)*.82:0)-(record.toId===save.clubId?Number(record.fee||0):0),Number(clubById(save.clubId).budget)||10)).toFixed(1));
+    save.media=(save.media||[]).filter(item=>item.type!=="transfer"||(item.date||openingDate)>=openingDate);
+    market.currentDate=save.date||openingDate;
+    market.nextTickDate=addDays(market.currentDate,transferTickDelay(market.currentDate,market.season));
+  }
+
+  function ensureTransferMarket(save) {
+    const market=save.transferMarket||(save.transferMarket=createTransferMarket(save.season||2026));
+    market.records=Array.isArray(market.records)?market.records:[];market.rumors=Array.isArray(market.rumors)?market.rumors:[];market.clubOverrides||={};market.budgets||={};market.sequence??=0;
+    CLUBS.forEach(club=>{market.budgets[club.id]??=Number(club.budget)||10;});
+    return market;
+  }
+
+  function currentPlayerClubId(save,player) {
+    return ensureTransferMarket(save).clubOverrides[player.id]||player.club;
+  }
+
+  function aiClubPlayers(save,clubId) {
+    if(clubId===save.clubId)return save.squad||[];
+    return REAL_PLAYERS.filter(player=>currentPlayerClubId(save,player)===clubId);
+  }
+
+  function aiSquadNeeds(save,clubId) {
+    const club=clubById(clubId),players=aiClubPlayers(save,clubId),groups=Object.fromEntries(Object.keys(AI_TRANSFER_TARGETS).map(role=>[role,[]]));
+    players.forEach(player=>groups[positionUnit(player.position)].push(player));
+    const squadStrength=[...players].sort((a,b)=>(b.overall||0)-(a.overall||0)).slice(0,11).reduce((sum,player)=>sum+Number(player.overall||60),0)/Math.max(1,Math.min(11,players.length));
+    const needs=Object.fromEntries(Object.entries(AI_TRANSFER_TARGETS).map(([role,target])=>{
+      const rolePlayers=groups[role].sort((a,b)=>(b.overall||0)-(a.overall||0)),core=rolePlayers.slice(0,target),average=core.reduce((sum,player)=>sum+Number(player.overall||60),0)/Math.max(1,core.length);
+      const shortage=Math.max(0,target-rolePlayers.length),qualityTarget=clamp(club.prestige-7,58,89),qualityGap=Math.max(0,qualityTarget-average);
+      return [role,{role,count:rolePlayers.length,target,average,shortage,score:shortage*11+qualityGap*1.5+(squadStrength-average)*.45}];
+    }));
+    return {club,players,groups,needs,squadStrength};
+  }
+
+  function sameTransferPlayer(left,right) {
+    if(!left||!right)return false;
+    const ids=new Set([left.id,left.playerId,left.sourcePlayerId].filter(Boolean));
+    if([right.id,right.playerId,right.sourcePlayerId].filter(Boolean).some(id=>ids.has(id)))return true;
+    const leftName=left.name||left.playerName,rightName=right.name||right.playerName;
+    return Boolean(leftName&&rightName&&comparableClubName(leftName)===comparableClubName(rightName));
+  }
+
+  function canonicalTransferPlayer(save,sellerId,player) {
+    return REAL_PLAYERS.find(candidate=>currentPlayerClubId(save,candidate)===sellerId&&sameTransferPlayer(candidate,player))||null;
+  }
+
+  function activeOutgoingRumors(save,sellerId) {
+    return ensureTransferMarket(save).rumors.filter(rumor=>rumor.status==="active"&&!rumor.advisoryOnly&&rumor.fromId===sellerId);
+  }
+
+  function aiSurplusCandidates(save,sellerId) {
+    const market=ensureTransferMarket(save),needs=aiSquadNeeds(save,sellerId),players=needs.players,active=activeOutgoingRumors(save,sellerId),projectedSize=players.length-active.length;
+    if(players.length<=AI_SQUAD_LIMITS.soft||projectedSize<=AI_SQUAD_LIMITS.ideal)return [];
+    const activeByRole={};active.forEach(rumor=>{const role=positionUnit(rumor.position);activeByRole[role]=(activeByRole[role]||0)+1;});
+    const playedMatches=sellerId===save.clubId?Number(save.played||0):Math.max(0,Math.round(daysBetween(`${save.season}-08-01`,save.date||`${save.season}-08-01`)/7));
+    return players.map(player=>{
+      const role=positionUnit(player.position),group=[...(needs.groups[role]||[])].sort((a,b)=>(b.overall||0)-(a.overall||0)),rank=group.findIndex(item=>sameTransferPlayer(item,player));
+      const remainingInRole=group.length-Number(activeByRole[role]||0),roleTarget=AI_TRANSFER_TARGETS[role]||4,roleExcess=remainingInRole-roleTarget,minimum=AI_TRANSFER_MINIMUMS[role]||3;
+      const contractRole=player.contract?.role||"",age=Number(player.age||24),overall=Number(player.overall||60),potential=Number(player.potential||overall),clubLevel=Number(needs.club.prestige||70);
+      const controlled=player.id===save.controlledId||sameTransferPlayer(player,(save.squad||[]).find(item=>item.id===save.controlledId));
+      const highPotential=age<=22&&potential>=Math.max(overall+4,clubLevel-3),coreRole=contractRole==="核心主力"||(contractRole==="常规主力"&&rank<roleTarget);
+      const recentSigning=market.records.some(record=>record.toId===sellerId&&sameTransferPlayer(record,player)&&daysBetween(record.date,save.date||record.date)<90);
+      const alreadyActive=active.some(rumor=>sameTransferPlayer(rumor,player));
+      const protectedPlayer=controlled||rank<=0||highPotential||coreRole||recentSigning||alreadyActive||remainingInRole<=minimum||(!player.listed&&rank<roleTarget&&overall>=needs.needs[role].average);
+      if(protectedPlayer||rank<0||roleExcess<=0)return null;
+      const expectedMinutes=Math.max(1,playedMatches*72),minutes=Number(player.development?.minutes||Number(player.appearances||0)*72),usageRatio=playedMatches>=4?clamp(minutes/expectedMinutes,0,1):clamp((roleTarget-rank)/Math.max(1,roleTarget),0,1);
+      const depthScore=(rank/Math.max(1,group.length-1))*24,usageScore=(1-usageRatio)*15,qualityGap=Math.max(0,needs.squadStrength-overall),ageScore=age>=31?6:age>=28?3:0,potentialProtection=Math.max(0,potential-overall)*(age<=24?1.3:.45);
+      const contractScore=player.listed?18:player.contract?.endSeason<=save.season+1?5:0,urgency=(projectedSize-AI_SQUAD_LIMITS.soft)*4+Math.max(0,projectedSize-AI_SQUAD_LIMITS.hard)*5;
+      const score=urgency+roleExcess*5+depthScore+usageScore+qualityGap*.8+ageScore+contractScore-potentialProtection;
+      const reason=players.length>AI_SQUAD_LIMITS.hard?"阵容人数过多，球员不在主要轮换计划内":`${transferRoleLabel(role)}人员冗余，需要为轮换顺位靠后的球员寻找出场机会`;
+      return {player,canonical:canonicalTransferPlayer(save,sellerId,player),sellerId,needs,role,rank,roleExcess,projectedSize,score,reason};
+    }).filter(Boolean).sort((a,b)=>b.score-a.score||a.player.overall-b.player.overall||b.player.age-a.player.age);
+  }
+
+  function transferRoleLabel(role) {
+    return ({goalkeeper:"门将",defence:"后防线",midfield:"中场",attack:"锋线"})[role]||role;
+  }
+
+  function aiCanSell(save,sellerId,player,indexedGroup=null) {
+    const role=positionUnit(player.position),group=indexedGroup||aiSquadNeeds(save,sellerId).groups[role]||[],minimum=AI_TRANSFER_MINIMUMS[role]||3;
+    if(group.length<=minimum)return false;
+    const rank=[...group].sort((a,b)=>(b.overall||0)-(a.overall||0)).findIndex(item=>item.id===player.id||item.sourcePlayerId===player.id||comparableClubName(item.name)===comparableClubName(player.name)),sellerClub=clubById(sellerId);
+    if(rank===0&&Number(player.overall||0)>=sellerClub.prestige-6)return false;
+    return rank>=Math.max(1,Math.floor(group.length*.42))||(player.age>=29&&rank>=1)||Number(player.overall||0)<sellerClub.prestige-10;
+  }
+
+  function transferFee(player,buyer,seller,sequence=0) {
+    const value=Math.max(.5,Number(player.value)||Math.max(1,Number(player.overall||65)-64)),potentialPremium=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0))*.045,prestigePressure=Math.max(0,seller.prestige-buyer.prestige)*.012;
+    const variation=.9+stableScoutingUnit(`${player.id}|${buyer.id}|${seller.id}|${sequence}`)*.28;
+    return Number(Math.max(.5,value*(1+potentialPremium+prestigePressure)*variation).toFixed(1));
+  }
+
+  function aiTransferCandidate(save,buyerId,date=save.date) {
+    const market=ensureTransferMarket(save),buyerNeeds=aiSquadNeeds(save,buyerId),buyer=buyerNeeds.club,budget=Number(market.budgets[buyerId]||buyer.budget||0),coach=aiCoachProfile(save,buyerId);
+    const windowKey=transferWindow(date,save.season).key,roleActivity={},windowActivity=[...market.records.filter(record=>record.windowKey===windowKey),...market.rumors.filter(rumor=>rumor.windowKey===windowKey&&rumor.status==="active")];
+    windowActivity.forEach(item=>{const role=positionUnit(item.position);roleActivity[role]=(roleActivity[role]||0)+1;});
+    const need=weightedPick(Object.values(buyerNeeds.needs),item=>{
+      const count=roleActivity[item.role]||0,goalkeeperCrowded=item.role==="goalkeeper"&&count>=Math.max(2,Math.ceil(windowActivity.length*.22));
+      const positionalPreference=.82+stableScoutingUnit(`${coach.name}|transfer-role|${item.role}`)*.36;
+      return goalkeeperCrowded?0:(Math.max(0,item.score)+3)*positionalPreference/(1+count*1.35);
+    });if(!need||budget<1)return null;
+    const sellerRoleGroups=new Map();
+    REAL_PLAYERS.forEach(player=>{const clubId=currentPlayerClubId(save,player),key=`${clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});
+    [...sellerRoleGroups.keys()].filter(key=>key.startsWith(`${save.clubId}|`)).forEach(key=>sellerRoleGroups.delete(key));
+    (save.squad||[]).forEach(player=>{const key=`${save.clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});
+    sellerRoleGroups.forEach(group=>group.sort((a,b)=>(b.overall||0)-(a.overall||0)));
+    const candidates=REAL_PLAYERS.filter(player=>{
+      const sellerId=currentPlayerClubId(save,player);if(sellerId===buyerId)return false;
+      if(market.records.some(record=>record.season===save.season&&record.playerId===player.id))return false;
+      if(save.role==="coach"&&sellerId===save.clubId)return false;
+      if(save.role==="player"&&sellerId===save.clubId&&comparableClubName(player.name)===comparableClubName((save.squad||[]).find(item=>item.id===save.controlledId)?.name||""))return false;
+      const seller=clubById(sellerId),role=positionUnit(player.position),fee=transferFee(player,buyer,seller,market.sequence);
+      const spendingLimit=budget*(.64+coach.risk*.16+coach.budgetDiscipline*.08);
+      if(role!==need.role||fee>spendingLimit||!aiCanSell(save,sellerId,player,sellerRoleGroups.get(`${sellerId}|${role}`)||[]))return false;
+      if(player.overall>=85&&buyer.prestige<85)return false;
+      if(player.potential>=88&&buyer.prestige<80)return false;
+      if(player.overall>buyer.prestige+6||player.overall<Math.max(54,buyer.prestige-18))return false;
+      return true;
+    }).map(player=>{
+      const sellerId=currentPlayerClubId(save,player),seller=clubById(sellerId),fee=transferFee(player,buyer,seller,market.sequence),improvement=Number(player.overall||0)-need.average,growth=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
+      const upward=buyer.prestige-seller.prestige,affordability=Math.max(-18,12-fee/Math.max(1,budget)*18),destinationFit=18-Math.abs((buyer.prestige-5)-Number(player.overall||0));
+      const ageFit=player.age<=23?coach.youthTrust*7:player.age>=30?(1-coach.youthTrust)*4:3;
+      const score=need.score*1.6+improvement*2.2+growth*(.55+coach.youthTrust)+ageFit+upward*.45+affordability*(.65+coach.budgetDiscipline*.55)+destinationFit+(stableScoutingUnit(`${market.season}|${buyerId}|${player.id}`)-.5)*16;
+      return {player,sellerId,seller,buyer,fee,need,score};
+    }).sort((a,b)=>b.score-a.score||b.player.potential-a.player.potential||b.player.overall-a.player.overall);
+    return candidates[0]||null;
+  }
+
+  function transferRumorExists(market,playerId,buyerId) {
+    return market.rumors.some(rumor=>rumor.playerId===playerId&&rumor.toId===buyerId&&rumor.status==="active");
+  }
+
+  function aiSurplusBuyer(save,candidate,date=save.date) {
+    const market=ensureTransferMarket(save),player=candidate.player,seller=clubById(candidate.sellerId),role=candidate.role,sequence=market.sequence;
+    const discount=candidate.projectedSize>AI_SQUAD_LIMITS.hard?.84:candidate.projectedSize>AI_SQUAD_LIMITS.soft+1?.9:.95;
+    const buyers=CLUBS.filter(club=>{
+      if(club.id===candidate.sellerId||(save.role==="coach"&&club.id===save.clubId))return false;
+      const buyerNeeds=aiSquadNeeds(save,club.id),budget=Number(market.budgets[club.id]||0),fee=Number((transferFee(candidate.canonical||player,club,seller,sequence)*discount).toFixed(1));
+      if(buyerNeeds.players.length>=AI_SQUAD_LIMITS.soft||budget<fee)return false;
+      if(Number(player.overall||0)>club.prestige+7||Number(player.overall||0)<Math.max(52,club.prestige-19))return false;
+      if(Number(player.overall||0)>=85&&club.prestige<84)return false;
+      return buyerNeeds.needs[role]&&buyerNeeds.needs[role].score>1;
+    }).map(club=>{
+      const buyerNeeds=aiSquadNeeds(save,club.id),need=buyerNeeds.needs[role],fee=Number((transferFee(candidate.canonical||player,club,seller,sequence)*discount).toFixed(1)),abilityGain=Number(player.overall||0)-need.average;
+      const score=need.score*1.8+abilityGain*1.4+(club.prestige-seller.prestige)*.25+(AI_SQUAD_LIMITS.soft-buyerNeeds.players.length)*2+(stableScoutingUnit(`${date}|surplus-buyer|${club.id}|${player.id}`)-.5)*8;
+      return {club,fee,need,score};
+    }).sort((a,b)=>b.score-a.score);
+    return buyers[0]||null;
+  }
+
+  function createAiSurplusSaleRumor(save,date,preferredSellerId=null) {
+    const market=ensureTransferMarket(save),eligibleClubs=preferredSellerId?CLUBS.filter(club=>club.id===preferredSellerId):CLUBS.filter(club=>!(save.role==="coach"&&club.id===save.clubId)),sellers=eligibleClubs.map(club=>{
+      const actual=aiClubPlayers(save,club.id).length,projected=actual-activeOutgoingRumors(save,club.id).length;
+      return {club,projected,weight:actual>AI_SQUAD_LIMITS.soft?Math.max(0,projected-AI_SQUAD_LIMITS.ideal)*Math.max(1,actual-AI_SQUAD_LIMITS.soft):0};
+    }).filter(item=>item.weight>0);
+    while(sellers.length){
+      const selected=weightedPick(sellers,item=>item.weight),index=sellers.indexOf(selected);if(index>=0)sellers.splice(index,1);
+      const candidates=aiSurplusCandidates(save,selected.club.id);
+      for(const candidate of candidates.slice(0,6)){
+        const buyer=aiSurplusBuyer(save,candidate,date);if(!buyer)continue;
+        const player=candidate.player,canonical=candidate.canonical,playerId=canonical?.id||player.sourcePlayerId||player.id;
+        if(transferRumorExists(market,playerId,buyer.club.id))continue;
+        const resolveDays=Math.round(rand(3,8)),confidence=clamp(Math.round(58+candidate.score*.24+buyer.need.score*.35),48,90);
+        const rumor={id:`rumor-${market.season}-${++market.sequence}`,season:save.season,windowKey:transferWindow(date,save.season).key,createdDate:date,resolveDate:addDays(date,resolveDays),status:"active",sellerDriven:true,playerId,sourcePlayerId:player.id,playerName:player.name,position:player.position,overall:player.overall,potential:player.potential,fromId:candidate.sellerId,toId:buyer.club.id,fee:buyer.fee,confidence,reason:candidate.reason};
+        market.rumors.unshift(rumor);
+        const important=rumor.fromId===save.clubId||rumor.toId===save.clubId||rumor.fee>=45||rumor.overall>=84;
+        reportTransferStory(save,`${clubById(rumor.fromId).name} 为 ${rumor.playerName} 寻找下家`,`${clubById(rumor.fromId).name} 正在主动精简一线队，${clubById(rumor.toId).name} 已就 ${rumor.playerName} 展开接触，预计费用约 ${money(rumor.fee)}。原因是${rumor.reason}。`,date,important);
+        return rumor;
+      }
+    }
+    return null;
+  }
+
+  function reportTransferStory(save,title,body,date,important=false) {
+    if(!important)return;
+    save.media.unshift({source:"Transfer Desk",title,body,date,type:"transfer"});save.media=save.media.slice(0,100);
+  }
+
+  function createAiTransferRumor(save,date) {
+    const market=ensureTransferMarket(save),clubCounts={};REAL_PLAYERS.forEach(player=>{const clubId=currentPlayerClubId(save,player);clubCounts[clubId]=(clubCounts[clubId]||0)+1;});clubCounts[save.clubId]=(save.squad||[]).length;
+    const clubs=CLUBS.filter(club=>{
+      if(save.role==="coach"&&club.id===save.clubId)return false;
+      const size=clubCounts[club.id]||0,needs=aiSquadNeeds(save,club.id),criticalShortage=Object.values(needs.needs).some(need=>need.shortage>0);
+      return Number(market.budgets[club.id]||0)>=3&&size>=14&&(size<AI_SQUAD_LIMITS.soft||criticalShortage);
+    });
+    if(!clubs.length)return null;
+    const buyer=weightedPick(clubs,club=>Math.max(1,club.prestige-55)*Math.max(1,Number(market.budgets[club.id]||0)/20)),candidate=buyer&&aiTransferCandidate(save,buyer.id,date);
+    if(!candidate||transferRumorExists(market,candidate.player.id,buyer.id))return null;
+    const resolveDays=Math.round(rand(4,11)),confidence=clamp(Math.round(48+candidate.score*.45+(buyer.prestige-candidate.seller.prestige)*.8),25,88),roleReason=candidate.need.shortage?`${transferRoleLabel(candidate.need.role)}人数不足`:`希望提升${transferRoleLabel(candidate.need.role)}的即战力`;
+    const rumor={id:`rumor-${market.season}-${++market.sequence}`,season:save.season,windowKey:transferWindow(date,save.season).key,createdDate:date,resolveDate:addDays(date,resolveDays),status:"active",playerId:candidate.player.id,playerName:candidate.player.name,position:candidate.player.position,overall:candidate.player.overall,potential:candidate.player.potential,fromId:candidate.sellerId,toId:buyer.id,fee:candidate.fee,confidence,reason:roleReason};
+    market.rumors.unshift(rumor);
+    const userInvolved=rumor.fromId===save.clubId||rumor.toId===save.clubId,important=userInvolved||rumor.fee>=55||rumor.overall>=85;
+    reportTransferStory(save,`${clubById(rumor.toId).name} 有意引进 ${rumor.playerName}`,`${clubById(rumor.toId).name} 正在评估从 ${clubById(rumor.fromId).name} 引进 ${rumor.playerName} 的可能，预计费用约 ${money(rumor.fee)}。消息人士称，${roleReason}是这项兴趣的主要原因。`,date,important);
+    return rumor;
+  }
+
+  function createCoachTransferReport(save,date) {
+    if(save.role!=="coach")return null;
+    const market=ensureTransferMarket(save),existing=market.rumors.some(rumor=>rumor.advisoryOnly&&rumor.status==="active");if(existing)return null;
+    const target=aiTransferCandidate(save,save.clubId,date),ownNeeds=aiSquadNeeds(save,save.clubId),surplusCandidate=aiSurplusCandidates(save,save.clubId)[0],surplus=surplusCandidate?.player,surplusBuyer=surplusCandidate?aiSurplusBuyer(save,surplusCandidate,date):null;
+    const outgoing=surplusBuyer&&(ownNeeds.players.length>AI_SQUAD_LIMITS.hard||Math.random()<.62);
+    if(!target&&!outgoing)return null;
+    let rumor;
+    if(outgoing){
+      const buyer=surplusBuyer.club;
+      rumor={id:`rumor-${market.season}-${++market.sequence}`,season:save.season,windowKey:transferWindow(date,save.season).key,createdDate:date,resolveDate:addDays(date,Math.round(rand(7,14))),status:"active",advisoryOnly:true,sellerDriven:true,playerId:surplusCandidate.canonical?.id||surplus.sourcePlayerId||surplus.id,sourcePlayerId:surplus.id,playerName:surplus.name,position:surplus.position,overall:surplus.overall,potential:surplus.potential,fromId:save.clubId,toId:buyer.id,fee:surplusBuyer.fee,confidence:Math.round(rand(48,76)),reason:surplusCandidate.reason};
+    }else{
+      rumor={id:`rumor-${market.season}-${++market.sequence}`,season:save.season,windowKey:transferWindow(date,save.season).key,createdDate:date,resolveDate:addDays(date,Math.round(rand(7,14))),status:"active",advisoryOnly:true,playerId:target.player.id,playerName:target.player.name,position:target.player.position,overall:target.player.overall,potential:target.player.potential,fromId:target.sellerId,toId:save.clubId,fee:target.fee,confidence:Math.round(rand(42,78)),reason:target.need.shortage?`${transferRoleLabel(target.need.role)}人数不足`:`提升${transferRoleLabel(target.need.role)}强度`};
+    }
+    market.rumors.unshift(rumor);
+    reportTransferStory(save,rumor.toId===save.clubId?`${clubById(save.clubId).name} 将 ${rumor.playerName} 列入考察名单`:`教练组建议为 ${rumor.playerName} 寻找下家`,rumor.toId===save.clubId?`俱乐部正在评估从 ${clubById(rumor.fromId).name} 引进 ${rumor.playerName} 的可行性，阵容分析认为球队需要${rumor.reason}。目前尚未提交正式报价。`:`阵容评估认为：${rumor.reason}。${clubById(rumor.toId).name} 可能愿意提供约 ${money(rumor.fee)}，但挂牌和接受报价仍由你决定。`,date,true);
+    return rumor;
+  }
+
+  function transferCareerSegment(save,player,club,date,statsTracked=true) {
+    const appearances=Number(player.appearances||0),start=Number(player.development?.startOverall||player.overall||65),end=Number(player.overall||65);
+    return {id:`career-transfer-${save.season}-${player.sourcePlayerId||player.id}-${date}-${club.id}`,season:save.season,club:club.name,clubId:club.id,appearances,goals:Number(player.goals||0),assists:Number(player.assists||0),average:Number((appearances?averageRating(player):0).toFixed(2)),overallStart:start,overallEnd:end,change:end-start,partialSeason:true,endDate:date,dataUnavailable:!statsTracked};
+  }
+
+  function transferContract(player,rumor,season) {
+    const offered=rumor.contract||{},years=Number(offered.years)||3,wage=Math.max(4,Number(offered.weeklyWage||player.contract?.weeklyWage||player.wage)||Math.round(Number(player.overall||65)*1.5));
+    return {...(player.contract||{}),...offered,weeklyWage:wage,signingBonus:Number(offered.signingBonus??player.contract?.signingBonus??Math.max(.1,wage*.035)),appearanceFee:Number(offered.appearanceFee??player.contract?.appearanceFee??Math.round(wage*.08)),releaseClause:Number(offered.releaseClause??player.contract?.releaseClause??Math.max(1,Number(player.value||2)*1.9)),role:offered.role||player.contract?.role||(Number(player.overall||0)>=85?"核心主力":Number(player.overall||0)>=76?"常规主力":"轮换球员"),endSeason:Number(offered.endSeason)||season+years};
+  }
+
+  function addUserSquadSigning(save,sourcePlayer,transferData={}) {
+    if(save.squad.some(player=>comparableClubName(player.name)===comparableClubName(sourcePlayer.name)))return;
+    const signing={...sourcePlayer,id:`ai-signing-${sourcePlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,sourcePlayerId:sourcePlayer.id,club:save.clubId,clubId:save.clubId,joinedDate:transferData.date||save.date,careerStats:transferData.careerStats||sourcePlayer.careerStats||[],contract:transferData.contract||sourcePlayer.contract,fitness:94,morale:86,form:0,lastRating:null,ratingTotal:0,appearances:0,goals:0,assists:0,injured:0,injury:null};
+    ["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{signing[key]=0;});
+    ensurePlayerDevelopment(signing,save.season);ensurePlayerContract(signing,save.season);save.squad.push(signing);
+  }
+
+  function completeTransfer(save,rumor,date,forced=false) {
+    const market=ensureTransferMarket(save),userSquadPlayer=rumor.fromId===save.clubId?(save.squad||[]).find(player=>sameTransferPlayer(player,rumor)):null,canonical=REAL_PLAYERS.find(player=>player.id===rumor.playerId)||canonicalTransferPlayer(save,rumor.fromId,userSquadPlayer||rumor),sourcePlayer=userSquadPlayer||canonical;
+    const validSource=sourcePlayer&&(rumor.fromId===save.clubId?Boolean(userSquadPlayer):Boolean(canonical&&currentPlayerClubId(save,canonical)===rumor.fromId));if(!validSource||userSquadPlayer?.id===save.controlledId){rumor.status="collapsed";return false;}
+    const buyer=clubById(rumor.toId),seller=clubById(rumor.fromId),budget=Number(market.budgets[buyer.id]||0),successChance=clamp(.5+(buyer.prestige-seller.prestige)/120+(rumor.confidence-50)/140,.28,.88);
+    if(!forced&&(budget<rumor.fee||Math.random()>successChance)){rumor.status="collapsed";if(rumor.fromId===save.clubId||rumor.toId===save.clubId)reportTransferStory(save,`${rumor.playerName} 的转会谈判暂时停止`,`相关俱乐部未能在费用、阵容计划或球员意愿上达成一致，这笔交易目前不会继续推进。`,date,true);return false;}
+    const careerSegment=transferCareerSegment(save,sourcePlayer,seller,date,Boolean(userSquadPlayer)),careerHistory=[...(sourcePlayer.careerStats||[])],newContract=transferContract(sourcePlayer,rumor,save.season);
+    market.budgets[buyer.id]=Number(Math.max(0,budget-rumor.fee).toFixed(1));market.budgets[seller.id]=Number((Number(market.budgets[seller.id]||0)+rumor.fee*.82).toFixed(1));market.clubOverrides[(canonical||sourcePlayer).id]=buyer.id;
+    if(buyer.id===save.clubId)addUserSquadSigning(save,canonical||sourcePlayer,{date,contract:newContract,careerStats:[...careerHistory,careerSegment]});
+    if(seller.id===save.clubId&&save.role==="player")save.squad=save.squad.filter(player=>player.id===save.controlledId||!sameTransferPlayer(player,sourcePlayer));
+    if(buyer.id===save.clubId)save.funds=Number(Math.max(0,Number(save.funds||0)-rumor.fee).toFixed(1));
+    if(seller.id===save.clubId)save.funds=Number((Number(save.funds||0)+rumor.fee*.82).toFixed(1));
+    rumor.status="completed";rumor.completedDate=date;
+    const record={id:`transfer-${market.season}-${++market.sequence}`,season:save.season,windowKey:rumor.windowKey,date,playerId:(canonical||sourcePlayer).id,playerName:sourcePlayer.name,position:sourcePlayer.position,overall:sourcePlayer.overall,potential:sourcePlayer.potential,fromId:seller.id,toId:buyer.id,fee:rumor.fee,reason:rumor.reason,clauses:rumor.clauses||null,contract:newContract,careerHistory,careerSegment};
+    market.records.unshift(record);
+    save.transferHistory=Array.isArray(save.transferHistory)?save.transferHistory:[];save.transferHistory.unshift(record);save.transferHistory=save.transferHistory.filter((item,index,list)=>list.findIndex(other=>other.id===item.id)===index).slice(0,500);
+    const important=record.fromId===save.clubId||record.toId===save.clubId||record.fee>=45||record.overall>=84;
+    reportTransferStory(save,`官方：${record.playerName} 加盟 ${buyer.name}`,`${buyer.name} 以约 ${money(record.fee)} 从 ${seller.name} 签下 ${record.playerName}。这笔交易针对${rumor.reason.replace("希望","")}，并符合球队的预算和阵容结构。`,date,important);
+    return true;
+  }
+
+  function simulateTransferMarket(save,targetDate) {
+    const market=ensureTransferMarket(save);if(market.season!==save.season)return;
+    while(market.nextTickDate<=targetDate){
+      const tickDate=market.nextTickDate,windowInfo=transferWindow(tickDate,save.season);
+      market.rumors.filter(rumor=>rumor.status==="active"&&rumor.resolveDate<=tickDate).forEach(rumor=>{if(rumor.advisoryOnly)rumor.status="expired";else completeTransfer(save,rumor,tickDate);});
+      if(windowInfo.open){const daysLeft=daysBetween(tickDate,windowInfo.end),attempts=daysLeft<=7?3:daysLeft<=21?2:1;for(let attempt=0;attempt<attempts;attempt++){if(save.role==="player")createAiSurplusSaleRumor(save,tickDate,save.clubId);createAiSurplusSaleRumor(save,tickDate);if(attempt===0||Math.random()<(daysLeft<=7?.68:.38))createAiTransferRumor(save,tickDate);}createCoachTransferReport(save,tickDate);}
+      market.nextTickDate=addDays(tickDate,transferTickDelay(tickDate,save.season));
+    }
+    market.rumors.filter(rumor=>rumor.status==="active"&&rumor.resolveDate<=targetDate).forEach(rumor=>{if(rumor.advisoryOnly)rumor.status="expired";else completeTransfer(save,rumor,targetDate);});
+    market.currentDate=targetDate;market.records=market.records.slice(0,120);market.rumors=market.rumors.slice(0,80);
+  }
+
+  function transferSquadNeeds() {
+    const club=clubById(state.clubId),groups=Object.fromEntries(Object.keys(TRANSFER_ROLE_TARGETS).map(role=>[role,[]]));
+    state.squad.forEach(player=>groups[transferRole(player.position)].push(player));
+    return Object.fromEntries(Object.entries(TRANSFER_ROLE_TARGETS).map(([role,target])=>{
+      const players=groups[role].sort((a,b)=>b.overall-a.overall),core=players.slice(0,target);
+      const average=core.length?core.reduce((sum,player)=>sum+player.overall,0)/core.length:club.prestige-18;
+      const shortage=Math.max(0,target-players.length),qualityGap=Math.max(0,club.prestige-4-average);
+      return [role,{score:clamp(shortage*6+qualityGap*.9,0,30),average,count:players.length,target}];
+    }));
+  }
+
+  function transferRecommendations(limit=8) {
+    const club=clubById(state.clubId),needs=transferSquadNeeds(),funds=Math.max(1,Number(state.funds)||club.budget||1);
+    const ownNames=new Set(state.squad.map(player=>comparableClubName(player.name)));
+    const minimumOverall=Math.max(58,club.prestige-16);
+    const candidates=REAL_PLAYERS.filter(player=>{
+      const currentClubId=currentPlayerClubId(state,player);
+      if(currentClubId===state.clubId||ownNames.has(comparableClubName(player.name)))return false;
+      return player.overall>=minimumOverall||player.potential>=club.prestige-5;
+    }).map(player=>{
+      const currentClubId=currentPlayerClubId(state,player),sourceClub=clubById(currentClubId),role=transferRole(player.position),need=needs[role];
+      const value=Math.max(.5,Number(player.value)||Math.max(1,player.overall-64));
+      const affinity=stableScoutingUnit(`${club.id}|${player.id}|${state.season}`),budgetRatio=funds/value;
+      const improvement=clamp(player.overall-need.average,-10,12),qualityFit=16-Math.abs((club.prestige-5)-player.overall)*.75;
+      const growth=Math.max(0,player.potential-player.overall)*1.15+(player.age<=21?4:player.age<=24?2:0);
+      const affordability=budgetRatio>=1?10+Math.min(7,(budgetRatio-1)*4):-Math.min(30,(1-budgetRatio)*34);
+      const score=need.score+improvement*1.15+qualityFit+growth+affordability+(affinity-.5)*44+(sourceClub.league===club.league?2:0);
+      const prestigeDelta=club.prestige-sourceClub.prestige;
+      const interest=clamp(Math.round(47+prestigeDelta*1.65+need.score*.55+(affinity-.5)*16+(budgetRatio>=1?5:-9)),5,93);
+      const reason=need.score>=17?`${playerRoleLabel(player.position)}重点补强`:improvement>=4?"提升位置即战力":player.potential-player.overall>=5?"潜力投资":"阵容适配";
+      return {...player,clubId:currentClubId,club:sourceClub.name,value,interest,score,reason,role};
+    }).sort((a,b)=>b.score-a.score||b.potential-a.potential||b.overall-a.overall);
+    const selected=[],roleCounts={};
+    for(const player of candidates){
+      if((roleCounts[player.role]||0)>=3)continue;
+      selected.push(player);roleCounts[player.role]=(roleCounts[player.role]||0)+1;
+      if(selected.length===limit)break;
+    }
+    if(selected.length<limit){for(const player of candidates){if(selected.includes(player))continue;selected.push(player);if(selected.length===limit)break;}}
+    return selected;
+  }
+
+  function negotiationById(id) { return (state.transferNegotiations||[]).find(item=>item.id===id); }
+  function transferPackageValue(terms) {
+    return Number((Number(terms.fee||0)+Number(terms.installments||0)*.82+Number(terms.appearanceAddon||0)*.38+Number(terms.goalAddon||0)*.32+Number(terms.sellOn||0)*.012*Number(terms.fee||0)).toFixed(1));
+  }
+  function startNegotiation(player) {
+    const current=(state.transferNegotiations||[]).find(item=>item.playerId===player.id&&!["completed","walked"].includes(item.status));
+    if(current){modal={type:"negotiation",id:current.id};render();return;}
+    const value=Math.max(.5,Number(player.value)||1),wage=Math.max(5,Number(player.wage)||Math.round(player.overall*1.5)),unit=stableScoutingUnit(`${player.id}|negotiation|${state.season}`);
+    const session={id:`neg-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,playerId:player.id,playerName:player.name,fromId:player.clubId,stage:"club",status:"active",round:1,clubPatience:100,agentPatience:100,createdDate:state.date,lastUpdated:state.date,valuation:value,interest:player.interest,clubTarget:Number((value*(1.08+unit*.24)).toFixed(1)),agentTarget:Number((wage*(1.04+unit*.18)).toFixed(0)),terms:{fee:Number((value*.92).toFixed(1)),installments:Number((value*.12).toFixed(1)),appearanceAddon:Number((value*.05).toFixed(1)),goalAddon:0,sellOn:5},contract:{weeklyWage:Math.round(wage),signingBonus:Number(Math.max(.2,value*.025).toFixed(1)),appearanceFee:Math.round(wage*.08),releaseClause:Number((value*2).toFixed(1)),role:player.overall>=84?"核心主力":"常规主力",years:4},history:[{round:0,speaker:"球探主管",text:`${clubById(player.clubId).name} 对球员估值约 ${money(value)}。经纪人希望先看到明确的球队计划。`}],playerSnapshot:{...player}};
+    state.transferNegotiations.unshift(session);modal={type:"negotiation",id:session.id};saveState();render();
+  }
+  function negotiationPatienceLoss(ratio,changes) { return Math.round((ratio<.65?28:ratio<.82?14:ratio>1.55?7:3)+Math.max(0,changes-2)*4); }
+  function submitClubOffer(session) {
+    const terms={fee:Number(document.getElementById("neg-fee")?.value),installments:Number(document.getElementById("neg-installments")?.value),appearanceAddon:Number(document.getElementById("neg-appearance")?.value),goalAddon:Number(document.getElementById("neg-goals")?.value),sellOn:Number(document.getElementById("neg-sell-on")?.value)};
+    if(Object.values(terms).some(value=>!Number.isFinite(value)||value<0)||terms.fee<=0){toast("请填写有效的转会条款");return;}
+    const total=Number((terms.fee+terms.installments).toFixed(1));if(total>state.funds){toast("固定转会支出超过可用预算");return;}
+    const previous=session.terms,changes=Object.keys(terms).filter(key=>Math.abs(Number(terms[key])-Number(previous[key]))>.01).length,value=transferPackageValue(terms),ratio=value/session.clubTarget;session.terms=terms;session.round++;session.lastUpdated=state.date;
+    if(ratio>=.96){session.stage="contract";session.history.push({round:session.round,speaker:clubById(session.fromId).name,text:`接受报价：固定部分 ${money(total)}，附加条款折算后总价值 ${money(value)}。可以与球员经纪人谈合同。`});toast("俱乐部接受报价，进入个人合同谈判");}
+    else{session.clubPatience=clamp(session.clubPatience-negotiationPatienceLoss(ratio,changes),0,100);const counter=Number((session.clubTarget*(.98+Math.random()*.05)).toFixed(1));session.terms.fee=Number(Math.max(1,counter-session.terms.installments*.82-session.terms.appearanceAddon*.38-session.terms.goalAddon*.32).toFixed(1));session.history.push({round:session.round,speaker:clubById(session.fromId).name,text:`报价仍低于估值。我们给出的还价以 ${money(session.terms.fee)} 基础费用为核心，耐心剩余 ${session.clubPatience}%。`});if(!session.clubPatience){session.status="walked";session.closedReason="出售俱乐部退出谈判";}}
+    saveState();render();
+  }
+  function submitContractOffer(session) {
+    const contract={weeklyWage:Number(document.getElementById("neg-wage")?.value),signingBonus:Number(document.getElementById("neg-signing")?.value),appearanceFee:Number(document.getElementById("neg-appearance-fee")?.value),releaseClause:Number(document.getElementById("neg-release")?.value),role:document.getElementById("neg-role")?.value,years:Number(document.getElementById("neg-years")?.value)};
+    if(!contract.weeklyWage||contract.signingBonus<0||contract.appearanceFee<0||!contract.releaseClause){toast("请填写有效的合同条款");return;}
+    const roleScore=({"核心主力":1.14,"常规主力":1.05,"轮换球员":.94,"替补球员":.82})[contract.role]||.9,releaseScore=contract.releaseClause>=session.valuation*2?.05:contract.releaseClause>=session.valuation*1.4?.12:.2;
+    const value=contract.weeklyWage+contract.signingBonus*4+contract.appearanceFee*.3,valueTarget=session.agentTarget+session.valuation*.1,ratio=(value/valueTarget)*roleScore+releaseScore+(session.interest-50)/250;const previous=session.contract,changes=Object.keys(contract).filter(key=>String(contract[key])!==String(previous[key])).length;session.contract=contract;session.round++;
+    if(ratio>=.98){
+      const p=session.playerSnapshot,market=ensureTransferMarket(state),rumor={id:`manual-negotiation-${++market.sequence}`,season:state.season,windowKey:transferWindow(state.date,state.season).key,createdDate:state.date,resolveDate:state.date,status:"active",playerId:p.id,playerName:p.name,position:p.position,overall:p.overall,potential:p.potential,fromId:session.fromId,toId:state.clubId,fee:Number((session.terms.fee+session.terms.installments).toFixed(1)),confidence:100,reason:p.reason||"协商引援",clauses:{...session.terms},contract:{...contract}};
+      market.rumors.unshift(rumor);completeTransfer(state,rumor,state.date,true);const signed=state.squad.find(player=>player.sourcePlayerId===p.id||player.id===p.id);if(signed)signed.contract={...contract,endSeason:state.season+contract.years};session.status="completed";session.stage="completed";session.history.push({round:session.round,speaker:"经纪人",text:`合同达成：周薪 €${Math.round(contract.weeklyWage)}K，定位为${contract.role}，合约 ${contract.years} 年。`});modal=null;toast(`${p.name} 已完成签约`);
+    }else{session.agentPatience=clamp(session.agentPatience-negotiationPatienceLoss(ratio,changes),0,100);session.contract.weeklyWage=Math.round(session.agentTarget*(.98+Math.random()*.06));session.contract.signingBonus=Number(Math.max(session.contract.signingBonus,session.valuation*.03).toFixed(1));session.history.push({round:session.round,speaker:"球员经纪人",text:`待遇或球队角色还不够有说服力。新的周薪要求为 €${session.contract.weeklyWage}K，耐心剩余 ${session.agentPatience}%。`});if(!session.agentPatience){session.status="walked";session.closedReason="经纪人退出谈判";}}
+    saveState();render();
+  }
+  function submitNegotiation() { const session=negotiationById(modal?.id);if(!session||session.status!=="active")return;if(session.stage==="club")submitClubOffer(session);else submitContractOffer(session); }
+  function withdrawNegotiation(id) { const session=negotiationById(id);if(!session)return;session.status="walked";session.closedReason="我方主动退出";session.history.push({round:session.round,speaker:"我方",text:"结束本次谈判。"});modal=null;saveState();render(); }
+  function toggleTransferList(playerId) { const player=state.squad.find(item=>item.id===playerId);if(!player)return;player.listed=!player.listed;state.transferRequestsLog.unshift({id:`list-${Date.now()}`,date:state.date,type:player.listed?"listed":"unlisted",playerId,playerName:player.name,status:"submitted"});addNotification({title:`董事会：${player.name} ${player.listed?"已被挂牌":"已撤出转会名单"}`,type:"transfer",date:state.date,detail:player.listed?"足球总监会向符合预算和阵容需求的俱乐部推荐这名球员，后续报价仍需主教练确认。":"足球总监已停止主动推介该球员。"});saveState();render(); }
+
+  function renderTransfers() {
+    const market=ensureTransferMarket(state),windowInfo=transferWindow(state.date,state.season),windowOpen=windowInfo.open,recommendations=transferRecommendations();
+    const club=clubById(state.clubId),seasonRecords=market.records.filter(record=>record.season===state.season&&(record.fromId===state.clubId||record.toId===state.clubId)).sort((a,b)=>b.date.localeCompare(a.date));
+    const windowRecords=market.records.filter(record=>record.windowKey===windowInfo.key).sort((a,b)=>b.fee-a.fee||b.date.localeCompare(a.date)).slice(0,12);
+    const rumors=market.rumors.filter(rumor=>rumor.windowKey===windowInfo.key&&rumor.status==="active").sort((a,b)=>(b.fromId===state.clubId||b.toId===state.clubId)-(a.fromId===state.clubId||a.toId===state.clubId)||b.confidence-a.confidence||b.fee-a.fee).slice(0,8);
+    const spent=seasonRecords.filter(record=>record.toId===state.clubId).reduce((sum,record)=>sum+record.fee,0),income=seasonRecords.filter(record=>record.fromId===state.clubId).reduce((sum,record)=>sum+record.fee,0);
+    const negotiations=(state.transferNegotiations||[]).filter(item=>item.status==="active");
+    return `<div class="page-heading"><span class="eyebrow">${windowOpen?"转会窗口开放":"转会窗口关闭"}</span><h2>转会中心</h2><p>转会费与个人合同分阶段谈判，报价结构、承诺和回复方式都会消耗对方耐心。</p></div>
+      <section class="stats"><div class="stat"><div class="stat-label">可用预算</div><div class="stat-value">${money(state.funds)}</div><div class="stat-context">仅教练视角可直接报价</div></div><div class="stat"><div class="stat-label">赛季支出</div><div class="stat-value">${money(spent)}</div><div class="stat-context">${seasonRecords.filter(record=>record.toId===state.clubId).length} 名球员转入</div></div><div class="stat"><div class="stat-label">赛季收入</div><div class="stat-value">${money(income)}</div><div class="stat-context">${seasonRecords.filter(record=>record.fromId===state.clubId).length} 名球员转出</div></div><div class="stat"><div class="stat-label">当前窗口</div><div class="stat-value transfer-window-value">${esc(windowInfo.label.replace("转会窗","窗"))}</div><div class="stat-context">${windowOpen?`开放至 ${formatDate(windowInfo.end,false)}`:"已关闭"}</div></div></section>
+      ${state.role==="player"?`<div class="panel transfer-actions-panel"><div class="panel-header"><h3>个人转会立场</h3><span class="meta">${controlledPlayer()?.transferRequestStatus==="submitted"?"董事会审议中":"尚未申请离队"}</span></div><div class="panel-body"><div class="grid grid-2"><button class="btn" id="request-transfer" ${!windowOpen||controlledPlayer()?.transferRequestStatus==="submitted"?"disabled":""}>${icon("send")}正式提交转会申请</button><button class="btn" id="suggest-signing">${icon("message-square")}向教练建议引援</button></div></div></div>`:`<section class="panel transfer-actions-panel"><div class="panel-header"><h3>挂牌与离队管理</h3><span class="meta">向董事会提交正式名单</span></div><div class="transfer-list-squad">${[...state.squad].sort((a,b)=>a.overall-b.overall).slice(0,8).map(player=>`<div><span><strong>${esc(player.name)}</strong><small>${playerRoleLabel(player.position)} · ${player.overall} · ${money(player.value)}</small></span><button class="btn btn-sm ${player.listed?"btn-danger":""}" data-list-player="${esc(player.id)}">${player.listed?"撤销挂牌":"挂牌出售"}</button></div>`).join("")}</div></section>`}
+      ${negotiations.length?`<section class="panel negotiation-desk"><div class="panel-header"><h3>谈判桌</h3><span class="meta">${negotiations.length} 项进行中</span></div><div class="negotiation-list">${negotiations.map(session=>`<button data-open-negotiation="${session.id}"><div><span class="tag ${session.stage==="contract"?"green":"amber"}">${session.stage==="contract"?"个人合同":"俱乐部报价"}</span><strong>${esc(session.playerName)}</strong><small>第 ${session.round} 轮 · ${esc(clubById(session.fromId).name)}</small></div><div class="patience-mini"><label>俱乐部 ${session.clubPatience}%</label><i><span style="width:${session.clubPatience}%"></span></i><label>经纪人 ${session.agentPatience}%</label><i><span style="width:${session.agentPatience}%"></span></i></div>${icon("chevron-right")}</button>`).join("")}</div></section>`:""}
+      <div class="transfer-overview"><section class="panel"><div class="panel-header"><h3>${esc(club.name)} · 本赛季转会记录</h3><span class="meta">${seasonRecords.length} 笔 · 净支出 ${money(spent-income)}</span></div><div class="table-wrap"><table class="transfer-record-table"><thead><tr><th>日期</th><th>类型</th><th>球员</th><th>交易球队</th><th class="num">转会费</th></tr></thead><tbody>${seasonRecords.map(record=>{const incoming=record.toId===state.clubId,other=clubById(incoming?record.fromId:record.toId),playerClub=clubById(incoming?record.toId:record.fromId);return `<tr><td>${formatDate(record.date,false)}</td><td><span class="tag ${incoming?"green":"red"}">${incoming?"转入":"转出"}</span></td><td class="player-name"><strong>${playerNameLink(record,{name:record.playerName,clubName:playerClub.name})}</strong><span>${playerRoleLabel(record.position)} · ${record.overall}/${record.potential}</span></td><td><span class="transfer-club">${clubBadge(other,"club-badge-result")}<b>${esc(other.name)}</b></span></td><td class="num"><strong>${money(record.fee)}</strong></td></tr>`;}).join("")||`<tr><td colspan="5"><div class="empty compact">${state.season}/${String(state.season+1).slice(2)} 赛季尚无本队正式交易</div></td></tr>`}</tbody></table></div></section>
+      <section class="panel"><div class="panel-header"><h3>正在发展的转会传闻</h3><span class="meta">兴趣、报价与谈判</span></div><div class="transfer-rumors">${rumors.map(rumor=>{const from=clubById(rumor.fromId),to=clubById(rumor.toId),userInvolved=rumor.fromId===state.clubId||rumor.toId===state.clubId;return `<article class="transfer-rumor ${userInvolved?"user-involved":""}"><div class="transfer-rumor-main"><span class="tag amber">可信度 ${rumor.confidence}%</span><strong>${playerNameLink(rumor,{name:rumor.playerName,clubName:from.name})}</strong><small>${playerRoleLabel(rumor.position)} · ${esc(from.name)} → ${esc(to.name)}</small></div><div class="transfer-rumor-fee"><b>${money(rumor.fee)}</b><span>${esc(rumor.reason)}</span></div></article>`;}).join("")||`<div class="empty compact">目前没有可信度足够高的活跃传闻</div>`}</div></section></div>
+      <section class="panel transfer-important"><div class="panel-header"><h3>${esc(windowInfo.label)} · 重要转会</h3><span class="meta">按转会费从高到低 · 最近更新 ${formatDate(market.currentDate,false)}</span></div><div class="table-wrap"><table><thead><tr><th class="num">排名</th><th>球员</th><th>转出球队</th><th>转入球队</th><th>日期</th><th class="num">转会费</th></tr></thead><tbody>${windowRecords.map((record,index)=>{const from=clubById(record.fromId),to=clubById(record.toId);return `<tr><td class="num"><span class="scorer-rank">${index+1}</span></td><td class="player-name"><strong>${playerNameLink(record,{name:record.playerName,clubName:to.name})}</strong><span>${playerRoleLabel(record.position)} · 能力 ${record.overall} / 潜力 ${record.potential}</span></td><td><span class="transfer-club">${clubBadge(from,"club-badge-result")}<b>${esc(from.name)}</b></span></td><td><span class="transfer-club">${clubBadge(to,"club-badge-result")}<b>${esc(to.name)}</b></span></td><td>${formatDate(record.date,false)}</td><td class="num"><strong class="transfer-fee">${money(record.fee)}</strong></td></tr>`;}).join("")||`<tr><td colspan="6"><div class="empty compact">该转会窗尚无已完成的重要交易</div></td></tr>`}</tbody></table></div></section>
+      <section class="panel"><div class="panel-header"><h3>球探推荐</h3><span class="meta">${esc(club.name)} · 按阵容缺口动态生成</span></div><div class="table-wrap"><table><thead><tr><th>球员</th><th>位置</th><th class="num">年龄</th><th class="num">能力 / 潜力</th><th class="num">估值</th><th class="num">加盟意愿</th><th></th></tr></thead><tbody>${recommendations.map((p,i)=>`<tr><td class="player-name"><strong>${playerNameLink(p,{clubName:p.club})}</strong><span>${esc(p.club)} · ${esc(p.reason)}</span></td><td><span class="tag">${playerRoleLabel(p.position)}</span></td><td class="num">${p.age}</td><td class="num"><span class="rating">${p.overall}</span> / ${p.potential}</td><td class="num">${money(p.value)}</td><td class="num">${p.interest}%</td><td class="num"><button class="btn btn-sm" data-transfer="${i}" ${!windowOpen?"disabled":""}>${state.role==="coach"?"报价":"建议"}</button></td></tr>`).join("")}</tbody></table></div></section>`;
+  }
+
+  function renderMedia() {
+    return `<div class="page-heading"><span class="eyebrow">舆论与叙事</span><h2>媒体中心</h2><p>报道会根据比赛、转会、表现、伤病和荣誉动态生成。</p></div><div class="grid grid-main"><section class="panel"><div class="panel-header"><h3>新闻流</h3><span class="meta">${state.media.length} 篇</span></div>${state.media.map(m=>`<article class="media-item"><div class="media-source">${icon(m.type==="injury"?"activity":m.type==="transfer"?"repeat-2":"radio")} ${esc(m.source)}</div><h3>${esc(m.title)}</h3><p>${esc(m.body)}</p><div class="media-time">${formatDate(m.date)}</div></article>`).join("")}</section><aside class="panel"><div class="panel-header"><h3>媒体评价模型</h3></div><div class="panel-body"><div class="timeline"><div class="timeline-item"><span class="timeline-mark"></span><strong>事件权重</strong><p>比赛级别、转会金额、对手实力与赛事阶段决定热度。</p></div><div class="timeline-item"><span class="timeline-mark"></span><strong>叙事连续性</strong><p>连胜、低迷、伤愈回归与争冠形势形成长期话题。</p></div><div class="timeline-item"><span class="timeline-mark"></span><strong>角色关系</strong><p>玩家建议、转会申请与比赛决策改变媒体态度。</p></div></div></div></aside></div>`;
+  }
+
+  function renderCareer() {
+    const p=controlledPlayer(), club=clubById(state.clubId), league=leagueOf(club);
+    const showcase = [
+      ["1301385.png","世界杯"],
+      ["1301394.png","欧洲冠军联赛"],
+      [leagueTrophyAsset(club.league),`${league.short}冠军`],
+      [trophyAsset(league.cup),league.cup]
+    ];
+    return `<div class="page-heading"><span class="eyebrow">永久记录</span><h2>生涯档案</h2><p>每个赛季的成绩、个人数据、奖项与重大节点都会被保存。</p></div>
+      <section class="stats"><div class="stat"><div class="stat-label">生涯赛季</div><div class="stat-value">${state.season-2025}</div><div class="stat-context">始于 2026-08-01</div></div><div class="stat"><div class="stat-label">正式比赛</div><div class="stat-value">${state.played}</div><div class="stat-context">胜 ${state.wins} · 平 ${state.draws} · 负 ${state.losses}</div></div><div class="stat"><div class="stat-label">${state.role==="player"?"进球 / 助攻":"执教积分"}</div><div class="stat-value">${state.role==="player"?`${p.goals} / ${p.assists}`:state.points}</div><div class="stat-context">${state.role==="player"?`场均 ${(averageRating(p)||6).toFixed(2)}`:"所有赛季累计"}</div></div><div class="stat"><div class="stat-label">荣誉</div><div class="stat-value">${state.honors.length}</div><div class="stat-context">俱乐部与个人奖项</div></div></section>
+      <section class="panel trophy-panel"><div class="panel-header"><h3>生涯目标</h3><span class="meta">可赢得的主要荣誉</span></div><div class="trophy-gallery">
+        ${showcase.map(([img,label])=>`<div class="trophy-showcase"><img src="assets/trophies/${img}" alt="${label}奖杯"><strong>${label}</strong></div>`).join("")}
+      </div></section>
+      <div class="grid grid-2"><section class="panel"><div class="panel-header"><h3>荣誉室</h3></div>${state.honors.length?`<div class="list">${state.honors.map(h=>`<div class="list-row"><div class="trophy-thumb"><img src="assets/trophies/${trophyAsset(h.name)}" alt=""></div><div class="list-row-main"><div class="list-row-title">${esc(h.name)}</div><div class="list-row-sub">${h.season}/${String(h.season+1).slice(2)} · ${esc(h.scope)}</div></div></div>`).join("")}</div>`:`<div class="empty">${icon("trophy")}<h3>荣誉仍在前方</h3><p>完成赛季并争取冠军或个人奖项。</p></div>`}</section><section class="panel"><div class="panel-header"><h3>赛季历史</h3></div>${state.history.length?`<div class="list">${state.history.map(h=>`<div class="list-row"><div class="list-row-main"><div class="list-row-title">${h.season}/${String(h.season+1).slice(2)} 赛季</div><div class="list-row-sub">${h.club} · ${h.played} 场 · ${h.wins} 胜 · 联赛第 ${h.position}</div></div></div>`).join("")}</div>`:`<div class="empty">首个赛季进行中</div>`}</section></div>`;
+  }
+
+  function trophyAsset(name) {
+    if (/世界杯/.test(name)) return "1301385.png";
+    if (/欧冠|欧洲冠军联赛/.test(name)) return "1301394.png";
+    if (/英格兰超级联赛|英超/.test(name)) return "11.png";
+    if (/西班牙甲级联赛|西甲/.test(name)) return "67.png";
+    if (/德国甲级联赛|德甲/.test(name)) return "22.png";
+    if (/意大利甲级联赛|意甲/.test(name)) return "32.png";
+    if (/法国甲级联赛|法甲/.test(name)) return "16.png";
+    if (/足总杯/.test(name)) return "1301426.png";
+    if (/联赛杯/.test(name)) return "1301427.png";
+    if (/国王杯/.test(name)) return "1301423.png";
+    if (/德国杯/.test(name)) return "1301410.png";
+    if (/意大利杯/.test(name)) return "1301412.png";
+    if (/法国杯/.test(name)) return "1301407.png";
+    if (/欧洲杯|美洲杯|国家队/.test(name)) return "international-cup.png";
+    if (/欧联|欧协|洲际|俱乐部世界杯/.test(name)) return "continental-cup.png";
+    return "league.png";
+  }
+
+  function leagueTrophyAsset(leagueId) {
+    return ({ENG1:"11.png",ESP1:"67.png",GER1:"22.png",ITA1:"32.png",FRA1:"16.png"})[leagueId] || "league.png";
+  }
+
+  function renderProfile() {
+    const p=controlledPlayer(), c=state.coachProfile;
+    const attrs=state.role==="coach"?[["战术",c.tactics],["人员管理",c.people],["青训",c.youth],["转会判断",c.transfers]]:[["速度",p.pace||70],["射门",p.shooting||65],["传球",p.passing||68],["盘带",p.dribbling||69],["防守",p.defending||60],["身体",p.physical||68]];
+    return `<div class="page-heading"><span class="eyebrow">${state.role==="coach"?"教练档案":"球员档案"}</span><h2>${esc(state.person)}</h2><p>${esc(clubById(state.clubId).name)} · ${state.role==="coach"?"主教练":`${playerRoleLabel(p.position)} · ${p.age} 岁`}</p></div>
+      <div class="grid grid-main"><section class="panel"><div class="panel-header"><h3>能力概览</h3><span class="meta">综合 ${state.role==="coach"?c.overall:p.overall}</span></div><div class="panel-body"><div class="attribute-grid">${attrs.map(([k,v])=>`<div class="attribute"><label>${k}</label><strong>${v}</strong><div class="meter ${v<60?"danger":v<75?"warn":""}"><span style="width:${v}%"></span></div></div>`).join("")}</div></div></section>
+      <div class="grid"><section class="panel"><div class="panel-header"><h3>发展机制</h3></div><div class="panel-body"><p style="margin:0;color:var(--muted);font-size:12px;line-height:1.7">${state.role==="coach"?"比赛结果、战术执行、球员发展与荣誉会改变教练能力及声望。连续失利也会带来下降。":"年龄、训练强度、出场时间、评分、荣誉与伤病共同作用于当前能力和潜力。重大伤病也有小概率带来心理韧性提升。"}</p></div></section><section class="panel"><div class="panel-header"><h3>职业决定</h3></div><div class="panel-body"><button class="btn btn-danger" id="retire" ${state.retired?"disabled":""}>${icon("log-out")}宣布退役</button></div></section><button class="btn btn-ghost" id="reset-save">${icon("trash-2")}删除当前存档</button></div></div>`;
+  }
+
+  function renderMatch() {
+    const m=state.activeMatch, club=clubById(state.clubId), f=m.fixture;
+    const ourName=f.teamName||club.name,homeName=f.home?ourName:f.opponent, awayName=f.home?f.opponent:ourName;
+    const heatPlayers=(m.lineupIds||[]).map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(Boolean);
+    const roleStatus=m.controlledSelection,roleBanner=state.role==="player"&&roleStatus?`<div class="player-match-role ${roleStatus.status}"><span>${esc(roleStatus.label)}</span><strong>${esc(roleStatus.reason)}</strong></div>`:"";
+    return `<main class="match-screen"><header class="match-topbar"><div class="match-club">${clubBadge(homeName,"club-badge-match")}<span>${clubNameLink(homeName)}</span></div><div class="match-score"><span class="score-number">${m.home}</span><span class="match-clock ${m.paused?"paused":""}">${m.finished?"FT":m.minute===45&&m.pendingTalk==="halfTime"?"HT":matchClockLabel(m.minute)}</span><span class="score-number">${m.away}</span></div><div class="match-club away"><span>${clubNameLink(awayName)}</span>${clubBadge(awayName,"club-badge-match")}</div></header>
+      ${roleBanner}<div class="match-layout"><div class="match-main"><div class="match-priority-grid"><section class="panel match-commentary-panel"><div class="panel-header"><h3>比赛实况</h3><span class="meta">${esc(f.competition)} · ${esc(f.round)}</span></div><div class="panel-body commentary" id="commentary">${m.commentary.slice().reverse().map(e=>`<div class="commentary-line"><time>${eventMinuteLabel(e.minute)}</time><span>${esc(e.text)}</span></div>`).join("")}</div></section>${renderMatchStats(m)}${renderFeaturedRatings(m)}</div>
+      <div class="match-broadcast-strip"><div><span>控球率</span><strong>${m.possession}%</strong></div><div><span>xG</span><strong>${m.stats.ours.xg.toFixed(2)} - ${m.stats.opponent.xg.toFixed(2)}</strong></div><div><span>射门</span><strong>${m.stats.ours.shots} - ${m.stats.opponent.shots}</strong></div><div><span>比赛速度</span><strong>${m.speed}x</strong></div></div>
+      <div class="match-visual-row"><section class="canvas-match-stage" aria-label="2D 比赛演播"><canvas id="match-canvas"></canvas><div class="canvas-status"><span class="live-indicator"><i></i>${m.paused?"比赛暂停":"LIVE"}</span><span>${esc(m.visualAction?.label||`${m.formation} vs ${m.opponentFormation}`)}</span></div>${m.paused&&!m.pendingTalk&&!m.finished?`<button class="canvas-play" id="toggle-match-play" aria-label="继续比赛">${icon("play")}</button>`:""}</section>
+      <div class="match-tools"><section class="panel match-playback"><div class="panel-header"><h3>演播控制</h3><span class="meta">${m.paused?"已暂停":"时间推进中"}</span></div><div class="panel-body"><div class="playback-row"><button class="btn btn-icon" id="toggle-match-play" title="${m.pendingTalk?"比赛暂停":m.paused?"继续":"暂停"}" ${m.pendingTalk?"disabled":""}>${icon(m.pendingTalk?"pause":m.paused?"play":"pause")}</button><div class="speed-control">${[1,2,4].map(speed=>`<button class="${m.speed===speed?"active":""}" data-match-speed="${speed}" ${m.pendingTalk?"disabled":""}>${speed}x</button>`).join("")}</div></div><button class="btn skip-result" id="skip-match" ${m.pendingTalk||m.finished?"disabled":""}>${icon("fast-forward")}直接查看赛果</button></div></section>
+      <section class="panel heatmap-panel"><div class="panel-header"><h3>球员热力图</h3><span class="meta">实时跑位采样</span></div><div class="panel-body"><select class="select" id="heatmap-player">${heatPlayers.map(player=>`<option value="${esc(player.id)}" ${m.selectedHeatmapPlayer===player.id?"selected":""}>${esc(player.name)} · ${playerRoleLabel(player.position)}</option>`).join("")}</select><canvas id="heatmap-canvas" width="420" height="220"></canvas></div></section></div></div>
+      <div class="match-team-grid">${renderMatchTeam(m,"home")}${renderMatchTeam(m,"away")}</div>${m.finished&&!m.pendingTalk?`<button class="btn btn-primary finish-report" id="finish-match">${icon("clipboard-check")}返回并生成赛后报告</button>`:""}</div></div>${renderTeamTalkOverlay(m)}</main>`;
+  }
+
+  function renderTeamTalkOverlay(m) {
+    if(!m.pendingTalk)return "";const half=m.pendingTalk==="halfTime",ours=m.fixture.home?m.home:m.away,theirs=m.fixture.home?m.away:m.home;
+    if(state.role==="player"){const profile=m.aiCoachProfiles?.ours||coachDecisionProfile("AI"),choice=aiTeamTalkChoice(m,profile),content={inspire:["激昂","我们仍在比赛中。提高对抗速度，下一次机会必须更坚决。"],criticize:["严厉","目前的执行远低于要求。减少无谓失误，立刻提高比赛强度。"],calm:["冷静","领先不等于结束。保持距离，不要被对手带乱节奏。"],encourage:["鼓励","节奏是对的，传球后继续移动，机会会出现。"]}[choice];return `<div class="team-talk-overlay"><div class="team-talk"><span class="eyebrow">${half?"中场休息":"赛后更衣室"} · AI 主教练</span><h2>${content[0]}</h2><blockquote>${esc(content[1])}</blockquote><button class="btn btn-primary" data-team-talk="listen">${icon("check")}继续</button></div></div>`;}
+    return `<div class="team-talk-overlay"><div class="team-talk"><span class="eyebrow">${half?"中场讲话":"赛后讲话"}</span><h2>${half?"你要如何改变下半场？":"最后一句话会留在更衣室"}</h2><div class="talk-options"><button data-team-talk="inspire">${icon("flame")}<strong>激昂</strong><span>提升士气与进攻欲望，风险同步上升</span></button><button data-team-talk="encourage">${icon("heart-handshake")}<strong>鼓励</strong><span>稳定情绪并小幅恢复体能</span></button><button data-team-talk="criticize">${icon("message-square-warning")}<strong>批评</strong><span>提高战术执行，可能打击低士气球员</span></button><button data-team-talk="calm">${icon("shield-check")}<strong>冷静</strong><span>降低比赛风险并保持阵型</span></button></div></div></div>`;
+  }
+
+  function matchTeamData(m,side) {
+    const oursSide=m.fixture.home?"home":"away",isOurs=side===oursSide;
+    if(isOurs)return {key:"ours",name:m.fixture.teamName||clubById(state.clubId).name,formation:m.formation,players:matchOurPlayers(m),lineupIds:m.lineupIds||[],initialLineupIds:m.initialLineupIds||m.lineupIds||[],initialBenchIds:m.initialBenchIds||m.benchIds||[],benchIds:m.benchIds||[],ratings:m.liveRatings||{},events:m.playerEvents||{},substitutions:(m.substitutions||[]).filter(item=>item.team==="ours"),isOurs:true};
+    return {key:"opponent",name:m.fixture.opponent,formation:m.opponentFormation,players:m.opponentPlayers||[],lineupIds:m.opponentLineupIds||[],initialLineupIds:m.opponentInitialLineupIds||m.opponentLineupIds||[],initialBenchIds:m.opponentInitialBenchIds||m.opponentBenchIds||[],benchIds:m.opponentBenchIds||[],ratings:m.opponentRatings||{},events:m.opponentEvents||{},substitutions:(m.substitutions||[]).filter(item=>item.team==="opponent"),isOurs:false};
+  }
+
+  function matchPlayer(team,id) { return team.players.find(player=>player.id===id); }
+  function ratingClass(value) { return value>=7.5?"excellent":value<6?"poor":""; }
+  function eventMarks(event={}) {
+    const defensive=(event.tacklesWon||0)+(event.interceptions||0)+(event.clearances||0)+(event.blocks||0)+(event.saves||0);
+    const impact=(event.keyPasses||0)+(event.chancesCreated||0)+(event.successfulDribbles||0)+(event.progressivePasses||0)+(event.recoveries||0)+(event.pressuresWon||0);
+    const defensiveTitle=`成功抢断 ${event.tacklesWon||0} · 拦截 ${event.interceptions||0} · 解围 ${event.clearances||0} · 封堵 ${event.blocks||0} · 扑救 ${event.saves||0}`;
+    const impactTitle=`关键传球 ${event.keyPasses||0} · 创造机会 ${event.chancesCreated||0} · 成功盘带 ${event.successfulDribbles||0} · 推进传球 ${event.progressivePasses||0} · 夺回球权 ${event.recoveries||0} · 压迫成功 ${event.pressuresWon||0}`;
+    return `${event.goals?`<span class="match-event goal" title="进球">${event.goals}球</span>`:""}${event.assists?`<span class="match-event assist" title="助攻">${event.assists}助</span>`:""}${event.shots?`<span class="match-event" title="射正 ${event.onTarget||0} / 射门 ${event.shots}">射 ${event.onTarget||0}/${event.shots}</span>`:""}${impact?`<span class="match-event" title="${impactTitle}">贡献 ${impact}</span>`:""}${defensive?`<span class="match-event" title="${defensiveTitle}">防 ${defensive}</span>`:""}${event.yellow?`<span class="card-mark yellow" title="黄牌"></span>`:""}${event.red?`<span class="card-mark red" title="红牌"></span>`:""}`;
+  }
+
+  function renderMatchPlayerRow(team,id,kind) {
+    const player=matchPlayer(team,id);if(!player)return "";
+    const active=team.lineupIds.includes(id),subbedOn=team.substitutions.some(item=>item.inId===id),subbedOff=team.substitutions.some(item=>item.outId===id),sentOff=Number(team.events[id]?.red||0)>0;
+    const rating=team.ratings[id],showRating=kind==="starter"||subbedOn||subbedOff;
+    const status=sentOff?"红牌罚下":subbedOff?"已换下":subbedOn?"替补登场":active?"场上":"替补";
+    const movement=subbedOff?`<b class="substitution-badge off">${icon("arrow-down")}换下</b>`:subbedOn?`<b class="substitution-badge on">${icon("arrow-up")}换上</b>`:"";
+    return `<div class="match-player-row ${active?"active":""} ${subbedOff?"subbed-off":""}"><span class="shirt-no">${player.number||"-"}</span><div class="match-player-main"><strong><span class="player-link-wrap">${playerNameLink(player,{clubName:team.name})}${movement}</span></strong><span>${playerRoleLabel(player.position)} · ${status}</span></div><div class="match-event-marks">${eventMarks(team.events[id])}</div><span class="live-rating ${showRating?ratingClass(Number(rating||6)):"muted"}">${showRating?Number(rating||6).toFixed(2):"—"}</span></div>`;
+  }
+
+  function renderSubstitutionControls(m,team) {
+    if(!team.isOurs||state.role!=="coach"||m.finished)return "";
+    const remaining=5-team.substitutions.length;
+    if(remaining<=0)return `<div class="sub-limit">本场换人名额已用完</div>`;
+    const onOptions=team.lineupIds.map(id=>matchPlayer(team,id)).filter(Boolean).sort((a,b)=>(a.position==="GK")-(b.position==="GK")),offOptions=team.benchIds.map(id=>matchPlayer(team,id)).filter(Boolean).sort((a,b)=>(a.position==="GK")-(b.position==="GK"));
+    return `<div class="sub-controls"><select class="select" id="sub-out" aria-label="换下球员">${onOptions.map(player=>`<option value="${esc(player.id)}" data-position="${esc(player.position)}">换下 · ${esc(player.name)} (${Number(team.ratings[player.id]||6).toFixed(2)})</option>`).join("")}</select><select class="select" id="sub-in" aria-label="换上球员">${offOptions.map(player=>`<option value="${esc(player.id)}" data-position="${esc(player.position)}">换上 · ${esc(player.name)} · ${playerRoleLabel(player.position)}</option>`).join("")}</select><button class="btn btn-sm" id="make-substitution" ${offOptions.length?"":"disabled"}>${icon("arrow-right-left")}确认换人</button><span class="sub-limit">剩余 ${remaining} 个名额</span></div>`;
+  }
+
+  function renderMatchTeam(m,side) {
+    const team=matchTeamData(m,side);
+    clubProfileRegistry.set(`match-team-${side}`,resolveClub(team.name));
+    return `<section class="panel match-team"><div class="panel-header"><div class="match-team-title">${clubBadge(team.name,"club-badge-team")}<h3>${esc(team.name)}</h3></div><span class="meta">${team.formation||"灵活阵型"} · 已换 ${team.substitutions.length}/5</span></div>${renderSubstitutionControls(m,team)}<div class="match-squad-section"><h4>首发阵容</h4>${team.initialLineupIds.map(id=>renderMatchPlayerRow(team,id,"starter")).join("")}</div><div class="match-squad-section bench"><h4>替补球员</h4>${team.initialBenchIds.map(id=>renderMatchPlayerRow(team,id,"bench")).join("")||`<div class="empty compact">暂无替补</div>`}</div>${team.substitutions.length?`<div class="sub-log"><h4>换人记录</h4>${team.substitutions.map(item=>`<div><time>${eventMinuteLabel(item.minute)}</time><span class="sub-on"><b>换上</b>${esc(item.inName)}</span><span class="sub-off"><b>换下</b>${esc(item.outName)}</span><small>${esc(item.reason||"战术调整")}</small></div>`).join("")}</div>`:""}</section>`;
+  }
+
+  function renderMatchStats(m) {
+    const home=m.fixture.home?m.stats.ours:m.stats.opponent,away=m.fixture.home?m.stats.opponent:m.stats.ours;
+    const homePoss=m.fixture.home?m.possession:100-m.possession,awayPoss=100-homePoss;
+    const rows=[["控球率",`${homePoss}%`,`${awayPoss}%`],["射门",home.shots,away.shots],["射正",home.onTarget,away.onTarget],["预期进球",Number(home.xg).toFixed(2),Number(away.xg).toFixed(2)],["角球",home.corners,away.corners],["犯规",home.fouls,away.fouls],["黄牌",home.yellow||0,away.yellow||0],["红牌",home.red||0,away.red||0]];
+    const ourName=m.fixture.teamName||clubById(state.clubId).name;return `<section class="panel match-data-panel"><div class="panel-header"><h3>比赛数据</h3><span class="meta">实时更新</span></div><div class="match-stat-head"><strong>${esc(m.fixture.home?ourName:m.fixture.opponent)}</strong><span>数据</span><strong>${esc(m.fixture.home?m.fixture.opponent:ourName)}</strong></div><div class="match-stat-list">${rows.map(([label,homeValue,awayValue])=>`<div class="match-stat-row"><strong>${homeValue}</strong><span>${label}</span><strong>${awayValue}</strong></div>`).join("")}</div><div class="possession-bar"><span style="width:${homePoss}%"></span></div></section>`;
+  }
+
+  function renderFeaturedRatings(m) {
+    const side=key=>{
+      const team=matchTeamData(m,key),rows=team.lineupIds.map((id,index)=>{
+        const player=matchPlayer(team,id),substitution=team.substitutions.find(item=>item.inId===id);
+        return {player,rating:Number(team.ratings[id]||6),events:team.events[id]||{},substitution,index};
+      }).filter(item=>item.player).sort((a,b)=>positionSortRank(a.player.position)-positionSortRank(b.player.position)||a.index-b.index);
+      return `<div class="featured-rating-team"><strong>${esc(team.name)}</strong>${rows.map(({player,rating,events,substitution})=>`<div class="featured-rating-row ${substitution?"substitute":""}"><span class="featured-position">${playerRoleLabel(player.position)}</span><span class="featured-player-name">${esc(player.name)}${substitution?` <b class="featured-sub-badge">${icon("arrow-up")}换上</b>`:""}${events.goals?` <b class="featured-goal">${events.goals}球</b>`:""}</span><em class="${ratingClass(rating)}">${rating.toFixed(2)}</em></div>`).join("")}</div>`;
+    };
+    return `<section class="panel featured-ratings"><div class="panel-header"><h3>球员评分</h3><span class="meta">按位置 · 场上球员</span></div><div class="featured-ratings-body">${side("home")}${side("away")}</div></section>`;
+  }
+
+  function renderMatchCenter(m) {
+    return `<div class="match-center">${renderMatchStats(m)}<div class="match-team-grid">${renderMatchTeam(m,"home")}${renderMatchTeam(m,"away")}</div></div>`;
+  }
+
+  function renderPlayersOnPitch(m) {
+    const dots=[]; const home=[[7,50],[22,18],[22,40],[22,60],[22,82],[43,25],[43,50],[43,75],[66,25],[70,50],[66,75]];
+    const away=home.map(([x,y])=>[100-x,y]);
+    const homeTeam=matchTeamData(m,"home"),awayTeam=matchTeamData(m,"away");
+    home.forEach((point,i)=>{const player=matchPlayer(homeTeam,homeTeam.lineupIds[i]);dots.push(`<span class="player-dot home" title="${esc(player?.name||"")}" style="left:${point[0]}%;top:${point[1]}%">${player?.number||i+1}</span>`);});
+    away.forEach((point,i)=>{const player=matchPlayer(awayTeam,awayTeam.lineupIds[i]);dots.push(`<span class="player-dot" title="${esc(player?.name||"")}" style="left:${point[0]}%;top:${point[1]}%">${player?.number||i+1}</span>`);}); return dots.join("");
+  }
+  function visualFormationPoints(side) {
+    const base=[[6,50],[22,16],[21,38],[21,62],[22,84],[43,22],[42,50],[43,78],[66,22],[71,50],[66,78]];
+    return side==="home"?base:base.map(([x,y])=>[100-x,y]);
+  }
+  function matchVisualPositions(m,side,tick=performance.now()/900) {
+    const homeTeam=m.fixture.home?"ours":"opponent",teamKey=side==="home"?homeTeam:(homeTeam==="ours"?"opponent":"ours"),action=m.visualAction||{},attacking=action.team?teamKey===action.team:(teamKey==="ours"?m.possession>=50:m.possession<50),direction=side==="home"?1:-1,push=({build:5,attack:11,shot:17,goal:19,save:14,defend:2})[action.kind]||7;
+    return visualFormationPoints(side).map(([x,y],index)=>({x:clamp(x+direction*(attacking?push:-Math.max(2,push*.32))+Math.sin(tick+index*1.7)*2.4,4,96),y:clamp(y+Math.cos(tick*.82+index*1.31)*3.7,5,95)}));
+  }
+  function setMatchVisualAction(m,team,kind,label) { m.visualAction={team,kind,label,startedAt:Date.now()}; }
+  function paintPitch(ctx,width,height) {
+    ctx.fillStyle="#177642";ctx.fillRect(0,0,width,height);const stripe=width/10;for(let i=0;i<10;i++){ctx.fillStyle=i%2?"rgba(255,255,255,.025)":"rgba(0,0,0,.035)";ctx.fillRect(i*stripe,0,stripe,height);}
+    ctx.strokeStyle="rgba(238,255,244,.72)";ctx.lineWidth=Math.max(1,width/600);ctx.strokeRect(width*.025,height*.045,width*.95,height*.91);ctx.beginPath();ctx.moveTo(width/2,height*.045);ctx.lineTo(width/2,height*.955);ctx.stroke();ctx.beginPath();ctx.arc(width/2,height/2,height*.13,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(width/2,height/2,2.5,0,Math.PI*2);ctx.fillStyle=ctx.strokeStyle;ctx.fill();
+    [[.025,.25,.14,.5],[.835,.25,.14,.5],[.025,.38,.065,.24],[.91,.38,.065,.24]].forEach(([x,y,w,h])=>ctx.strokeRect(width*x,height*y,width*w,height*h));
+  }
+  function drawMatchCanvas() {
+    const canvas=document.getElementById("match-canvas");if(!canvas)return;
+    const animate=()=>{const current=document.getElementById("match-canvas");if(!current||!state?.activeMatch){matchCanvasFrame=null;return;}drawMatchCanvasFrame();matchCanvasFrame=requestAnimationFrame(animate);};animate();drawHeatmapCanvas();
+  }
+  function drawMatchCanvasFrame() {
+    const canvas=document.getElementById("match-canvas"),m=state?.activeMatch;if(!canvas||!m)return;const rect=canvas.getBoundingClientRect(),ratio=Math.min(2,window.devicePixelRatio||1),width=Math.max(320,Math.round(rect.width*ratio)),height=Math.max(190,Math.round(rect.height*ratio));if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}const ctx=canvas.getContext("2d");paintPitch(ctx,width,height);
+    const tick=performance.now()/(m.paused?3000:900),home=matchTeamData(m,"home"),away=matchTeamData(m,"away"),drawTeam=(team,side,color)=>{const points=matchVisualPositions(m,side,tick);points.forEach((point,index)=>{const player=matchPlayer(team,team.lineupIds[index]);if(!player)return;const x=point.x/100*width,y=point.y/100*height,r=Math.max(5,width*.008);ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();ctx.strokeStyle="rgba(255,255,255,.86)";ctx.lineWidth=1.5*ratio;ctx.stroke();ctx.fillStyle=side==="home"?"#102018":"#fff";ctx.font=`700 ${Math.max(7,width*.010)}px Inter, sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(String(player.number||index+1),x,y);});return points;};
+    const homePoints=drawTeam(home,"home","#e8f0ec"),awayPoints=drawTeam(away,"away","#ef4f61"),action=m.visualAction||{},homeKey=m.fixture.home?"ours":"opponent",attackingHome=action.team?homeKey===action.team:m.possession>=50,points=attackingHome?homePoints:awayPoints,direction=attackingHome?1:-1,owner=points[(m.minute+(m.visualTick||0))%Math.max(1,points.length)],duration=({1:1050,2:520,4:260})[m.speed]||1050,progress=m.paused?.25:clamp((Date.now()-Number(action.startedAt||Date.now()))/duration,0,1),targetX=action.kind==="goal"?(direction>0?98:2):action.kind==="shot"||action.kind==="save"?(direction>0?92:8):owner?clamp(owner.x+direction*(12+progress*12),4,96):m.ballX,targetY=action.kind==="goal"?50:owner?clamp(owner.y+Math.sin(progress*Math.PI)*10,7,93):m.ballY,ballX=((owner?.x||m.ballX)*(1-progress)+targetX*progress)/100*width,ballY=((owner?.y||m.ballY)*(1-progress)+targetY*progress)/100*height;ctx.beginPath();ctx.arc(ballX,ballY,Math.max(3,width*.0045),0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill();ctx.strokeStyle="#142019";ctx.lineWidth=1;ctx.stroke();
+  }
+  function sampleMatchHeatmap(m) {
+    [["home",matchTeamData(m,"home")],["away",matchTeamData(m,"away")]].forEach(([side,team])=>{matchVisualPositions(m,side,m.minute*.37).forEach((point,index)=>{const id=team.lineupIds[index];if(!id)return;const normalizedX=side==="away"?100-point.x:point.x;(m.heatmap[id]||(m.heatmap[id]=[])).push([Number(normalizedX.toFixed(1)),Number(point.y.toFixed(1))]);m.heatmap[id]=m.heatmap[id].slice(-180);});});m.heatmapNormalized=true;m.visualTick=(m.visualTick||0)+1;
+  }
+  function drawHeatmapCanvas() {
+    const canvas=document.getElementById("heatmap-canvas"),m=state?.activeMatch;if(!canvas||!m)return;const ctx=canvas.getContext("2d"),width=canvas.width,height=canvas.height;paintPitch(ctx,width,height);const points=m.heatmap?.[m.selectedHeatmapPlayer]||[];points.forEach(([px,py],index)=>{const x=px/100*width,y=py/100*height,r=22*(.45+index/Math.max(1,points.length));const gradient=ctx.createRadialGradient(x,y,0,x,y,r);gradient.addColorStop(0,"rgba(255,232,80,.22)");gradient.addColorStop(.5,"rgba(255,112,48,.12)");gradient.addColorStop(1,"rgba(255,40,40,0)");ctx.fillStyle=gradient;ctx.fillRect(x-r,y-r,r*2,r*2);});
+  }
+  function matchPhase(m) {
+    if(m.minute<25)return {id:"opening",label:"开局阶段"};
+    if(m.minute<45)return {id:"firstHalf",label:"半场前"};
+    if(m.minute<70)return {id:"middle",label:"下半场中段"};
+    return {id:"closing",label:"决胜阶段"};
+  }
+
+  function matchSituation(m) {
+    const ours=m.fixture.home?m.home:m.away,theirs=m.fixture.home?m.away:m.home;
+    return ours>theirs?{id:"leading",label:"领先"}:ours<theirs?{id:"trailing",label:"落后"}:{id:"level",label:"平局"};
+  }
+
+  function playerDecisionGroup(position) {
+    if(position==="GK")return "goalkeeper";
+    if(["CB","DF","FB","RB","LB"].includes(position))return "defender";
+    if(position==="DM")return "holding";
+    if(position==="CM")return "midfielder";
+    if(["AM","WG","RW","LW"].includes(position))return "creator";
+    return "forward";
+  }
+
+  function pd(id,iconName,label,desc,config,successText,failureText) {
+    const {possession=0,fitness=-1,bonus=0,risk=0,skill="overall",chance=.65,stat="control",win=.12,lose=-.18}=config;
+    return {id,icon:iconName,label,desc,effect:{possession,fitness,bonus,tactical:0,risk},resolution:{skill,chance,stat,win,lose,successText,failureText}};
+  }
+
+  function scenario(id,iconName,title,detail,zone,pressure,threat,options) { return {id,icon:iconName,title,detail,zone,pressure,threat,options}; }
+
+  const PLAYER_DECISION_SCENARIOS = {
+    goalkeeper:{
+      opening:scenario("gk-opening-cross","circle-dot","边路传中直奔六码区","对手边锋摆脱后送出带弧线的传中，前锋正冲向你与中卫之间。","六码区","中",.24,[
+        pd("gk-claim","hand","果断出击摘球","抢在前锋之前控制高球",{possession:4,fitness:-2,bonus:4,risk:2,chance:.7,stat:"save",win:.2,lose:-.32},"你判断准确，高点稳稳摘下传中。","你出击稍慢，皮球从手边滑向门前。"),
+        pd("gk-punch","shield","双拳击出","优先把球清出危险区域",{possession:1,fitness:-2,bonus:3,risk:1,chance:.78,stat:"clear",win:.14,lose:-.2},"你用双拳把球击出禁区。","击球落点不佳，对手拿到第二点。"),
+        pd("gk-line","map-pin","守住门线","相信中卫处理传中",{possession:0,fitness:0,bonus:1,risk:-2,chance:.73,stat:"save",win:.1,lose:-.22},"你保持重心，随后封住近距离攻门。","中卫漏人，你被迫面对近距离头球。"),
+        pd("gk-counter-throw","send","摘球后快发手抛球","争取立即发动反击",{possession:2,fitness:-2,bonus:5,risk:4,chance:.62,stat:"distribution",win:.2,lose:-.25},"你摘球后迅速手抛发动反击。","快发路线被识破，球队再次承压。")]),
+      firstHalf:scenario("gk-pressed-backpass","triangle-alert","回传球遭遇前锋逼抢","中卫在压力下把球回传给你，对方前锋已封住中路接应线。","小禁区外","高",.2,[
+        pd("gk-short-pass","shuffle","短传中卫","用脚下配合绕过逼抢",{possession:5,fitness:-1,bonus:4,risk:4,skill:"passing",chance:.64,stat:"distribution",win:.18,lose:-.35},"你冷静找到空出的中卫，破解第一线逼抢。","短传被对手预判，禁区前出现险情。"),
+        pd("gk-wide-pass","split","分给边后卫","利用边路空当继续组织",{possession:3,fitness:-1,bonus:3,risk:2,skill:"passing",chance:.7,stat:"distribution",win:.15,lose:-.22},"你把球准确送到边路安全区域。","传球力量不足，边后卫被迫回追。"),
+        pd("gk-long-kick","send","长传找前锋","越过逼抢直接争夺第二点",{possession:-2,fitness:-1,bonus:4,risk:2,skill:"passing",chance:.66,stat:"distribution",win:.12,lose:-.12},"长传越过中场，前锋成功争到落点。","长传直接交还球权。"),
+        pd("gk-clear-stand","shield-check","踢出边线","不在危险区域承担风险",{possession:-3,fitness:0,bonus:0,risk:-5,chance:.92,stat:"clear",win:.06,lose:-.08},"你把球安全踢出边线，化解逼抢。","解围碰到逼抢球员后出了底线。")]),
+      middle:scenario("gk-one-on-one","goal","对手形成单刀","直塞穿透防线，对方前锋正带球进入禁区，你必须立即决定站位。","禁区正面","极高",.38,[
+        pd("gk-rush","move-up","快速出击封角度","缩短距离迫使前锋提前处理",{possession:1,fitness:-3,bonus:6,risk:5,chance:.66,stat:"save",win:.28,lose:-.42},"你迅速出击，用身体封住对方射门。","前锋抢先挑射，皮球越过你的头顶。"),
+        pd("gk-hold-depth","map-pin","控制出击距离","边退边保持扑救反应空间",{possession:0,fitness:-1,bonus:4,risk:1,chance:.72,stat:"save",win:.22,lose:-.3},"你控制好距离，倒地封住低射。","前锋晃出角度后把球推向远角。"),
+        pd("gk-spread","maximize-2","提前扩大封堵面积","判断射门瞬间展开身体",{possession:0,fitness:-2,bonus:5,risk:3,chance:.69,stat:"save",win:.25,lose:-.36},"你展开身体，皮球击中腿部弹出。","你提前倒地，对手轻松变向。"),
+        pd("gk-delay","clock-3","等待后卫回追","不给前锋轻易过掉你的机会",{possession:1,fitness:0,bonus:2,risk:-1,chance:.68,stat:"save",win:.16,lose:-.26},"你的延缓奏效，回追后卫完成干扰。","后卫未能赶上，前锋获得从容射门时间。")]),
+      closing:scenario("gk-late-set-piece","flag","最后阶段定位球压入禁区","对手把中卫也推到门前，任意球正落向拥挤的后点区域。","后点门前","极高",.34,[
+        pd("gk-command","megaphone","指挥防线盯人","先确保每个抢点球员都被控制",{possession:1,fitness:-1,bonus:3,risk:-2,chance:.78,stat:"clear",win:.16,lose:-.22},"你的指挥让防线抢到第一落点。","沟通出现混乱，对手在后点获得空间。"),
+        pd("gk-attack-cross","hand","越过人群摘球","主动终结这次定位球",{possession:4,fitness:-3,bonus:6,risk:5,chance:.62,stat:"save",win:.3,lose:-.48},"你穿过人群高高跃起，将球牢牢抱住。","你没能碰到皮球，球门短暂失去保护。"),
+        pd("gk-punch-wide","shield","击向边线","避免把球留在禁区中央",{possession:0,fitness:-2,bonus:4,risk:2,chance:.72,stat:"clear",win:.2,lose:-.28},"你准确把球击向边线，危险解除。","你只蹭到皮球，对手仍能补射。"),
+        pd("gk-launch-late","send","控制后立刻长传","利用对手中卫压上后的空当",{possession:-2,fitness:-2,bonus:6,risk:4,skill:"passing",chance:.6,stat:"distribution",win:.22,lose:-.2},"你快速开球，前场形成以多打少。","长传落点太深，对方门将轻松得到。")])
+    },
+    defender:{
+      opening:scenario("df-wing-duel","swords","边路一对一防守","对方边锋接球后正面加速，身后的套边球员也在靠近。","防守边路","中",.24,[
+        pd("df-show-wide","move-right","迫使走外线","封住内切路线等待协防",{possession:1,fitness:-2,bonus:3,risk:-2,skill:"defending",chance:.77,stat:"tackle",win:.16,lose:-.2},"你控制距离，把对手逼向边线。","对手突然变向，从你身前切入。"),
+        pd("df-front-tackle","shield","主动上抢","在对手起速前抢下皮球",{possession:3,fitness:-3,bonus:5,risk:4,skill:"defending",chance:.64,stat:"tackle",win:.23,lose:-.34},"你看准触球时机干净断球。","上抢落空，对手从身侧突破。"),
+        pd("df-delay-run","clock-3","延缓推进","跟随对手移动等待队友回位",{possession:0,fitness:-1,bonus:2,risk:-3,skill:"defending",chance:.82,stat:"control",win:.12,lose:-.14},"你成功拖慢进攻，队友已经回防。","你后退过深，让对手获得传中空间。"),
+        pd("df-track-overlap","scan-line","跟住套边球员","把持球人交给中场协防",{possession:0,fitness:-3,bonus:3,risk:0,skill:"pace",chance:.7,stat:"intercept",win:.15,lose:-.22},"你及时切断套边传球路线。","持球人利用无人压迫完成内切。")]),
+      firstHalf:scenario("df-cross-defence","circle-dot","传中落向禁区中路","对手从边路起球，前锋正在你身前与点球点之间抢位。","禁区中路","高",.3,[
+        pd("df-attack-ball","move-up","主动迎球解围","抢在前锋之前处理第一落点",{possession:0,fitness:-3,bonus:5,risk:3,skill:"defending",chance:.72,stat:"clear",win:.22,lose:-.34},"你迎球跃起，把传中顶出危险区域。","你判断落点失误，前锋在身后完成头球。"),
+        pd("df-block-runner","shield-check","卡住前锋路线","用身体阻止对手冲向落点",{possession:1,fitness:-2,bonus:4,risk:1,skill:"physical",chance:.75,stat:"clear",win:.18,lose:-.25},"你占住位置，让门将轻松收下皮球。","身体对抗失败，对手抢到身前。"),
+        pd("df-drop-cover","undo-2","退向门前保护","防止传中越过整条防线",{possession:0,fitness:-1,bonus:2,risk:-2,skill:"defending",chance:.79,stat:"clear",win:.13,lose:-.18},"你退到关键区域，稳妥完成解围。","退得太深，第二点区域无人保护。"),
+        pd("df-head-counter","send","头球找中场","解围同时尝试保留球权",{possession:3,fitness:-2,bonus:4,risk:4,skill:"passing",chance:.61,stat:"intercept",win:.2,lose:-.28},"你把头球准确摆渡给中场队友。","头球落到对方脚下，攻势继续。")]),
+      middle:scenario("df-transition","triangle-alert","丢球后的快速反击","本队进攻被断，对手带球冲向你与另一名中卫之间。","中后场转换","高",.32,[
+        pd("df-step-out","arrow-up","迎前封堵","在对手抬头前破坏推进",{possession:2,fitness:-4,bonus:6,risk:5,skill:"defending",chance:.64,stat:"tackle",win:.25,lose:-.38},"你果断迎前断球，反击被终止。","对手一脚出球越过你的防区。"),
+        pd("df-drop-line","undo-2","快速退守","优先保护禁区和身后空间",{possession:0,fitness:-3,bonus:3,risk:-3,skill:"pace",chance:.76,stat:"control",win:.15,lose:-.2},"你快速回到防线，迫使对手减速。","回退中失去持球人，防线被迫收缩。"),
+        pd("df-cover-pass","split","封锁直塞路线","诱导持球人自己完成低质量射门",{possession:1,fitness:-2,bonus:4,risk:-1,skill:"defending",chance:.74,stat:"intercept",win:.19,lose:-.25},"你封住最危险的传球，对手只能仓促起脚。","对手看穿意图，把球塞入另一侧空当。"),
+        pd("df-tactical-foul","octagon","战术犯规","用犯规换取全队重新落位",{possession:-1,fitness:-1,bonus:1,risk:-5,skill:"defending",chance:.82,stat:"foul",win:.05,lose:-.35},"你在安全区域及时犯规，阻止反击。","犯规位置危险，主裁判也掏出了牌。")]),
+      closing:scenario("df-box-scramble","flame","禁区内连续争抢","皮球在禁区内多次折射，对手已经准备近距离补射。","六码区前","极高",.4,[
+        pd("df-slide-block","shield","倒地封堵","不惜身体挡住这次射门",{possession:0,fitness:-5,bonus:7,risk:4,skill:"defending",chance:.7,stat:"clear",win:.3,lose:-.42},"你倒地挡出近距离射门。","皮球从你腿边穿过，直奔球门。"),
+        pd("df-clear-stands","send","大脚解围","把球尽快送离禁区",{possession:-4,fitness:-2,bonus:4,risk:-4,skill:"defending",chance:.86,stat:"clear",win:.14,lose:-.2},"你不再犹豫，大脚把球踢上看台。","解围踢疵，皮球仍留在门前。"),
+        pd("df-hold-offside","scan-line","保持造越位线","相信整条防线同步前压",{possession:2,fitness:-1,bonus:6,risk:7,skill:"defending",chance:.58,stat:"intercept",win:.28,lose:-.48},"防线同步前压，对手被判越位。","队友没有同步，前锋获得单刀。"),
+        pd("df-find-outlet","shuffle","解围找队友","尝试以传球结束连续防守",{possession:4,fitness:-2,bonus:5,risk:5,skill:"passing",chance:.6,stat:"distribution",win:.23,lose:-.32},"你在压力下找到接应点，球队成功脱困。","传球被封堵，禁区内再次混战。")])
+    },
+    holding:{
+      opening:scenario("dm-pressed-receive","circle-dot","背身接球遭到贴防","中卫把球交给你，对方前腰已经从身后压迫，边路有空当。","后场中路","中",.18,[
+        pd("dm-one-touch","shuffle","一脚回做","快速释放球权重新移动",{possession:4,fitness:-1,bonus:3,risk:-3,skill:"passing",chance:.82,stat:"pass",win:.12,lose:-.14},"你一脚回做并摆脱盯防。","回传力量偏小，队友被迫仓促处理。"),
+        pd("dm-turn-away","rotate-ccw","转身摆脱","用身体护球带过第一道压迫",{possession:3,fitness:-3,bonus:6,risk:5,skill:"dribbling",chance:.61,stat:"dribble",win:.25,lose:-.35},"你倚住对手完成转身，面前豁然开朗。","对手从身后把球捅走。"),
+        pd("dm-switch-wide","split","直接转移边路","利用对手收缩留下的空间",{possession:3,fitness:-1,bonus:5,risk:3,skill:"passing",chance:.69,stat:"pass",win:.2,lose:-.24},"你送出准确转移，边路获得推进机会。","转移球被边锋提前判断。"),
+        pd("dm-draw-foul","shield-check","护球等待犯规","利用身体保护球权",{possession:3,fitness:-2,bonus:2,risk:-2,skill:"physical",chance:.76,stat:"control",win:.12,lose:-.2},"你护住球并赢得后场任意球。","裁判没有表示，皮球被抢走。")]),
+      firstHalf:scenario("dm-stop-counter","zap","对方从中路发动转换","本队边后卫仍在前场，对手持球人正准备把球送向空出的肋部。","中圈附近","高",.28,[
+        pd("dm-intercept-lane","split","预判直塞","提前移动封住传球线路",{possession:3,fitness:-2,bonus:5,risk:1,skill:"defending",chance:.73,stat:"intercept",win:.22,lose:-.25},"你提前截下直塞，立即夺回球权。","对手改变传球方向，绕过你的封锁。"),
+        pd("dm-front-tackle","shield","正面抢断","不给持球人抬头观察的时间",{possession:2,fitness:-4,bonus:6,risk:4,skill:"defending",chance:.65,stat:"tackle",win:.25,lose:-.34},"你强硬而干净地完成抢断。","对手轻巧拨球，突破你的上抢。"),
+        pd("dm-screen-defence","map-pin","保护中卫身前","保持位置压缩危险区域",{possession:0,fitness:-2,bonus:3,risk:-3,skill:"defending",chance:.8,stat:"control",win:.14,lose:-.16},"你站住关键位置，迫使对手走边。","你只关注中路，对方边锋获得空间。"),
+        pd("dm-drop-between","undo-2","落入中卫之间","临时形成三中卫阻止反击",{possession:1,fitness:-3,bonus:4,risk:-2,skill:"defending",chance:.76,stat:"clear",win:.18,lose:-.2},"你及时回到防线，破坏了最后一传。","回撤稍晚，对手已经进入禁区。")]),
+      middle:scenario("dm-second-ball","activity","中场出现第二落点","双方争顶后皮球弹向中圈，你和对方中场同时冲向落点。","中圈","中",.2,[
+        pd("dm-press-second","arrow-up","抢先压迫","用强度夺下第二点",{possession:3,fitness:-4,bonus:5,risk:3,skill:"physical",chance:.68,stat:"tackle",win:.22,lose:-.28},"你抢先伸脚，把球控制下来。","对手先触球并从你身边摆脱。"),
+        pd("dm-secure-ball","shield-check","先护住皮球","控制节奏等待队友接应",{possession:5,fitness:-2,bonus:3,risk:-2,skill:"physical",chance:.78,stat:"control",win:.15,lose:-.18},"你用身体隔开对手，稳稳控制球权。","对抗中失去平衡，皮球被对方拿走。"),
+        pd("dm-first-switch","send","第一时间转移","趁对手阵型未稳发动进攻",{possession:1,fitness:-2,bonus:6,risk:5,skill:"passing",chance:.62,stat:"pass",win:.24,lose:-.3},"你不停球完成转移，进攻突然提速。","仓促传球偏离目标。"),
+        pd("dm-carry-forward","move-up","带球越过中线","利用中路无人防守的空间",{possession:2,fitness:-4,bonus:6,risk:5,skill:"dribbling",chance:.61,stat:"dribble",win:.24,lose:-.32},"你带球穿过中场，迫使对手后退。","带球过大，对手从侧面断球。")]),
+      closing:scenario("dm-late-turnover","triangle-alert","最后阶段中路丢球","队友冒险直塞被断，对手正在中圈形成三打三转换。","中圈后方","极高",.34,[
+        pd("dm-stop-foul","octagon","立即战术犯规","终止转换并接受判罚风险",{possession:-1,fitness:-2,bonus:1,risk:-6,skill:"defending",chance:.8,stat:"foul",win:.05,lose:-.4},"你及时拉住对手，球队得以重新站位。","你没能阻止推进，反而吃到一张牌。"),
+        pd("dm-delay-counter","clock-3","延缓持球人","边退边封住向前线路",{possession:0,fitness:-3,bonus:4,risk:-3,skill:"defending",chance:.75,stat:"control",win:.18,lose:-.23},"你逼迫对方横传，回防人数已经到位。","持球人突然加速，从你身侧通过。"),
+        pd("dm-win-and-direct","send","抢断后直接向前","把防守瞬间转成最后机会",{possession:1,fitness:-4,bonus:8,risk:7,skill:"passing",chance:.55,stat:"pass",win:.3,lose:-.38},"你断球后送出直传，前锋获得冲刺机会。","直传被拦截，球队再次暴露在反击中。"),
+        pd("dm-track-runner","scan-line","跟住无球前插者","牺牲上抢确保禁区人数",{possession:0,fitness:-4,bonus:4,risk:-4,skill:"pace",chance:.73,stat:"intercept",win:.18,lose:-.24},"你一路跟回禁区，抢先处理横传。","你在回追中被对手甩开半个身位。")])
+    },
+    midfielder:{
+      opening:scenario("cm-open-space","waypoints","中场获得向前空间","你在中圈接球，对手两条线之间暂时没有球员上抢。","中场中路","低",.14,[
+        pd("cm-simple-settle","shuffle","简洁交给前腰","让球队保持开局节奏",{possession:5,fitness:0,bonus:2,risk:-3,skill:"passing",chance:.86,stat:"pass",win:.1,lose:-.1},"你准确把球送到前腰脚下。","传球稍慢，前腰被迫回传。"),
+        pd("cm-switch-play","split","长传转移弱侧","迅速改变进攻方向",{possession:2,fitness:-1,bonus:5,risk:3,skill:"passing",chance:.69,stat:"pass",win:.19,lose:-.23},"你的转移准确找到无人盯防的边路。","长传出了边线。"),
+        pd("cm-carry-space","move-up","带球向前推进","吸引中场后再寻找队友",{possession:3,fitness:-3,bonus:5,risk:3,skill:"dribbling",chance:.68,stat:"dribble",win:.2,lose:-.25},"你带球推进十余米，迫使防线收缩。","对手从侧后方完成抢断。"),
+        pd("cm-third-man","repeat-2","寻找第三人配合","用连续传递穿过中场",{possession:4,fitness:-2,bonus:6,risk:4,skill:"passing",chance:.64,stat:"pass",win:.22,lose:-.27},"连续撞墙配合让你们进入进攻三区。","队友没有理解跑位，传球被截断。")]),
+      firstHalf:scenario("cm-half-space","sparkles","肋部出现接球窗口","前锋回撤带走中卫，你在禁区前右侧获得短暂空当。","进攻肋部","中",.2,[
+        pd("cm-through-ball","send","送出直塞","抓住防线移动中的缝隙",{possession:-1,fitness:-2,bonus:7,risk:6,skill:"passing",chance:.59,stat:"pass",win:.27,lose:-.3},"直塞穿透防线，队友形成射门。","直塞被中卫伸脚拦下。"),
+        pd("cm-wall-pass","repeat-2","与前锋撞墙","继续向禁区前沿移动",{possession:3,fitness:-3,bonus:6,risk:3,skill:"passing",chance:.68,stat:"pass",win:.22,lose:-.24},"撞墙配合成功，你在禁区前重新得球。","回做被对手预判。"),
+        pd("cm-edge-shot","crosshair","禁区外起脚","利用对手没有及时上抢",{possession:-2,fitness:-2,bonus:6,risk:5,skill:"shooting",chance:.57,stat:"shot",win:.23,lose:-.2},"你的远射迫使门将做出扑救。","射门没有压住，皮球高出横梁。"),
+        pd("cm-recycle","undo-2","回传重新组织","保留球权等待更好机会",{possession:5,fitness:1,bonus:1,risk:-4,skill:"passing",chance:.9,stat:"pass",win:.08,lose:-.08},"你没有勉强处理，球队重新展开进攻。","回传让进攻节奏暂时中断。")]),
+      middle:scenario("cm-tempo-choice","gauge","比赛节奏突然加快","双方连续转换，中场空间增大，你接球时队友正在不同方向前插。","中圈前方","中",.22,[
+        pd("cm-quick-vertical","fast-forward","快速纵向传递","趁对方防线未落位推进",{possession:0,fitness:-2,bonus:7,risk:5,skill:"passing",chance:.62,stat:"pass",win:.25,lose:-.28},"你快速把球打到防线身后。","传球被回追中场拦截。"),
+        pd("cm-late-run","move-up","交球后继续前插","从第二线攻击禁区空间",{possession:0,fitness:-5,bonus:7,risk:5,skill:"pace",chance:.62,stat:"shot",win:.26,lose:-.26},"你后插上接到回做并完成射门。","前插时机稍晚，队友只能转移。"),
+        pd("cm-control-tempo","circle-dot","踩住节奏","用连续控球稳定中场",{possession:6,fitness:1,bonus:2,risk:-4,skill:"passing",chance:.86,stat:"control",win:.12,lose:-.1},"你用几次安全传递让比赛重新受控。","对手突然上抢，迫使你仓促出球。"),
+        pd("cm-wide-switch","split","转移到弱侧","利用快速转换后的横向空当",{possession:2,fitness:-2,bonus:5,risk:3,skill:"passing",chance:.7,stat:"pass",win:.2,lose:-.22},"转移准确落到弱侧队友脚下。","皮球飞行太久，对手完成移动。")]),
+      closing:scenario("cm-late-loose-ball","flame","禁区弧顶出现第二点","角球被顶出后，皮球正落向你所在的禁区弧区域。","禁区弧顶","高",.27,[
+        pd("cm-volley","crosshair","直接凌空射门","不给防线再次封堵的时间",{possession:-3,fitness:-3,bonus:9,risk:8,skill:"shooting",chance:.48,stat:"shot",win:.34,lose:-.25},"你迎球抽射，皮球直奔球门死角。","凌空射门没有吃准部位。"),
+        pd("cm-slip-pass","send","顺势塞入禁区","寻找仍处于有利位置的前锋",{possession:-1,fitness:-2,bonus:8,risk:6,skill:"passing",chance:.57,stat:"pass",win:.3,lose:-.3},"你送出隐蔽直塞，前锋获得绝佳机会。","传球被密集防线挡回。"),
+        pd("cm-wide-cross","move-up-right","分边后立即传中","重新把球送回门前",{possession:0,fitness:-3,bonus:6,risk:4,skill:"passing",chance:.64,stat:"cross",win:.23,lose:-.22},"你与边路完成配合，传中落到危险区域。","分边节奏偏慢，对手重新站稳。"),
+        pd("cm-secure-second","shield-check","控制第二点","避免被对手直接反击",{possession:5,fitness:-1,bonus:2,risk:-5,skill:"dribbling",chance:.84,stat:"control",win:.12,lose:-.16},"你稳稳停下皮球，继续围攻。","停球稍大，对手抢到反击机会。")])
+    },
+    creator:{
+      opening:scenario("am-isolation","move-up-right","边路形成一对一","你在边线附近接球，边后卫独自面对你，队友正从外侧套上。","进攻边路","中",.18,[
+        pd("am-take-on","swords","正面突破","利用速度直接挑战边后卫",{possession:-1,fitness:-3,bonus:6,risk:5,skill:"dribbling",chance:.64,stat:"dribble",win:.25,lose:-.28},"你变向突破边后卫，进入传中区域。","对手判断准确，把球断下。"),
+        pd("am-use-overlap","move-up-right","交给套边队友","吸引防守后利用外侧通道",{possession:3,fitness:-1,bonus:5,risk:2,skill:"passing",chance:.75,stat:"pass",win:.19,lose:-.18},"你传球时机准确，套边队友获得空间。","边后卫提前封住传球线路。"),
+        pd("am-cut-combine","repeat-2","内切寻求配合","进入肋部与中场打撞墙",{possession:2,fitness:-3,bonus:6,risk:4,skill:"dribbling",chance:.66,stat:"dribble",win:.23,lose:-.27},"你内切后完成配合，继续向禁区推进。","内切路线拥挤，皮球被破坏。"),
+        pd("am-early-cross","send","提前传中","趁中卫还未完全落位送球",{possession:-1,fitness:-2,bonus:5,risk:4,skill:"passing",chance:.65,stat:"cross",win:.2,lose:-.2},"传中越过前点，后点队友获得机会。","传中高度不足，被第一点解围。")]),
+      firstHalf:scenario("am-between-lines","sparkles","在两线之间接球","你背对球门接到中场传球，身后防守者正在快速贴近。","禁区前沿","高",.23,[
+        pd("am-turn-face","rotate-ccw","转身面对球门","用第一脚触球摆脱贴防",{possession:1,fitness:-3,bonus:7,risk:6,skill:"dribbling",chance:.59,stat:"dribble",win:.28,lose:-.34},"你漂亮转身，直接面对防线。","防守者从身后把球捅走。"),
+        pd("am-first-through","send","不停球直塞","利用视野找到前锋跑位",{possession:-1,fitness:-1,bonus:7,risk:5,skill:"passing",chance:.62,stat:"pass",win:.27,lose:-.28},"你不停球送出直塞，前锋形成机会。","传球意图被中卫识破。"),
+        pd("am-layoff-move","repeat-2","回做后前插","避开贴防重新寻找接球点",{possession:4,fitness:-3,bonus:5,risk:1,skill:"passing",chance:.75,stat:"pass",win:.19,lose:-.18},"回做与前插衔接流畅，你在禁区前再次得球。","队友没有及时回传。"),
+        pd("am-turn-shot","crosshair","转身直接射门","利用防守者尚未封堵的瞬间",{possession:-3,fitness:-2,bonus:7,risk:7,skill:"shooting",chance:.51,stat:"shot",win:.28,lose:-.25},"你转身起脚，射门迫使门将侧扑。","射门被贴身防守者封堵。")]),
+      middle:scenario("am-counter-choice","zap","反击中形成前场三打三","你带球越过中线，左右两侧都有队友高速前插。","进攻转换","高",.25,[
+        pd("am-carry-counter","move-up","继续带球吸引防守","等待中卫作出选择后再处理",{possession:1,fitness:-5,bonus:7,risk:5,skill:"dribbling",chance:.63,stat:"dribble",win:.27,lose:-.3},"你带球吸引中卫，为队友创造空当。","带球节奏拖慢，对手完成回防。"),
+        pd("am-release-early","send","提前送出直塞","让速度最快的队友直接冲刺",{possession:-1,fitness:-2,bonus:8,risk:6,skill:"passing",chance:.59,stat:"pass",win:.3,lose:-.3},"提前量恰到好处，队友获得单刀。","直塞力量过大，门将先得到球。"),
+        pd("am-wide-lane","move-up-right","拉向边路推进","扩大进攻宽度并保留球权",{possession:3,fitness:-4,bonus:5,risk:2,skill:"pace",chance:.72,stat:"dribble",win:.2,lose:-.2},"你拉开宽度，反击得以继续推进。","对手边后卫及时封住线路。"),
+        pd("am-slow-support","gauge","减速等待支援","避免三打三演变成丢球反击",{possession:5,fitness:0,bonus:2,risk:-4,skill:"passing",chance:.86,stat:"control",win:.1,lose:-.12},"你保护球权，更多队友已经赶到。","反击机会随着减速消失。")]),
+      closing:scenario("am-edge-late","clock-3","禁区前获得最后处理机会","对手防线全部退入禁区，你在弧顶左侧接球，封堵者正快速冲出。","禁区弧侧","极高",.29,[
+        pd("am-curl-shot","crosshair","兜射远角","利用封堵者重心尝试决定比赛",{possession:-3,fitness:-4,bonus:9,risk:8,skill:"shooting",chance:.5,stat:"shot",win:.34,lose:-.25},"你的弧线球绕过封堵直奔远角。","射门被冲出的后卫挡下。"),
+        pd("am-beat-blocker","swords","扣过封堵者","进入禁区后再选择射门或传球",{possession:-1,fitness:-5,bonus:9,risk:9,skill:"dribbling",chance:.5,stat:"dribble",win:.34,lose:-.4},"你扣过封堵者，禁区内出现巨大空间。","对手伸脚断球并立即发动反击。"),
+        pd("am-cutback","undo-2","分边后接倒三角","寻找点球点附近的队友",{possession:1,fitness:-3,bonus:7,risk:4,skill:"passing",chance:.64,stat:"cross",win:.27,lose:-.24},"倒三角传到无人区域，队友迎球射门。","传球被门前第一名后卫挡出。"),
+        pd("am-win-foul","shield-check","护球制造犯规","争取位置理想的定位球",{possession:2,fitness:-3,bonus:5,risk:1,skill:"dribbling",chance:.72,stat:"control",win:.2,lose:-.22},"对手碰倒了你，球队获得前场任意球。","裁判认为身体接触合理，比赛继续。")])
+    },
+    forward:{
+      opening:scenario("st-press-build","arrow-up","对方中卫横向出球","对手后场正在倒脚，其中一名中卫停球稍大，门将是他的回传选择。","前场压迫区","中",.16,[
+        pd("st-press-centre","flame","直接压迫中卫","迫使持球者立即处理",{possession:2,fitness:-4,bonus:5,risk:2,skill:"pace",chance:.68,stat:"tackle",win:.2,lose:-.14},"你的压迫迫使中卫把球踢出边线。","中卫冷静传球，从你身边化解压力。"),
+        pd("st-block-keeper","split","封锁回传门将","诱导中卫向危险区域出球",{possession:1,fitness:-3,bonus:4,risk:1,skill:"pace",chance:.72,stat:"intercept",win:.18,lose:-.15},"你封住回传线路，队友完成抢断。","中卫找到另一侧安全接应。"),
+        pd("st-curve-press","rotate-ccw","弧线跑动逼抢","同时限制中卫与后腰的连接",{possession:2,fitness:-4,bonus:6,risk:3,skill:"physical",chance:.66,stat:"intercept",win:.23,lose:-.18},"你的跑动切断两条线路，球队在前场夺球。","跑动角度被识破，对方顺利推进。"),
+        pd("st-hold-shape","map-pin","保持进攻位置","保存体能等待队友统一压迫",{possession:0,fitness:1,bonus:1,risk:-2,chance:.88,stat:"control",win:.06,lose:-.08},"你保持阵型，没有让防线被轻易拉开。","对手从容组织，逐渐推进过半场。")]),
+      firstHalf:scenario("st-box-cross","send","边路传中即将到来","边锋已经抬头，你位于两名中卫之间，门前有三个可攻击区域。","禁区中路","高",.25,[
+        pd("st-near-post","move-up-right","冲击前点","抢在中卫之前完成触球",{possession:-1,fitness:-4,bonus:7,risk:5,skill:"pace",chance:.61,stat:"shot",win:.28,lose:-.22},"你抢到前点，把传中蹭向球门。","中卫跟住跑位，抢先完成解围。"),
+        pd("st-far-post","move-right","绕向后点","避开正面对抗等待传中过顶",{possession:0,fitness:-3,bonus:6,risk:3,skill:"pace",chance:.67,stat:"shot",win:.25,lose:-.2},"你绕到后点，无人干扰完成攻门。","传中没有越过第一名中卫。"),
+        pd("st-penalty-spot","map-pin","停在点球点","观察落点后攻击第二点",{possession:1,fitness:-2,bonus:5,risk:1,skill:"shooting",chance:.71,stat:"shot",win:.22,lose:-.18},"皮球被顶到点球点，你迎球完成射门。","后腰及时回收，封住你的起脚。"),
+        pd("st-screen-defender","shield-check","卡住中卫","为后插上的队友制造空间",{possession:2,fitness:-3,bonus:4,risk:0,skill:"physical",chance:.74,stat:"control",win:.18,lose:-.18},"你牵制中卫，队友从后排获得射门机会。","裁判吹罚你进攻犯规。")]),
+      middle:scenario("st-through-chance","zap","直塞形成单刀机会","你反越位成功，门将正在出击，身侧还有一名队友同步跟进。","禁区正面","极高",.3,[
+        pd("st-first-shot","crosshair","第一时间低射","不给回追后卫封堵机会",{possession:-3,fitness:-3,bonus:9,risk:7,skill:"shooting",chance:.57,stat:"shot",win:.35,lose:-.25},"你第一时间推射远角，门将来不及反应。","射门角度太正，被门将封住。"),
+        pd("st-round-keeper","swords","趟过门将","追求更高质量的空门机会",{possession:-2,fitness:-5,bonus:10,risk:10,skill:"dribbling",chance:.48,stat:"dribbleShot",win:.42,lose:-.48},"你冷静趟过门将，面对空门。","门将准确扑到脚下，把球没收。"),
+        pd("st-square-pass","split","横传跟进队友","用传球绕过出击门将",{possession:1,fitness:-2,bonus:8,risk:4,skill:"passing",chance:.67,stat:"pass",win:.32,lose:-.24},"你的横传越过门将，队友轻松完成射门。","横传被回追后卫伸脚破坏。"),
+        pd("st-protect-wait","shield-check","护球等待支援","避免在角度不足时仓促处理",{possession:3,fitness:-3,bonus:4,risk:1,skill:"physical",chance:.72,stat:"control",win:.18,lose:-.22},"你护住球，后插上队友已经到位。","回追后卫从身后完成抢断。")]),
+      closing:scenario("st-late-scramble","flame","门前出现最后机会","射门被门将挡出，皮球弹向六码区，你与中卫同时冲向落点。","六码区","极高",.36,[
+        pd("st-snap-rebound","crosshair","抢先补射","不调整直接把球送回门前",{possession:-3,fitness:-5,bonus:10,risk:8,skill:"shooting",chance:.56,stat:"shot",win:.38,lose:-.28},"你抢先伸脚补射，皮球直奔球门。","仓促补射偏出近门柱。"),
+        pd("st-slide-finish","move-up","倒地铲射","用最大伸展距离争夺落点",{possession:-3,fitness:-6,bonus:10,risk:9,skill:"physical",chance:.5,stat:"shot",win:.4,lose:-.36},"你倒地铲到皮球，门将已经失去位置。","你慢了半步，中卫率先解围。"),
+        pd("st-layoff-late","undo-2","回做弧顶队友","利用防线全部收向门前的空间",{possession:1,fitness:-2,bonus:8,risk:5,skill:"passing",chance:.62,stat:"pass",win:.3,lose:-.25},"你把球回做，队友迎球劲射。","回做力量太轻，被防守者截下。"),
+        pd("st-win-corner","flag","护球制造角球","保留最后一次定位球机会",{possession:2,fitness:-3,bonus:5,risk:-1,skill:"physical",chance:.76,stat:"control",win:.18,lose:-.16},"你把球打在后卫腿上，赢得角球。","后卫稳稳护球出了底线。")])
+    }
+  };
+
+  function coachDecisionEvent(m) {
+    const phase=matchPhase(m),situation=matchSituation(m),possession=m.possession;
+    const events={opening:["对手开局主动压迫","对手前锋正在封锁后场短传线路。","本方后场","中"],firstHalf:[possession<48?"中场控制权正在流失":"肋部空间逐渐出现",possession<48?"对手连续赢得第二落点，球队难以稳定推进。":"对手边后卫频繁内收，边路和肋部之间出现空当。","中场","中"],middle:[situation.id==="trailing"?"球队需要改变比赛走势":situation.id==="leading"?"对手开始提高进攻人数":"比赛进入拉锯阶段",situation.id==="trailing"?"当前进攻投入不足，禁区内接应点有限。":situation.id==="leading"?"对手阵线明显前移，身后空间与防守压力同时增加。":"双方攻防转换加快，中场距离正在拉大。","全场","高"],closing:[situation.id==="trailing"?"时间正在快速流逝":situation.id==="leading"?"对手发起最后围攻":"下一次攻防可能决定比赛",`比赛来到 ${m.minute}'，当前${situation.label}，体能与风险控制将直接影响结果。`,"决胜区域","极高"]};
+    const item=events[phase.id];return {id:`coach-${phase.id}-${m.minute}`,icon:"radio",title:item[0],detail:item[1],zone:item[2],pressure:item[3],groupLabel:"全队",minute:m.minute,scoreLabel:situation.label};
+  }
+
+  function generateDecisionEvent(m,save=state) {
+    if(save.role==="coach")return coachDecisionEvent(m);
+    const player=save.squad.find(item=>item.id===save.controlledId);if(!player)return null;
+    const group=playerDecisionGroup(player.position),phase=matchPhase(m),situation=matchSituation(m),base=PLAYER_DECISION_SCENARIOS[group]?.[phase.id];if(!base)return null;
+    const groupLabel=({goalkeeper:"门将",defender:"后卫",holding:"后腰",midfielder:"中场",creator:"前腰 / 边锋",forward:"前锋"})[group];
+    return {...base,options:base.options.map(option=>({...option,effect:{...option.effect},resolution:{...option.resolution}})),group,groupLabel,minute:m.minute,scoreLabel:situation.label,detail:`${base.detail} 当前比分${situation.label}，比赛处于${phase.label}。`};
+  }
+
+  function ensureDecisionEvent(m,save=state) {
+    if(!m||m.finished)return null;
+    if(save.role==="player"&&!(m.lineupIds||[]).includes(save.controlledId))return null;
+    if(!m.decisionEvent||m.decisionEvent.minute!==m.minute)m.decisionEvent=generateDecisionEvent(m,save);
+    return m.decisionEvent;
+  }
+
+  function renderDecisionEvent(event) {
+    return `<article class="live-decision-event"><div class="live-event-icon">${icon(event.icon||"radio")}</div><div class="live-event-copy"><span>第 ${event.minute}' · 场上即时事件</span><strong>${esc(event.title)}</strong><p>${esc(event.detail)}</p></div><div class="live-event-tags"><span>${icon("map-pin")}${esc(event.zone)}</span><span class="pressure-${event.pressure==="极高"?"critical":event.pressure==="高"?"high":"normal"}">${icon("activity")}压力 ${esc(event.pressure)}</span></div></article>`;
+  }
+
+  function matchDecisions(m=state.activeMatch) {
+    const phase=matchPhase(m).id,situation=matchSituation(m).id;
+    const d=(id,icon,label,desc,possession,fitness,bonus,tactical,risk,text)=>({id,icon,label,desc,effect:{possession,fitness,bonus,tactical,risk},text});
+    if(state.role==="coach"){
+      if(phase==="opening")return [
+        d("observe-press","scan-line","观察性压迫","试探对方出球，风险较低",3,-2,2,2,1,"球队保持阵型进行试探性压迫。"),
+        d("build-back","waypoints","从后场组织","提高控球，耐心寻找空间",5,1,1,2,0,"球队从门将开始耐心组织进攻。"),
+        d("attack-wide","move-up-right","主攻边路","增加推进速度与传中机会",-1,-2,4,3,2,"进攻重心转向边路，边后卫开始频繁套上。"),
+        d("settle-team","megaphone","稳定军心","减少开局波动并提升执行力",1,0,2,2,-1,"场边要求全队保持冷静，严格执行赛前部署。")
+      ];
+      if(phase==="firstHalf")return [
+        d("half-space","split","加强肋部渗透","创造更高质量机会，但容易丢球",2,-3,5,4,3,"球队开始反复攻击中卫与边后卫之间的空当。"),
+        d("first-half-counter","zap","提速反击","牺牲控球，快速冲击身后",-4,-2,6,3,4,"球队加快由守转攻，向对方防线身后送球。"),
+        d("slow-before-half","gauge","压低比赛节奏","保存体能，减少半场前失误",5,1,0,2,-2,"球队放缓节奏，用控球度过半场前的阶段。"),
+        d("mark-playmaker","crosshair","限制对方核心","减少威胁，但增加防守消耗",1,-2,3,3,2,"中场开始贴身限制对方的进攻组织者。")
+      ];
+      if(phase==="middle"&&situation==="trailing")return [
+        d("early-push","arrow-up","提前大举压上","显著增加机会，也暴露身后",-2,-5,8,5,7,"球队整体阵线前移，开始持续围攻。"),
+        d("overlap-backs","move-up-right","边后卫套上","拉开宽度并制造人数优势",1,-4,6,4,5,"两名边后卫同时压上参与进攻。"),
+        d("load-box","users-round","增加禁区人数","提高抢点概率，反击风险更高",-3,-3,7,4,6,"更多球员进入禁区等待传中与二点球。"),
+        d("patient-chase","gauge","保持耐心","稳住控球，等待防线出现漏洞",5,1,2,2,-2,"球队没有盲目进攻，而是继续耐心调动防线。")
+      ];
+      if(phase==="middle"&&situation==="leading")return [
+        d("control-midfield","circle-dot","控制中场","压缩空间并牢牢掌握球权",6,1,1,3,-2,"球队增加中场接应点，开始控制比赛。"),
+        d("keep-counter","zap","保留反击点","保持纵深，对手不敢全线压上",-2,-1,4,2,2,"锋线仍留在前场，随时准备发动反击。"),
+        d("lower-press","battery-medium","降低压迫","恢复体能，但让出部分主动权",2,3,0,1,-3,"球队降低压迫频率，保持紧凑站位。"),
+        d("deny-creator","shield-check","限制核心","切断对方最危险的进攻来源",1,-2,2,3,1,"防守重心转向限制对方核心球员。")
+      ];
+      if(phase==="middle")return [
+        d("mid-tempo","fast-forward","中场提速","争取主动，承担一定转换风险",2,-3,5,4,3,"球队突然提高节奏，试图打破僵局。"),
+        d("invite-counter","zap","诱导后反击","主动让出空间，寻找反击机会",-3,-1,5,3,3,"球队略微回收，等待对方阵型前压。"),
+        d("keep-control","gauge","继续控场","降低波动，等待更稳妥的机会",5,1,1,2,-2,"球队保持控球，不急于完成最后一传。"),
+        d("rally-team","megaphone","鼓励全队","提升专注与短期执行力",1,0,3,3,0,"场边的鼓励让全队重新集中注意力。")
+      ];
+      if(situation==="trailing")return [
+        d("all-out","swords","全线压上","机会大增，极易遭到反击",-5,-7,10,7,10,"球队全线压过半场，比赛进入最后一搏。"),
+        d("box-bombard","send","直接轰炸禁区","连续传中争抢二点球",-7,-5,9,5,9,"球队放弃繁复组织，连续将球送入禁区。"),
+        d("desperate-press","flame","高位疯狂反抢","压迫收益高，体能消耗巨大",2,-7,8,6,8,"所有球员在前场展开不惜体力的反抢。"),
+        d("keeper-up","goal","门将参与进攻","最后时刻最高收益与最高风险",-6,-8,12,4,14,"门将也进入前场，球队孤注一掷。")
+      ];
+      if(situation==="leading")return [
+        d("low-block","shield","收缩低位防守","减少身后空间，放弃进攻人数",-4,3,0,5,-5,"球队退守低位，用密集站位保护领先。"),
+        d("kill-tempo","clock-3","控球拖慢节奏","降低比赛回合并保存体能",8,2,0,4,-4,"球队利用安全传递主动消耗比赛时间。"),
+        d("safe-counter","zap","只打安全反击","保留少量威胁，不轻易投入兵力",-2,1,3,3,-1,"球队只在机会明确时才发动反击。"),
+        d("protect-energy","battery-charging","保护体能","降低强度，稳妥完成比赛",2,4,-1,1,-4,"球队控制跑动强度并保持阵型完整。")
+      ];
+      return [
+        d("late-push","swords","最后一搏","全力争胜，但输球风险明显提高",-3,-6,9,6,9,"球队大举压上争取最后的进球。"),
+        d("measured-win","scale","谨慎争胜","保持平衡并寻找高质量机会",3,-2,4,4,2,"球队在保持平衡的前提下继续争胜。"),
+        d("set-piece-push","flag","定位球压上","利用定位球制造决定性机会",-1,-3,7,4,5,"高大球员全部进入禁区争抢定位球。"),
+        d("accept-draw","shield-check","守住平局","减少风险并控制最后阶段",5,2,-1,3,-4,"球队不再冒险，优先确保不被绝杀。")
+      ];
+    }
+    const event=ensureDecisionEvent(m);
+    return event?.options||[];
+  }
+
+  function renderMatchReport(report) {
+    if(!report)return `<div class="report-missing">这条通知来自旧版本存档，没有可回溯的比赛明细。</div>`;
+    const rows=[["控球率",`${report.homeStats.possession}%`,`${report.awayStats.possession}%`],["射门",report.homeStats.shots,report.awayStats.shots],["射正",report.homeStats.onTarget,report.awayStats.onTarget],["预期进球",Number(report.homeStats.xg).toFixed(2),Number(report.awayStats.xg).toFixed(2)],["角球",report.homeStats.corners,report.awayStats.corners],["犯规",report.homeStats.fouls,report.awayStats.fouls],["黄牌",report.homeStats.yellow||0,report.awayStats.yellow||0],["红牌",report.homeStats.red||0,report.awayStats.red||0]];
+    const ratingRows=[...(report.ratings||[])].sort((a,b)=>positionSortRank(a.position)-positionSortRank(b.position)||b.minutes-a.minutes||b.rating-a.rating);
+    return `<div class="report-score"><div><span>${clubNameLink(report.homeName)}</span><strong>${report.score.home}</strong></div><div class="report-result"><span>${esc(report.competition)} · ${esc(report.round)}</span><b>全场</b>${report.penalties?`<small>点球 ${report.penalties.home}-${report.penalties.away}</small>`:""}</div><div><strong>${report.score.away}</strong><span>${clubNameLink(report.awayName)}</span></div></div>
+      <section class="report-section"><div class="report-team-head"><strong>${esc(report.homeName)}</strong><span>比赛数据</span><strong>${esc(report.awayName)}</strong></div>${rows.map(([label,home,away])=>`<div class="report-stat-row"><strong>${home}</strong><span>${label}</span><strong>${away}</strong></div>`).join("")}</section>
+      <section class="report-section"><h3>球员表现</h3><div class="report-mvp">${icon("star")}<span>本场最佳</span><strong>${playerNameLink(report.mvp,{clubName:report.mvp.ours?(report.teamName||clubById(state.clubId).name):report.awayName})} · ${Number(report.mvp.rating).toFixed(2)}</strong></div><div class="table-wrap"><table class="report-player-table"><thead><tr><th>球员</th><th>位置</th><th class="num">分钟</th><th class="num">进球</th><th class="num">助攻</th><th>关键贡献</th><th>防守数据</th><th>评分依据</th><th class="num">评分</th></tr></thead><tbody>${ratingRows.map(player=>{const subOn=report.substitutions.find(item=>item.team==="ours"&&item.inId===player.id),subOff=report.substitutions.find(item=>item.team==="ours"&&item.outId===player.id),movement=subOff?`<b class="substitution-badge off">${icon("arrow-down")}换下</b>`:subOn?`<b class="substitution-badge on">${icon("arrow-up")}换上</b>`:"";return `<tr><td><span class="player-link-wrap">${playerNameLink(player,{clubName:report.teamName||clubById(state.clubId).name})}${movement}</span></td><td>${playerRoleLabel(player.position)}</td><td class="num">${player.minutes}</td><td class="num">${player.goals}</td><td class="num">${player.assists}</td><td>${playerContributionText(player)}</td><td>${playerDefensiveText(player)}</td><td>${(player.ratingReasons||[]).map(esc).join(" · ")||"稳定完成职责"}</td><td class="num"><span class="live-rating ${ratingClass(player.rating)}">${Number(player.rating).toFixed(2)}</span></td></tr>`;}).join("")}</tbody></table></div></section>
+      ${report.heatmapSummary?.length?`<section class="report-section"><h3>场上活动区域</h3><div class="report-heatmap-summary">${report.heatmapSummary.slice(0,8).map(player=>`<div><strong>${esc(player.name)}</strong><span>${esc(player.zone)}</span><i><b style="width:${player.intensity}%"></b></i></div>`).join("")}</div></section>`:""}
+      <section class="report-section"><h3>换人与医疗</h3>${report.substitutions.length?`<div class="report-events substitution-events">${report.substitutions.map(item=>{const ours=item.team==="ours";return `<div class="${ours?"report-sub-ours":"report-sub-opponent"}"><time>${eventMinuteLabel(item.minute)}</time><span class="report-team-label">${ours?"本队":"对手"}</span><span class="sub-on"><b>换上</b>${esc(item.inName)}</span><span class="sub-off"><b>换下</b>${esc(item.outName)}</span><small>${esc(item.reason||"战术调整")}</small></div>`;}).join("")}</div>`:`<p class="report-copy">本场没有换人记录。</p>`}${report.injuries.length?`<div class="report-injuries">${report.injuries.map(item=>`<span class="tag red">${item.team==="opponent"?"对手":"本队"} · ${esc(item.name)} · ${esc(item.injury)} · ${item.days} 天</span>`).join("")}</div>`:`<p class="report-copy">本场没有新增伤病。</p>`}</section>`;
+  }
+
+  function playerContributionText(player) {
+    const parts=[];
+    if(player.passes)parts.push(`传球 ${player.accuratePasses||0}/${player.passes}`);
+    if(player.shots)parts.push(`射门 ${player.onTarget||0}/${player.shots}`);
+    if(player.keyPasses)parts.push(`关键传球 ${player.keyPasses}`);
+    if(player.chancesCreated)parts.push(`创造机会 ${player.chancesCreated}`);
+    if(player.successfulDribbles)parts.push(`过人 ${player.successfulDribbles}`);
+    if(player.progressivePasses)parts.push(`推进 ${player.progressivePasses}`);
+    if(player.recoveries)parts.push(`夺回 ${player.recoveries}`);
+    if(player.pressuresWon)parts.push(`压迫 ${player.pressuresWon}`);
+    return parts.length?parts.join(" · "):"—";
+  }
+
+  function playerDefensiveText(player) {
+    const parts=[];
+    if(player.tackles)parts.push(`抢断 ${player.tacklesWon}/${player.tackles}`);
+    if(player.interceptions)parts.push(`拦截 ${player.interceptions}`);
+    if(player.clearances)parts.push(`解围 ${player.clearances}`);
+    if(player.blocks)parts.push(`封堵 ${player.blocks}`);
+    if(player.duels)parts.push(`对抗 ${player.duelsWon}/${player.duels}`);
+    if(player.saves)parts.push(`扑救 ${player.saves}`);
+    if(player.cleanSheets)parts.push("零封");
+    return parts.length?parts.join(" · "):"—";
+  }
+
+  function renderNotificationDetail(notification) {
+    const report=notification.reportId?(state.matchReports||[]).find(item=>item.id===notification.reportId):null;
+    return `<div class="notification-meta">${icon(notificationIcon(notification.type))}<span>${formatDate(notification.date)} · ${notification.read?"已查看":"未读"}</span></div>${notification.detail?`<p class="report-copy lead">${esc(notification.detail)}</p>`:""}${notification.facts?.length?`<ul class="report-facts">${notification.facts.map(fact=>`<li>${esc(fact)}</li>`).join("")}</ul>`:""}${notification.type==="match"?renderMatchReport(report):""}`;
+  }
+
+  function openNotification(id) {
+    const notification=state.notifications.find(item=>item.id===id);if(!notification)return;
+    notification.read=true;state.inboxUnread=state.notifications.filter(item=>!item.read).length;modal={type:"notification",id};saveState();render();
+  }
+
+  function profileAttribute(player,key,modifier=0,sourceKey=null) {
+    const direct=sourceKey?Number(player[sourceKey]):Number(player[key]);
+    if(Number.isFinite(direct)&&direct>0)return clamp(Math.round(direct+modifier*.35),1,99);
+    const variance=(stableScoutingUnit(`${player.id||player.name}|${key}`)-.5)*10;
+    return clamp(Math.round(Number(player.overall||65)+modifier+variance),1,99);
+  }
+
+  function playerAttributeGroups(player) {
+    const p=player,position=p.position;
+    if(position==="GK")return [
+      ["守门",[["反应","reflexes",6],["手型","handling",3],["一对一","oneOnOnes",4],["制空范围","aerialReach",2],["指挥防线","command",2],["开球","kicking",0,"passing"]]],
+      ["精神",[["预判","anticipation",3],["决断","decisions",2],["镇定","composure",2],["集中","concentration",4],["站位","positioning",4],["交流","communication",3]]],
+      ["身体",[["爆发力","acceleration",-8,"pace"],["灵活","agility",2,"dribbling"],["平衡","balance",0,"physical"],["弹跳","jumping",3,"physical"],["强壮","strength",1,"physical"],["耐力","stamina",-8,"physical"]]]
+    ];
+    const boosts={
+      CB:{finishing:-15,passing:-3,dribbling:-8,tackling:10,positioning:9,offTheBall:-7,pace:-3,strength:7},
+      DF:{finishing:-15,passing:-3,dribbling:-8,tackling:10,positioning:9,offTheBall:-7,pace:-3,strength:7},
+      RB:{finishing:-8,passing:2,dribbling:2,tackling:5,positioning:4,pace:5,stamina:8},LB:{finishing:-8,passing:2,dribbling:2,tackling:5,positioning:4,pace:5,stamina:8},FB:{finishing:-8,passing:2,dribbling:2,tackling:5,positioning:4,pace:5,stamina:8},
+      DM:{finishing:-7,passing:4,dribbling:-2,tackling:8,positioning:8,vision:3,workRate:7,strength:3},
+      CM:{finishing:-2,passing:7,dribbling:2,tackling:2,positioning:2,vision:6,workRate:6,stamina:5},
+      AM:{finishing:4,passing:7,dribbling:7,tackling:-10,positioning:-3,vision:9,offTheBall:5,agility:4},
+      RW:{finishing:5,passing:3,dribbling:9,tackling:-12,vision:3,offTheBall:7,pace:8,agility:6},LW:{finishing:5,passing:3,dribbling:9,tackling:-12,vision:3,offTheBall:7,pace:8,agility:6},WG:{finishing:5,passing:3,dribbling:9,tackling:-12,vision:3,offTheBall:7,pace:8,agility:6},
+      ST:{finishing:11,passing:-4,dribbling:3,tackling:-15,positioning:-5,composure:6,offTheBall:10,pace:4,strength:5}
+    }[position]||{};
+    const a=(label,key,sourceKey=null)=>[label,key,boosts[key]||0,sourceKey];
+    return [
+      ["技术",[a("停球","firstTouch"),a("技术","technique"),a("传球","passing","passing"),a("盘带","dribbling","dribbling"),a("射门","finishing","shooting"),a("抢断","tackling","defending")]],
+      ["精神",[a("预判","anticipation"),a("决断","decisions"),a("镇定","composure"),a("视野","vision"),a("站位","positioning"),a("无球跑动","offTheBall"),a("工作投入","workRate")]],
+      ["身体",[a("爆发力","acceleration","pace"),a("速度","pace","pace"),a("灵活","agility","dribbling"),a("耐力","stamina","physical"),a("强壮","strength","physical"),a("平衡","balance","physical")]]
+    ];
+  }
+
+  function playerTraits(player) {
+    const pools={
+      GK:["喜欢手抛球发动反击","倾向短传出球","出击控制传中","指挥防线站位","一对一保持站立"],
+      CB:["从后场组织进攻","贴身盯防对手","倒地铲球较少","长传转移","定位球前插争顶"],DF:["从后场组织进攻","贴身盯防对手","倒地铲球较少","长传转移","定位球前插争顶"],
+      RB:["沿边路套上","提前传中","内收参与组织","积极回追","尝试抢断"],LB:["沿边路套上","提前传中","内收参与组织","积极回追","尝试抢断"],FB:["沿边路套上","提前传中","内收参与组织","积极回追","尝试抢断"],
+      DM:["回撤接球","控制比赛节奏","简单短传","保护防线身前","尝试长距离转移"],
+      CM:["控制比赛节奏","前插进入禁区","尝试直塞球","大范围转移","积极压迫"],
+      AM:["在空当接球","尝试直塞球","带球突破","禁区外射门","与队友撞墙配合"],
+      RW:["从边路内切","带球突破","利用速度过人","尝试倒三角传球","攻击后点"],LW:["从边路内切","带球突破","利用速度过人","尝试倒三角传球","攻击后点"],WG:["从边路内切","带球突破","利用速度过人","尝试倒三角传球","攻击后点"],
+      ST:["反越位前插","背身拿球","第一时间射门","攻击近门柱","回撤串联进攻"]
+    };
+    const pool=pools[player.position]||pools.CM,start=Math.floor(stableScoutingUnit(`${player.id||player.name}|traits`)*pool.length);
+    return [pool[start],pool[(start+2)%pool.length],pool[(start+4)%pool.length]];
+  }
+
+  function playerDevelopmentScore(player) {
+    const avg=averageRating(player)||6,appearances=Number(player.appearances||0),minutes=Number(player.development?.minutes||appearances*75),injuryDays=Number(player.development?.injuryDays||0),gap=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
+    const ageBase=player.age<=19?.78:player.age<=21?.62:player.age<=23?.42:player.age<=26?.18:player.age<=29?.04:player.age<=31?-.18:player.age<=33?-.48:-.82;
+    const performance=clamp((avg-6.45)*.5,-.35,.55),playingTime=minutes>=2400?.25:minutes>=1200?.12:minutes<350?-.14:0,potential=Math.min(.35,gap*.035),injury=Math.min(.6,injuryDays/150);
+    return ageBase+performance+playingTime+potential-injury;
+  }
+
+  function developmentOutlook(player) {
+    const score=playerDevelopmentScore(player),gap=Math.max(0,player.potential-player.overall);
+    if(!gap&&player.age<30)return ["接近能力上限","本赛季重点是保持稳定表现"];
+    if(score>=1.45)return ["突破赛季","极佳表现可能在赛季结算时提升 3–4 点"];
+    if(score>=.75)return ["明显上升","赛季结算时有机会提升 1–2 点"];
+    if(score>=.25)return ["稳步发展","赛季结算时有机会提升 1 点"];
+    if(score<=-.65)return ["下降风险","年龄、伤病或出场不足可能导致能力下降"];
+    return ["保持稳定","当前发展趋势不会带来快速变化"];
+  }
+
+  function renderPlayerProfileModal(player) {
+    const p=playerProfileData(player),groups=playerAttributeGroups(p),traits=playerTraits(p),[outlook,outlookText]=developmentOutlook(p),currentAverage=p.appearances?(averageRating(p)||6).toFixed(2):"—";
+    const career=[...(p.careerStats||[])],transfers=[...(p.transferHistory||[])].sort((a,b)=>b.date.localeCompare(a.date)),latest=p.latestTransfer,contractEnd=p.contractEnd||state.season+2+Math.floor(stableScoutingUnit(`${p.id||p.name}|contract`)*3);
+    return `<div class="modal-backdrop"><div class="modal player-profile-modal" role="dialog" aria-modal="true" aria-labelledby="player-profile-title"><div class="modal-header player-profile-header"><div class="player-profile-avatar">${initials(p.name)}</div><div><span>${clubNameLink(p.clubName)}</span><h2 id="player-profile-title">${esc(p.name)}</h2><p>${playerRoleLabel(p.position)} · ${p.age} 岁 · ${esc(p.nationality||"国籍未知")}</p></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body player-profile-body">
+      <section class="player-profile-summary"><div><label>当前能力</label><strong>${p.overall}</strong></div><div><label>潜力</label><strong>${p.potential}</strong></div><div><label>身价</label><strong>${money(p.value||0)}</strong></div><div><label>合同</label><strong>${contractEnd} 年</strong></div><div><label>体能</label><strong>${Math.round(p.fitness??100)}%</strong></div><div><label>士气</label><strong>${Math.round(p.morale??75)}%</strong></div></section>
+      <section class="player-profile-grid"><div class="player-profile-section"><div class="player-profile-section-head"><h3>当前合同</h3><span>${esc(p.contract?.role||"轮换球员")}</span></div><div class="profile-stat-list"><div><span>所属俱乐部</span><strong>${clubNameLink(p.clubName)}</strong></div><div><span>合同到期</span><strong>${contractEnd} 年</strong></div><div><span>周薪</span><strong>€${Math.round(Number(p.contract?.weeklyWage||p.wage||0))}K</strong></div><div><span>出场津贴</span><strong>€${Math.round(Number(p.contract?.appearanceFee||0))}K</strong></div><div><span>解约金</span><strong>${money(p.contract?.releaseClause||0)}</strong></div><div><span>队内角色</span><strong>${esc(p.contract?.role||"轮换球员")}</strong></div></div></div><div class="player-profile-section"><div class="player-profile-section-head"><h3>加盟信息</h3><span>${latest?formatDate(latest.date,false):"青训或原有球员"}</span></div><div class="profile-stat-list"><div><span>当前球队</span><strong>${clubNameLink(p.clubName)}</strong></div><div><span>加盟日期</span><strong>${latest?formatDate(latest.date):"赛季开始前"}</strong></div><div><span>来自</span><strong>${latest?clubNameLink(clubById(latest.fromId).name):"原有阵容"}</strong></div><div><span>转会费</span><strong>${latest?money(latest.fee):"—"}</strong></div><div><span>交易方式</span><strong>${latest?.clauses?"协商转会":"永久转会"}</strong></div><div><span>生涯转会</span><strong>${transfers.length} 次</strong></div></div></div></section>
+      <section class="player-profile-section"><div class="player-profile-section-head"><h3>细分属性</h3><span>1–99</span></div><div class="detailed-attributes">${groups.map(([title,attrs])=>`<div class="attribute-column"><h4>${title}</h4>${attrs.map(([label,key,modifier,sourceKey])=>{const value=profileAttribute(p,key,modifier,sourceKey);return `<div><span>${label}</span><strong class="${value>=85?"elite":value<60?"weak":""}">${value}</strong></div>`;}).join("")}</div>`).join("")}</div></section>
+      <section class="player-profile-grid"><div class="player-profile-section"><div class="player-profile-section-head"><h3>本赛季数据</h3><span>${state.season}/${String(state.season+1).slice(2)}</span></div><div class="profile-stat-list"><div><span>出场</span><strong>${p.appearances||0}</strong></div><div><span>进球</span><strong>${p.goals||0}</strong></div><div><span>助攻</span><strong>${p.assists||0}</strong></div><div><span>场均评分</span><strong>${currentAverage}</strong></div><div><span>国家队</span><strong>${p.internationalAppearances||0} 场</strong></div><div><span>国家队进球/助攻</span><strong>${p.internationalGoals||0} / ${p.internationalAssists||0}</strong></div></div></div><div class="player-profile-section"><div class="player-profile-section-head"><h3>发展趋势</h3><span>${outlook}</span></div><div class="development-outlook"><strong>${outlook}</strong><p>${outlookText}。能力变化统一在赛季结束时结算，单场比赛不会直接涨点。</p><div class="meter"><span style="width:${clamp(50+playerDevelopmentScore(p)*35,8,92)}%"></span></div></div></div></section>
+      <section class="player-profile-section"><div class="player-profile-section-head"><h3>踢球习惯</h3><span>${traits.length} 项</span></div><div class="player-traits">${traits.map(trait=>`<span>${icon("sparkles")}${esc(trait)}</span>`).join("")}</div></section>
+      ${transfers.length?`<section class="player-profile-section"><div class="player-profile-section-head"><h3>转会履历</h3><span>${transfers.length} 笔正式转会</span></div><div class="table-wrap"><table class="player-career-table"><thead><tr><th>日期</th><th>转出球队</th><th>转入球队</th><th class="num">转会费</th><th>原因</th></tr></thead><tbody>${transfers.map(record=>`<tr><td>${formatDate(record.date)}</td><td>${clubNameLink(clubById(record.fromId).name)}</td><td>${clubNameLink(clubById(record.toId).name)}</td><td class="num">${money(record.fee)}</td><td>${esc(record.reason||"阵容规划")}</td></tr>`).join("")}</tbody></table></div></section>`:""}
+      <section class="player-profile-section"><div class="player-profile-section-head"><h3>生涯数据</h3><span>${career.length+1} 个俱乐部阶段</span></div><div class="table-wrap"><table class="player-career-table"><thead><tr><th>赛季</th><th>俱乐部</th><th class="num">出场</th><th class="num">进球</th><th class="num">助攻</th><th class="num">评分</th><th class="num">阶段</th></tr></thead><tbody><tr class="current-season-row"><td>${state.season}/${String(state.season+1).slice(2)}</td><td>${clubNameLink(p.clubName)}</td><td class="num">${p.appearances||0}</td><td class="num">${p.goals||0}</td><td class="num">${p.assists||0}</td><td class="num">${currentAverage}</td><td class="num">${latest?`${formatDate(latest.date,false)} 起`:"进行中"}</td></tr>${career.map(row=>`<tr><td>${row.season}/${String(Number(row.season||state.season)+1).slice(2)}</td><td>${clubNameLink(row.club||p.clubName)}</td><td class="num">${row.dataUnavailable?"—":row.appearances||0}</td><td class="num">${row.dataUnavailable?"—":row.goals||0}</td><td class="num">${row.dataUnavailable?"—":row.assists||0}</td><td class="num">${row.dataUnavailable?"—":row.appearances?Number(row.average||0).toFixed(2):"—"}</td><td class="num">${row.dataUnavailable?"历史版本未记录":row.partialSeason&&row.endDate?`至 ${formatDate(row.endDate,false)}`:row.change===undefined?"已记录":`${row.change>0?"+":""}${row.change||0}`}</td></tr>`).join("")}</tbody></table></div></section>
+    </div></div></div>`;
+  }
+
+  function renderClubProfileModal(value) {
+    const data=clubProfileData(value),club=data.club,league=data.league,roster=[...(data.roster||[])].sort((a,b)=>positionSortRank(a.position)-positionSortRank(b.position)||Number(b.overall||0)-Number(a.overall||0));
+    if(!club)return "";
+    const standing=state.majorLeagueWorld?.leagues?.[club.league]?.clubs?.find(item=>item.id===club.id),table=state.majorLeagueWorld?.leagues?.[club.league]?majorStandings(state.majorLeagueWorld.leagues[club.league]):[],rank=table.findIndex(item=>item.id===club.id)+1,honors=[...clubHonors(club),...(club.id===state.clubId?(state.honors||[]).filter(item=>item.scope==="俱乐部").map(item=>({name:item.name,count:1,asset:trophyAsset(item.name)})):[])];
+    const average=roster.length?Math.round(roster.reduce((sum,p)=>sum+Number(p.overall||0),0)/roster.length):0,totalValue=roster.reduce((sum,p)=>sum+Number(p.value||0),0);
+    return `<div class="modal-backdrop"><div class="modal club-profile-modal" role="dialog" aria-modal="true" aria-labelledby="club-profile-title"><div class="modal-header club-profile-header"><div class="club-profile-badge">${clubBadge(club,"club-badge-profile-modal")}</div><div><span>${esc(league?.short||"俱乐部")}${league?.country?` · ${esc(league.country)}`:""}</span><h2 id="club-profile-title">${esc(club.name)}</h2><p>${esc(club.city||"城市资料待更新")} · ${esc(club.stadium||"主场资料待更新")} · 主教练 ${esc(club.coach||"资料待更新")}</p></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body club-profile-body">
+      <section class="club-profile-summary"><div><label>俱乐部声望</label><strong>${club.prestige||"—"}</strong></div><div><label>阵容人数</label><strong>${roster.length}</strong></div><div><label>平均能力</label><strong>${average||"—"}</strong></div><div><label>阵容总身价</label><strong>${money(totalValue)}</strong></div><div><label>当前排名</label><strong>${rank||"—"}${rank?` / ${table.length}`:""}</strong></div><div><label>本赛季积分</label><strong>${standing?.pts??"—"}</strong></div></section>
+      <section class="club-profile-section"><div class="club-profile-section-head"><h3>一线队阵容</h3><span>按位置排序 · ${roster.length} 人</span></div><div class="table-wrap"><table class="club-roster-table"><thead><tr><th>球员</th><th>位置</th><th class="num">年龄</th><th class="num">能力 / 潜力</th><th class="num">身价</th></tr></thead><tbody>${roster.map(player=>`<tr><td class="player-name"><strong>${playerNameLink(player,{clubName:club.name})}</strong><span>${player.nationality?esc(player.nationality):"球员"}</span></td><td><span class="tag">${playerRoleLabel(player.position)}</span></td><td class="num">${player.age||"—"}</td><td class="num"><span class="rating">${player.overall||"—"}</span> / ${player.potential||player.overall||"—"}</td><td class="num">${money(player.value||0)}</td></tr>`).join("")||`<tr><td colspan="5"><div class="empty compact">暂无可用阵容数据</div></td></tr>`}</tbody></table></div></section>
+      <section class="club-profile-grid"><div class="club-profile-section"><div class="club-profile-section-head"><h3>俱乐部荣誉</h3><span>主要荣誉概览</span></div><div class="club-honors">${honors.map(item=>`<div class="club-honor"><img src="assets/trophies/${item.asset||"league.png"}" alt=""><div><strong>${esc(item.name)}</strong><span>${item.count} 次</span></div></div>`).join("")||`<p class="report-copy">暂无已记录荣誉。</p>`}</div></div><div class="club-profile-section"><div class="club-profile-section-head"><h3>近期状态</h3><span>${standing?`${standing.w}胜 ${standing.d}平 ${standing.l}负`:"当前赛季"}</span></div><div class="club-form-row"><div><label>战绩</label><strong>${standing?`${standing.w}-${standing.d}-${standing.l}`:"—"}</strong></div><div><label>进失球</label><strong>${standing?`${standing.gf} / ${standing.ga}`:"—"}</strong></div><div><label>近况</label><strong>${standing?.form?.length?standing.form.map(item=>`<i class="form-dot ${item}"></i>`).join(""):"—"}</strong></div></div></div></section>
+    </div></div></div>`;
+  }
+
+  function renderModal() {
+    if (!modal) return "";
+    if (modal.type === "playerProfile") return renderPlayerProfileModal(modal.player);
+    if (modal.type === "clubProfile") return renderClubProfileModal(modal.club);
+    if (modal.type === "mobileMenu") return `<div class="modal-backdrop mobile-menu-backdrop"><div class="modal mobile-menu" role="dialog" aria-modal="true"><div class="modal-header"><h2>更多页面</h2><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="mobile-menu-grid">${NAV.slice(4).map(navButton).join("")}</div></div></div>`;
+    if (modal.type === "notification") {
+      const notification=state.notifications.find(item=>item.id===modal.id);if(!notification)return "";
+      return `<div class="modal-backdrop"><div class="modal report-modal" role="dialog" aria-modal="true" aria-labelledby="notification-title"><div class="modal-header"><h2 id="notification-title">${esc(notification.title)}</h2><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body">${renderNotificationDetail(notification)}</div><div class="modal-actions"><button class="btn btn-primary" data-close-modal>完成查看</button></div></div></div>`;
+    }
+    if (modal.type === "negotiation") {
+      const session=negotiationById(modal.id);if(!session)return "";const p=session.playerSnapshot,clubStage=session.stage==="club",closed=session.status!=="active";
+      const patience=(label,value)=>`<div class="patience-bar ${value<=30?"danger":value<=60?"warn":""}"><div><span>${label}</span><strong>${value}%</strong></div><i><span style="width:${value}%"></span></i></div>`;
+      return `<div class="modal-backdrop"><div class="modal negotiation-modal" role="dialog" aria-modal="true"><div class="modal-header"><div><span class="eyebrow">第 ${session.round} 轮 · ${clubStage?"俱乐部协议":"个人合同"}</span><h2>${esc(session.playerName)}</h2></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="negotiation-patience">${patience(clubById(session.fromId).name,session.clubPatience)}${patience("球员经纪人",session.agentPatience)}</div><div class="modal-body negotiation-body">
+        <section class="negotiation-summary"><div><span>参考身价</span><strong>${money(session.valuation)}</strong></div><div><span>加盟意愿</span><strong>${session.interest}%</strong></div><div><span>可用预算</span><strong>${money(state.funds)}</strong></div><div><span>当前阶段</span><strong>${closed?"谈判结束":clubStage?"转会费":"个人条款"}</strong></div></section>
+        ${closed?`<div class="negotiation-closed">${icon("circle-x")}<strong>${esc(session.closedReason||"谈判已结束")}</strong><span>本次谈判不会继续推进。</span></div>`:clubStage?`<section class="negotiation-form"><h3>转会报价结构</h3><div class="negotiation-fields"><label>基础转会费<small>百万欧元</small><input class="input" id="neg-fee" type="number" min="0.5" step="0.5" value="${session.terms.fee}"></label><label>分期付款<small>百万欧元</small><input class="input" id="neg-installments" type="number" min="0" step="0.5" value="${session.terms.installments}"></label><label>出场附加条款<small>百万欧元</small><input class="input" id="neg-appearance" type="number" min="0" step="0.5" value="${session.terms.appearanceAddon}"></label><label>进球附加条款<small>百万欧元</small><input class="input" id="neg-goals" type="number" min="0" step="0.5" value="${session.terms.goalAddon}"></label><label>二次转会分成<small>百分比</small><input class="input" id="neg-sell-on" type="number" min="0" max="50" step="1" value="${session.terms.sellOn}"></label></div></section>`:`<section class="negotiation-form"><h3>个人合同条款</h3><div class="negotiation-fields"><label>周薪<small>千欧元</small><input class="input" id="neg-wage" type="number" min="1" step="1" value="${session.contract.weeklyWage}"></label><label>签约奖金<small>百万欧元</small><input class="input" id="neg-signing" type="number" min="0" step="0.1" value="${session.contract.signingBonus}"></label><label>出场津贴<small>千欧元</small><input class="input" id="neg-appearance-fee" type="number" min="0" step="1" value="${session.contract.appearanceFee}"></label><label>解约金<small>百万欧元</small><input class="input" id="neg-release" type="number" min="1" step="1" value="${session.contract.releaseClause}"></label><label>队内角色<small>承诺</small><select class="select" id="neg-role">${["核心主力","常规主力","轮换球员","替补球员"].map(role=>`<option ${session.contract.role===role?"selected":""}>${role}</option>`).join("")}</select></label><label>合同年限<small>年</small><input class="input" id="neg-years" type="number" min="1" max="5" value="${session.contract.years}"></label></div></section>`}
+        <section class="negotiation-history"><h3>谈判记录</h3>${session.history.slice().reverse().map(item=>`<article><span>${item.round?`第 ${item.round} 轮`:"背景"}</span><div><strong>${esc(item.speaker)}</strong><p>${esc(item.text)}</p></div></article>`).join("")}</section></div><div class="modal-actions">${closed?`<button class="btn btn-primary" data-close-modal>返回转会中心</button>`:`<button class="btn btn-danger" id="withdraw-negotiation">退出谈判</button><button class="btn btn-primary" id="submit-negotiation">${clubStage?"提交俱乐部报价":"提交合同报价"}</button>`}</div></div></div>`;
+    }
+    if (modal.type === "transfer") {
+      const p=modal.player;if(!p)return "";return `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true"><div class="modal-header"><h2>${state.role==="coach"?"建立谈判":"建议引援"}</h2><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body"><div class="list-row" style="padding:0 0 18px"><div class="avatar">${initials(p.name)}</div><div class="list-row-main"><div class="list-row-title">${esc(p.name)}</div><div class="list-row-sub">${playerRoleLabel(p.position)} · ${p.age} 岁 · ${esc(p.club)} · 能力 ${p.overall} / 潜力 ${p.potential}</div></div></div>${state.role==="coach"?`<div class="data-note">谈判将先与出售俱乐部协商基础转会费、分期、附加条款及二次转会分成；达成后再与经纪人谈个人合同。双方都会记录耐心值。</div>`:`<p style="color:var(--muted);font-size:12px;line-height:1.7">你会向主教练建议考察这名球员。你的球队地位与该球员的适配度会影响建议被采纳的概率。</p>`}</div><div class="modal-actions"><button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="confirm-transfer">${state.role==="coach"?"开启谈判":"提交建议"}</button></div></div></div>`;
+    }
+    if (modal.type === "retire") return `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true"><div class="modal-header"><h2>确认退役</h2><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body"><p style="color:var(--muted);line-height:1.7">退役会结束当前可推进的生涯，但不会删除历史记录。球员通常在 33–43 岁退役，玩家可以提前作出自己的决定。</p></div><div class="modal-actions"><button class="btn" data-close-modal>继续生涯</button><button class="btn btn-danger" id="confirm-retire">宣布退役</button></div></div></div>`;
+    return "";
+  }
+
+  function openClubProfile(value) {
+    const club=resolveClub(value); if(!club)return;
+    modal={type:"clubProfile",club}; render();
+  }
+
+  function bindEvents() {
+    document.querySelectorAll("[data-setup]").forEach(b=>b.addEventListener("click",()=>{
+      setup[b.dataset.setup]=b.dataset.value;
+      if (b.dataset.setup==="role") {const first=setup.role==="coach"?COACHES[0]:REAL_PLAYERS[0];setup.identity=setupIdentityId(first);setup.clubId=first.club;setup.leagueId=clubById(first.club).league;}
+      render();
+    }));
+    document.getElementById("setup-league")?.addEventListener("change",e=>{setup.leagueId=e.target.value;const identities=setupIdentities(),eligible=setup.origin==="real"?new Set(identities.map(item=>item.club)):new Set(CLUBS.map(club=>club.id));setup.clubId=CLUBS.find(club=>club.league===setup.leagueId&&eligible.has(club.id))?.id;if(setup.origin==="real")setup.identity=setupIdentityId(identities.find(item=>item.club===setup.clubId)||identities[0]);render();});
+    document.getElementById("setup-club")?.addEventListener("change",e=>{setup.clubId=e.target.value;setup.leagueId=clubById(setup.clubId).league;if(setup.origin==="real"){const item=setupIdentities().find(person=>person.club===setup.clubId);if(item)setup.identity=setupIdentityId(item);}render();});
+    document.getElementById("identity")?.addEventListener("change",e=>{setup.identity=e.target.value;const item=setupIdentities().find(person=>setupIdentityId(person)===setup.identity);if(item){setup.clubId=item.club;setup.leagueId=clubById(item.club).league;}render();});
+    const form=document.getElementById("setup-form"); if(form) form.addEventListener("submit",e=>{ e.preventDefault(); const fd=new FormData(form); for(const [k,v] of fd) setup[k]=v; if(setup.origin==="real") { const item=setup.role==="coach"?COACHES.find(c=>c.name===setup.identity):REAL_PLAYERS.find(p=>p.id===setup.identity); if(!item){toast("请选择有效的球员或教练");return;} setup.clubId=item.club; } state=createState(); saveState(); render(); toast("生涯创建成功"); });
+    document.getElementById("continue-save")?.addEventListener("click",()=>{ state=loadState(); render(); });
+    document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>{ state.view=b.dataset.view; saveState(); render(); }));
+    document.getElementById("open-mobile-menu")?.addEventListener("click",()=>{modal={type:"mobileMenu"};render();});
+    document.getElementById("continue-game")?.addEventListener("click",continueGame);
+    document.getElementById("start-match")?.addEventListener("click",continueGame);
+    document.getElementById("new-season")?.addEventListener("click",newSeason);
+    document.getElementById("tactic")?.addEventListener("change",e=>{state.tactic=e.target.value;saveState();});
+    document.getElementById("training")?.addEventListener("change",e=>{state.training=e.target.value;saveState();toast("训练强度已更新");});
+    document.getElementById("squad-search")?.addEventListener("input",e=>{state.squadSearch=e.target.value;let visible=0;document.querySelectorAll("#squad-body tr").forEach(r=>{r.hidden=!r.dataset.playerName.includes(e.target.value.toLowerCase());if(!r.hidden)visible++;});const count=document.getElementById("squad-count");if(count)count.textContent=visible===state.squad.length?`${state.squad.length} 名球员`:`显示 ${visible} / ${state.squad.length}`;saveState();});
+    document.querySelectorAll("[data-squad-sort]").forEach(button=>button.addEventListener("click",()=>{const key=button.dataset.squadSort,current=state.squadSort||{};state.squadSort={key,direction:current.key===key&&current.direction==="desc"?"asc":current.key===key?"desc":["name","position","age"].includes(key)?"asc":"desc"};saveState();render();}));
+    document.getElementById("squad-sort-select")?.addEventListener("change",e=>{const key=e.target.value;state.squadSort={key,direction:["name","position","age"].includes(key)?"asc":"desc"};saveState();render();});
+    document.getElementById("squad-sort-direction")?.addEventListener("click",()=>{state.squadSort.direction=state.squadSort.direction==="asc"?"desc":"asc";saveState();render();});
+    document.getElementById("fixture-filter")?.addEventListener("change",event=>{state.fixtureFilter=event.target.value;saveState();render();});
+    document.querySelectorAll("[data-notification]").forEach(button=>button.addEventListener("click",()=>openNotification(button.dataset.notification)));
+    document.querySelectorAll("[data-player-profile]").forEach(button=>button.addEventListener("click",()=>{const player=playerProfileRegistry.get(button.dataset.playerProfile);if(!player)return;modal={type:"playerProfile",player};render();}));
+    document.querySelectorAll(".league-club-cell,.league-result-team,.transfer-club,.match-club,.match-team-title,.report-team-head strong").forEach(element=>element.addEventListener("click",event=>{if(event.target.closest("button"))return;let label=(element.querySelector(".player-name strong,.league-result-team b,.transfer-club b,.match-team-title h3,.report-team-head strong")||element).textContent.replace(/^★\s*/,"").trim();if(element.classList.contains("match-club")){label=label.replace(/^[A-Z]{2,5}/,"").replace(/[A-Z]{2,5}$/ ,"").trim();}openClubProfile(label);}));
+    document.querySelectorAll("[data-club-profile]").forEach(button=>button.addEventListener("click",()=>{const club=clubProfileRegistry.get(button.dataset.clubProfile);if(club)openClubProfile(club);}));
+    document.querySelectorAll("[data-major-league]").forEach(button=>button.addEventListener("click",()=>{state.majorLeagueId=button.dataset.majorLeague;saveState();render();}));
+    document.querySelectorAll("[data-transfer]").forEach(b=>b.addEventListener("click",()=>{const player=transferRecommendations()[Number(b.dataset.transfer)];if(!player)return;modal={type:"transfer",player};render();}));
+    document.querySelectorAll("[data-open-negotiation]").forEach(button=>button.addEventListener("click",()=>{modal={type:"negotiation",id:button.dataset.openNegotiation};render();}));
+    document.querySelectorAll("[data-list-player]").forEach(button=>button.addEventListener("click",()=>toggleTransferList(button.dataset.listPlayer)));
+    document.querySelectorAll("[data-close-modal]").forEach(b=>b.addEventListener("click",()=>{modal=null;render();}));
+    document.getElementById("confirm-transfer")?.addEventListener("click",confirmTransfer);
+    document.getElementById("submit-negotiation")?.addEventListener("click",submitNegotiation);
+    document.getElementById("withdraw-negotiation")?.addEventListener("click",()=>withdrawNegotiation(modal?.id));
+    document.getElementById("request-transfer")?.addEventListener("click",requestTransfer);
+    document.getElementById("suggest-signing")?.addEventListener("click",()=>toast("你已向教练组提交引援建议"));
+    document.getElementById("retire")?.addEventListener("click",()=>{modal={type:"retire"};render();});
+    document.getElementById("confirm-retire")?.addEventListener("click",retire);
+    document.getElementById("reset-save")?.addEventListener("click",()=>{ if(confirm("确定删除当前存档？此操作无法撤销。")) resetSave(); });
+    document.querySelectorAll("#toggle-match-play").forEach(button=>button.addEventListener("click",toggleMatchPlay));
+    document.querySelectorAll("[data-match-speed]").forEach(button=>button.addEventListener("click",()=>setMatchSpeed(button.dataset.matchSpeed)));
+    document.getElementById("skip-match")?.addEventListener("click",skipMatch);
+    document.querySelectorAll("[data-team-talk]").forEach(button=>button.addEventListener("click",()=>applyTeamTalk(button.dataset.teamTalk)));
+    document.getElementById("heatmap-player")?.addEventListener("change",event=>{state.activeMatch.selectedHeatmapPlayer=event.target.value;saveState();drawHeatmapCanvas();});
+    document.getElementById("make-substitution")?.addEventListener("click",makeManualSubstitution);
+    document.getElementById("sub-out")?.addEventListener("change",syncSubstitutionOptions);
+    document.getElementById("finish-match")?.addEventListener("click",finishMatch);
+    document.getElementById("world-league")?.addEventListener("change",e=>{state.worldLeague=e.target.value;saveState();render();});
+    document.getElementById("import-mod")?.addEventListener("click",()=>document.getElementById("mod-file")?.click());
+    document.getElementById("mod-file")?.addEventListener("change",importModFile);
+    document.getElementById("export-mod")?.addEventListener("click",exportModPacks);
+    document.getElementById("clear-mods")?.addEventListener("click",clearModPacks);
+    syncSubstitutionOptions();
+  }
+
+  async function importModFile(event) {
+    const file=event.target.files?.[0];if(!file)return;
+    try{
+      const pack=validateModPack(JSON.parse(await file.text())),packs=loadModPacks();
+      const next=[...packs.filter(item=>item.packId!==pack.packId),pack];localStorage.setItem(MOD_KEY,JSON.stringify(next));
+      const fresh=createBackgroundWorld(state.season);
+      Object.entries(fresh.leagues).forEach(([id,league])=>{if(!state.backgroundWorld.leagues[id])state.backgroundWorld.leagues[id]=league;});
+      state.worldLeague=pack.leagues.find(item=>item.simulation==="background")?.id||state.worldLeague;saveState();render();toast(`已导入 ${pack.name}`);
+    }catch(error){toast(`MOD 导入失败：${error.message}`);}
+  }
+
+  function downloadJson(filename,value) {
+    const blob=new Blob([JSON.stringify(value,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),link=document.createElement("a");
+    link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+
+  function exportModPacks() {
+    const packs=loadModPacks();let exported;
+    if(packs.length){exported={schemaVersion:1,packId:`community-export-${Date.now()}`,name:"Football Simulator community export",leagues:packs.flatMap(pack=>pack.leagues||[]),clubs:packs.flatMap(pack=>pack.clubs||[]),players:packs.flatMap(pack=>pack.players||[])};}
+    else{exported={schemaVersion:1,packId:"builtin-background-example",name:"Built-in background league example",leagues:BACKGROUND_LEAGUES.map(league=>({id:league.id,name:league.name,country:league.country,tier:league.tier,simulation:"background"})),clubs:BACKGROUND_LEAGUES.flatMap(league=>league.clubs.map((club,index)=>({id:`${league.id.toLowerCase()}-${index+1}`,name:club[0],leagueId:league.id,prestige:club[1],averageAbility:club[2]}))),players:[]};}
+    downloadJson("football-simulator-mod-pack.json",exported);toast("可再次导入的 MOD 数据包已导出");
+  }
+
+  function clearModPacks() {
+    if(!confirm("清除当前浏览器中的所有 MOD 数据包？"))return;
+    localStorage.removeItem(MOD_KEY);const builtIn=new Set(BACKGROUND_LEAGUES.map(item=>item.id));
+    Object.keys(state.backgroundWorld.leagues).forEach(id=>{if(!builtIn.has(id))delete state.backgroundWorld.leagues[id];});
+    if(!state.backgroundWorld.leagues[state.worldLeague])state.worldLeague="BRA1";saveState();render();toast("MOD 数据包已清除");
+  }
+
+  function recoverFitness(player,days,training) {
+    let fitness=Number(player.fitness||70),remaining=Math.max(0,Math.floor(days));
+    const trainingFactor=training==="recovery"?1.24:training==="intense"?.72:1;
+    const ageFactor=player.age>=34?.86:player.age>=30?.94:player.age<=23?1.05:1;
+    const injuryDays=Math.max(0,Number(player.injured||0));
+    let elapsed=0;
+    while(remaining-->0&&fitness<100){
+      const base=fitness<70?4.4:fitness<85?3.4:fitness<93?2.35:1.2;
+      const injuryFactor=elapsed<injuryDays?.48:1;
+      fitness=clamp(fitness+base*trainingFactor*ageFactor*injuryFactor,35,100);
+      elapsed++;
+    }
+    return Math.round(fitness);
+  }
+
+  function importantTransferEvent(previousRecordIds,previousRumorIds) {
+    const market=ensureTransferMarket(state),newRecords=market.records.filter(record=>!previousRecordIds.has(record.id)),newRumors=market.rumors.filter(rumor=>rumor.status==="active"&&!previousRumorIds.has(rumor.id));
+    const record=newRecords.find(item=>item.fromId===state.clubId||item.toId===state.clubId||item.fee>=45||item.overall>=84);
+    if(record){const buyer=clubById(record.toId);return {type:"transfer",title:`转会完成：${record.playerName} 加盟 ${buyer.name}`,view:"transfers"};}
+    const rumor=newRumors.find(item=>item.fromId===state.clubId||item.toId===state.clubId||item.fee>=55||item.overall>=85);
+    if(rumor){return {type:"transfer",title:`转会动态：${clubById(rumor.toId).name} 有意 ${rumor.playerName}`,view:"transfers"};}
+    return null;
+  }
+
+  function advanceCareerDay(targetDate) {
+    const market=ensureTransferMarket(state),previousRecordIds=new Set(market.records.map(record=>record.id)),previousRumorIds=new Set(market.rumors.map(rumor=>rumor.id));
+    state.squad.forEach(player=>{
+      player.fitness=recoverFitness(player,1,state.training);
+      if(player.injured){player.injured=Math.max(0,player.injured-1);if(!player.injured){player.injury=null;player.morale=clamp(player.morale+3,0,100);}}
+    });
+    simulateBackgroundWorld(targetDate);
+    simulateMajorLeagueWorld(state,targetDate);
+    simulateTransferMarket(state,targetDate);
+    state.date=targetDate;
+    return importantTransferEvent(previousRecordIds,previousRumorIds);
+  }
+
+  function continueGame() {
+    const fixture=nextFixture();if(!fixture||state.retired)return;
+    if(fixture.date<=state.date){state.continueStatus={type:"match",title:`${fixture.competition}比赛日：对阵 ${fixture.opponent}`,date:state.date};saveState();startMatch();return;}
+    state.continueStatus=null;
+    let event=null,cursor=state.date,guard=0;
+    while(cursor<fixture.date&&guard++<370){
+      cursor=addDays(cursor,1);
+      event=advanceCareerDay(cursor);
+      if(cursor===fixture.date){event={type:"match",title:`${fixture.competition}比赛日：对阵 ${fixture.opponent}`,view:"home"};break;}
+      if(event)break;
+    }
+    if(!event)event={type:"calendar",title:"时间推进已暂停",view:state.view};
+    state.continueStatus={type:event.type,title:event.title,date:state.date};
+    if(event.view)state.view=event.view;
+    saveState();render();toast(`${formatDate(state.date,false)} · ${event.title}`);
+  }
+
+  function positionUnit(position) {
+    if(position==="GK")return "goalkeeper";
+    if(["RB","LB","FB","DF","CB"].includes(position))return "defence";
+    if(["DM","CM","AM"].includes(position))return "midfield";
+    return "attack";
+  }
+
+  const AI_FORMATIONS=[
+    {name:"4-3-3",requirements:{goalkeeper:1,defence:4,midfield:3,attack:3}},
+    {name:"4-4-2",requirements:{goalkeeper:1,defence:4,midfield:4,attack:2}},
+    {name:"3-5-2",requirements:{goalkeeper:1,defence:3,midfield:5,attack:2}},
+    {name:"3-4-3",requirements:{goalkeeper:1,defence:3,midfield:4,attack:3}},
+    {name:"5-3-2",requirements:{goalkeeper:1,defence:5,midfield:3,attack:2}}
+  ];
+  function aiLineupScore(player,profile=null,dense=false) {
+    const coach=profile||coachDecisionProfile("AI"),fitnessWeight=dense?.22:.13,formWeight=.1,abilityWeight=1-fitnessWeight-formWeight;
+    const youthBonus=player.age<=22?coach.youthTrust*1.8:0,experienceBonus=player.age>=29?(1-coach.risk)*.8:0;
+    return (player.overall||60)*abilityWeight+(player.fitness||80)*fitnessWeight+(player.form||6)*10*formWeight+youthBonus+experienceBonus;
+  }
+  function fixtureSelectionImportance(fixture) {
+    if(!fixture)return .65;
+    const competition=String(fixture.competition||""),round=String(fixture.round||fixture.stageName||""),knockout=fixture.knockout||fixture.phase==="knockout";
+    let importance=fixture.international?.78:/欧冠|冠军联赛/.test(competition)?.86:/欧联/.test(competition)?.76:/欧协/.test(competition)?.68:/杯|Cup|Pokal|Copa/.test(competition)?.56:.64;
+    if(knockout)importance=Math.max(importance,.84);
+    if(/决赛/.test(round))importance=.99;else if(/半决赛/.test(round))importance=Math.max(importance,.94);else if(/八强|四分之一/.test(round))importance=Math.max(importance,.89);
+    const ourClub=state?.clubId?clubById(state.clubId):null,opponent=findClubByName(fixture.opponent),opponentStrength=Number(fixture.opponentStrength||opponent?.prestige||74);
+    if(ourClub)importance+=clamp((opponentStrength-ourClub.prestige)/35,-.08,.12);
+    if(!knockout&&state?.played>=28&&(state.leaguePosition<=4||state.leaguePosition>=Math.max(15,(OPPONENTS[ourClub?.league]||[]).length-4)))importance+=.08;
+    return clamp(importance,.42,1);
+  }
+  function tacticalSelectionFit(player,tactic="balanced") {
+    const attribute=key=>Number(player[key]??player.overall??70),keys=({
+      press:["physical","pace","workRate","defending"],counter:["pace","shooting","passing"],defensive:["defending","physical","positioning"],balanced:["passing","technique","dribbling"]
+    })[tactic]||["passing","physical"];
+    const average=keys.reduce((sum,key)=>sum+attribute(key),0)/keys.length;
+    return clamp((average-70)/7,-2.4,2.8);
+  }
+  function playerSelectionWorkload(player,fixture,dense,importance) {
+    const starts=Number(player.consecutiveStarts||0),minutes=Number(player.lastMatchMinutes||0),days=player.lastMatchDate?daysBetween(player.lastMatchDate,fixture.date):99;
+    let penalty=Math.max(0,starts-1)*(dense?3.1:1.45)*(1-importance*.25);
+    if(days<=5&&minutes>=70)penalty+=(6-days)*.8+Math.max(0,minutes-70)*.035;
+    if((player.fitness||100)<78)penalty+=(78-Number(player.fitness||78))*(dense?.2:.1);
+    if(player.age>=32&&days<=5)penalty+=1.1;
+    return penalty;
+  }
+  function matchSelectionScore(player,fixture,profile,dense,tactic) {
+    const importance=fixtureSelectionImportance(fixture),form=Number(player.lastRating||player.form||6.35),morale=Number(player.morale??75),fitness=Number(player.fitness??85),role=player.contract?.role||"轮换球员";
+    const abilityWeight=.61+importance*.08,fitnessWeight=dense?.2:.13,formWeight=.09,roleBonus=({"核心主力":2.7,"常规主力":1.45,"轮换球员":.35,"替补球员":-.6})[role]||0;
+    const youthBonus=player.age<=22?profile.youthTrust*1.15:0,experienceBonus=player.age>=29?(1-profile.risk)*.55:0,variation=(stableScoutingUnit(`lineup|${fixture.id||fixture.date}|${player.id||player.name}|${profile.name||"coach"}`)-.5)*(1.5+profile.rotation*2.4);
+    return Number(player.overall||60)*abilityWeight+fitness*fitnessWeight+(form-5.5)*10*formWeight+(morale-75)*.025+roleBonus+youthBonus+experienceBonus+tacticalSelectionFit(player,tactic)-playerSelectionWorkload(player,fixture,dense,importance)+variation;
+  }
+  function controlledSelectionSummary(player,fixture,lineup,bench,dense) {
+    if(!player)return null;
+    const status=lineup.includes(player)?"starter":bench.includes(player)?"bench":"rest",form=Number(player.lastRating||player.form||6.35),fitness=Number(player.fitness??100),starts=Number(player.consecutiveStarts||0),importance=fixtureSelectionImportance(fixture);
+    let reason;
+    if(player.injured)reason=`${player.injury||"伤病"}恢复中，未进入比赛名单`;
+    else if(status==="starter")reason=importance>=.86?"重要比赛采用主力阵容":dense&&starts>=2?"阵容需要，密集赛程继续首发":"综合能力、状态与战术适配达到首发要求";
+    else if(fitness<72)reason=status==="bench"?"体能尚未恢复到首发标准，进入替补席":"体能恢复计划，安排本场休息";
+    else if(dense&&(starts>=2||Number(player.lastMatchMinutes||0)>=75))reason=status==="bench"?"密集赛程控制连续出场负荷，进入替补席":"密集赛程轮休，未进入本场名单";
+    else if(form<6.05)reason=status==="bench"?"近期状态影响首发顺位，进入替补席":"近期状态与位置竞争导致轮休";
+    else reason=status==="bench"?"战术轮换，进入替补席等待临场机会":"阵容竞争与战术安排，未进入本场名单";
+    return {status,reason,label:status==="starter"?"本场首发":status==="bench"?"替补待命":"本场轮休"};
+  }
+  function coachFormationBias(identity,index,profile=null) {
+    const coach=profile||coachDecisionProfile(identity),preferred=Math.floor(coach.formationSeed*AI_FORMATIONS.length);
+    return index===preferred?2.2:Math.abs(index-preferred)===1?.55:0;
+  }
+  function chooseFormationPlayers(sortedPlayers,controlledId=null,identity="AI",options={}) {
+    const profile=options.profile||coachDecisionProfile(identity),dense=Boolean(options.dense),scorePlayer=options.scorePlayer||((player)=>aiLineupScore(player,profile,dense));
+    const candidates=AI_FORMATIONS.map((formation,index)=>{
+      const players=[];let valid=true;
+      Object.entries(formation.requirements).forEach(([unit,count])=>{
+        const group=sortedPlayers.filter(player=>positionUnit(player.position)===unit).sort((a,b)=>scorePlayer(b)-scorePlayer(a)).slice(0,count);
+        if(group.length<count)valid=false;players.push(...group);
+      });
+      const balancePenalty=players.filter(player=>(player.fitness||100)<66).length*(2.8-profile.rotation);
+      return {name:formation.name,players,score:valid?players.reduce((sum,player)=>sum+scorePlayer(player),0)+coachFormationBias(identity,index,profile)-balancePenalty:-Infinity};
+    }).sort((a,b)=>b.score-a.score);
+    const choice=candidates[0],selected=[...(Number.isFinite(choice?.score)?choice.players:[])];
+    sortedPlayers.filter(player=>player.position!=="GK"&&!selected.includes(player)).forEach(player=>{if(selected.length<11)selected.push(player);});
+    sortedPlayers.filter(player=>!selected.includes(player)).forEach(player=>{if(selected.length<11)selected.push(player);});
+    return {players:selected.slice(0,11),name:choice?.name||"灵活阵型"};
+  }
+
+  function selectFormationPlayers(sortedPlayers,controlledId=null,identity="AI") { return chooseFormationPlayers(sortedPlayers,controlledId,identity).players; }
+
+  function selectMatchBench(sortedPlayers,lineup,size=9) {
+    const remaining=sortedPlayers.filter(player=>!lineup.includes(player)),backupKeeper=remaining.find(player=>player.position==="GK"),bench=[];
+    if(backupKeeper)bench.push(backupKeeper);
+    remaining.filter(player=>player!==backupKeeper).forEach(player=>{if(bench.length<size)bench.push(player);});
+    return bench;
+  }
+
+  function repairMatchLineups(save,m) {
+    const repair=(players,lineupKey,initialKey,benchKey,initialBenchKey,controlledId=null)=>{
+      const initialIds=m[initialKey]||m[lineupKey]||[],currentIds=m[lineupKey]||[],available=[...players].sort((a,b)=>(b.overall||0)-(a.overall||0));
+      const keeper=available.find(player=>player.id===controlledId&&player.position==="GK")||available.find(player=>player.position==="GK");
+      if(!keeper)return;
+      const addKeeper=ids=>{
+        if(ids.some(id=>players.find(player=>player.id===id)?.position==="GK"))return;
+        const replaceIndex=ids.map((id,index)=>({id,index,player:players.find(player=>player.id===id)})).filter(item=>item.player&&item.id!==controlledId&&item.player.position!=="GK").at(-1)?.index;
+        if(replaceIndex!=null)ids[replaceIndex]=keeper.id;
+      };
+      addKeeper(initialIds);addKeeper(currentIds);m[initialKey]=initialIds;m[lineupKey]=currentIds;
+      const lineupPlayers=initialIds.map(id=>players.find(player=>player.id===id)).filter(Boolean),benchSize=m.fixture?.international?12:9,orderedBench=selectMatchBench(available,lineupPlayers,benchSize).map(player=>player.id);
+      m[initialBenchKey]=orderedBench;m[benchKey]=(m[benchKey]||orderedBench).filter(id=>!currentIds.includes(id));
+      if(!m[benchKey].some(id=>players.find(player=>player.id===id)?.position==="GK")){
+        const reserve=available.find(player=>player.position==="GK"&&!currentIds.includes(player.id));if(reserve)m[benchKey].unshift(reserve.id);
+      }
+      m[benchKey]=[...new Set(m[benchKey])].slice(0,benchSize);
+    };
+    repair(m.ourPlayers||save.squad||[],"lineupIds","initialLineupIds","benchIds","initialBenchIds",save.role==="player"?save.controlledId:null);
+    if(m.opponentPlayers)repair(m.opponentPlayers,"opponentLineupIds","opponentInitialLineupIds","opponentBenchIds","opponentInitialBenchIds");
+  }
+
+  function matchOurPlayers(m) {
+    const controlled=controlledPlayer();return (m?.ourPlayers||state.squad).map(player=>controlled&&player.id===state.controlledId?controlled:player);
+  }
+
+  function buildNationalMatchSquad(nation,fixture,controlled=null,idPrefix="national") {
+    const quotas={goalkeeper:3,defence:8,midfield:7,attack:5},generatedPositions={goalkeeper:["GK","GK","GK"],defence:["RB","CB","CB","CB","CB","LB","FB","DF"],midfield:["DM","DM","CM","CM","CM","AM","AM"],attack:["RW","LW","WG","ST","ST"]};
+    const candidates=REAL_PLAYERS.filter(item=>primaryNationality(item)===nation&&(!controlled||comparableClubName(item.name)!==comparableClubName(controlled.name))).sort((a,b)=>b.overall-a.overall||a.age-b.age),squad=controlled?[controlled]:[];
+    Object.keys(quotas).forEach(unit=>{
+      const needed=quotas[unit]-squad.filter(item=>positionUnit(item.position)===unit).length;
+      candidates.filter(item=>positionUnit(item.position)===unit).slice(0,Math.max(0,needed)).forEach((item,index)=>squad.push({...item,id:`${idPrefix}-${item.id}`,number:item.number||index+1,fitness:Math.round(rand(84,100)),morale:82}));
+    });
+    let generatedIndex=0;
+    Object.entries(quotas).forEach(([unit,quota])=>{
+      while(squad.filter(item=>positionUnit(item.position)===unit).length<quota){
+        const unitIndex=squad.filter(item=>positionUnit(item.position)===unit).length,position=generatedPositions[unit][unitIndex%generatedPositions[unit].length],overall=clamp(Math.round((NATIONAL_TEAM_STRENGTH[nation]||74)-10+rand(-4,5)),58,89),index=generatedIndex++;
+        squad.push({id:`${idPrefix}-generated-${fixture.id}-${index}`,name:`${FIRST[(index*5+nation.length)%FIRST.length]} ${LAST[(index*7+nation.length)%LAST.length]}`,number:index+1,position,overall,fitness:Math.round(rand(86,100)),morale:80,nationality:nation,generated:true});
+      }
+    });
+    const ordered=Object.keys(quotas).flatMap(unit=>squad.filter(item=>positionUnit(item.position)===unit).sort((a,b)=>b.overall-a.overall)).slice(0,23),keeperNumbers=[1,12,23],outfieldNumbers=[2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22],used=new Set();
+    return ordered.map(item=>{const pool=positionUnit(item.position)==="goalkeeper"?keeperNumbers:outfieldNumbers,number=pool.find(value=>!used.has(value))||Array.from({length:23},(_,index)=>index+1).find(value=>!used.has(value))||item.number;used.add(number);return item===controlled?item:{...item,number};});
+  }
+
+  function createNationalMatchSquad(player,fixture) {
+    return buildNationalMatchSquad(fixture.teamName||primaryNationality(player),fixture,player,"national");
+  }
+
+  function selectMatchLineup(fixture,tactic="balanced") {
+    const previous=[...state.schedule].filter(item=>item.status==="played"&&item.date<fixture.date).sort((a,b)=>b.date.localeCompare(a.date))[0];
+    const dense=previous&&daysBetween(previous.date,fixture.date)<=5;
+    const identity=fixture.international?`${fixture.teamName}国家队主教练`:state.role==="player"?(clubById(state.clubId).coach||state.clubId):(state.coachProfile?.name||state.clubId),profile=aiCoachProfile(state,fixture.international?fixture.teamName:state.clubId,identity);
+    const pool=fixture.international?createNationalMatchSquad(controlledPlayer(),fixture):state.squad;
+    const selectionScore=player=>matchSelectionScore(player,fixture,profile,Boolean(dense),tactic),available=pool.filter(player=>!player.injured).sort((a,b)=>selectionScore(b)-selectionScore(a));
+    const controlled=controlledPlayer(),selection=chooseFormationPlayers(available,null,identity,{profile,dense:Boolean(dense),scorePlayer:selectionScore}),lineup=selection.players;
+    const strongestPool=[...available].sort((a,b)=>b.overall-a.overall),strongest=chooseFormationPlayers(strongestPool,null,identity,{profile,dense:false}).players,rotated=strongest.filter(player=>!lineup.includes(player)).length;
+    const bench=selectMatchBench(available,lineup,fixture.international?12:9);
+    const controlledSelection=state.role==="player"?controlledSelectionSummary(controlled,fixture,lineup,bench,Boolean(dense)):null;
+    return {lineup,bench,pool,dense:Boolean(dense),rotated,formation:selection.name,coachProfile:profile,controlledSelection};
+  }
+
+  function findClubByName(name) {
+    const target=comparableClubName(name);
+    return CLUBS.find(club=>comparableClubName(club.name)===target||comparableClubName(club.englishName||"")===target);
+  }
+
+  function createOpponentMatchSquad(fixture) {
+    if(fixture.international)return buildNationalMatchSquad(fixture.opponent,fixture,null,`opp-national-${fixture.id}`);
+    const opponentClub=findClubByName(fixture.opponent),prestige=fixture.opponentStrength||opponentClub?.prestige||78;
+    const imported=opponentClub?aiClubPlayers(state,opponentClub.id):[];
+    const players=[...imported].sort((a,b)=>b.overall-a.overall).slice(0,20).map((player,index)=>({
+      ...player,id:`opp-${fixture.id}-${player.id}`,name:player.name,number:player.number||index+1,position:player.position,overall:player.overall,fitness:Math.round(rand(82,100))
+    }));
+    for(let index=players.length;index<20;index++){
+      const position=POSITIONS[index%POSITIONS.length],overall=clamp(Math.round(prestige-14+rand(-5,6)),58,91);
+      players.push({id:`opp-${fixture.id}-generated-${index}`,name:`${FIRST[(index*3+fixture.opponent.length)%FIRST.length]} ${LAST[(index*5+fixture.opponent.length)%LAST.length]}`,number:index+1,position,overall,fitness:Math.round(rand(82,100)),generated:true});
+    }
+    while(players.filter(player=>player.position==="GK").length<2){
+      const reserve=[...players].reverse().find(player=>player.generated&&player.position!=="GK");if(!reserve)break;reserve.position="GK";
+    }
+    return players;
+  }
+
+  function emptyMatchEvent() {
+    return {goals:0,assists:0,shots:0,onTarget:0,bigChancesMissed:0,penaltiesMissed:0,mistakes:0,errorsLeadingToGoal:0,yellow:0,red:0,passes:0,accuratePasses:0,possessionLost:0,tackles:0,tacklesWon:0,interceptions:0,clearances:0,blocks:0,duels:0,duelsWon:0,wasDribbled:0,saves:0,cleanSheets:0,keyPasses:0,chancesCreated:0,dribblesAttempted:0,successfulDribbles:0,progressivePasses:0,recoveries:0,pressuresWon:0,defensiveRating:0,impactRating:0,decisionRating:0,ratingDelta:0,ratingReasons:[]};
+  }
+
+  function ensureMatchEvent(events,id) {
+    const event=events[id]||(events[id]=emptyMatchEvent());
+    Object.entries(emptyMatchEvent()).forEach(([key,value])=>{event[key]??=value;});
+    return event;
+  }
+
+  function ensureMatchRuntime(save,m) {
+    const squad=m.ourPlayers||save.squad||[],initial=m.initialLineupIds||[...(m.lineupIds||[])];
+    m.initialLineupIds=initial;
+    if(!m.benchIds){const lineupPlayers=initial.map(id=>squad.find(player=>player.id===id)).filter(Boolean),available=squad.filter(player=>!player.injured).sort((a,b)=>b.overall-a.overall);m.benchIds=selectMatchBench(available,lineupPlayers).map(player=>player.id);}
+    m.initialBenchIds||=[...m.benchIds];
+    m.opponentPlayers||=createOpponentMatchSquad(m.fixture);
+    const opponentClub=findClubByName(m.fixture.opponent),opponentProfile=aiCoachProfile(save,opponentClub?.id||m.fixture.opponent,opponentClub?.coach||m.fixture.opponent);
+    m.aiCoachProfiles||={ours:aiCoachProfile(save,save.clubId,save.role==="player"?(clubById(save.clubId).coach||save.clubId):(save.coachProfile?.name||save.clubId)),opponent:opponentProfile};
+    m.aiLastSubMinute||={ours:-20,opponent:-20};
+    m.aiLastTacticalMinute||={ours:-20,opponent:-20};
+    m.aiTacticalPlans||={ours:"balanced",opponent:"balanced"};
+    if(!m.opponentLineupIds){const opponentSelection=chooseFormationPlayers([...m.opponentPlayers].sort((a,b)=>aiLineupScore(b,opponentProfile,false)-aiLineupScore(a,opponentProfile,false)),null,opponentProfile.name,{profile:opponentProfile});m.opponentLineupIds=opponentSelection.players.map(player=>player.id);m.opponentFormation=opponentSelection.name;}
+    m.opponentInitialLineupIds||=[...m.opponentLineupIds];
+    if(!m.opponentBenchIds){const lineupPlayers=m.opponentLineupIds.map(id=>m.opponentPlayers.find(player=>player.id===id)).filter(Boolean);m.opponentBenchIds=selectMatchBench([...m.opponentPlayers].sort((a,b)=>b.overall-a.overall),lineupPlayers).map(player=>player.id);}
+    m.opponentInitialBenchIds||=[...m.opponentBenchIds];
+    repairMatchLineups(save,m);
+    m.formation||=chooseFormationPlayers(squad.filter(player=>m.initialLineupIds.includes(player.id)).sort((a,b)=>b.overall-a.overall),save.role==="player"?save.controlledId:null,save.coachProfile?.name||save.clubId).name;
+    m.opponentFormation||=chooseFormationPlayers(m.opponentPlayers.filter(player=>m.opponentInitialLineupIds.includes(player.id)).sort((a,b)=>b.overall-a.overall),null,opponentProfile.name,{profile:opponentProfile}).name;
+    m.liveRatings||=Object.fromEntries([...m.initialLineupIds,...m.initialBenchIds].map(id=>[id,6]));
+    m.opponentRatings||=Object.fromEntries(m.opponentPlayers.map(player=>[player.id,6]));
+    m.playerEvents||={};m.opponentEvents||={};m.substitutions||=[];m.dismissals||=[];
+    [...m.initialLineupIds,...m.initialBenchIds].forEach(id=>ensureMatchEvent(m.playerEvents,id));
+    m.opponentPlayers.forEach(player=>ensureMatchEvent(m.opponentEvents,player.id));
+    m.stats||={ours:{shots:Number(m.shots)||0,onTarget:0,corners:0,fouls:0,xg:0,yellow:0,red:0},opponent:{shots:0,onTarget:0,corners:0,fouls:0,xg:0,yellow:0,red:0}};
+    m.stats.ours||={shots:Number(m.shots)||0,onTarget:0,corners:0,fouls:0,xg:0,yellow:0,red:0};
+    m.stats.opponent||={shots:0,onTarget:0,corners:0,fouls:0,xg:0,yellow:0,red:0};
+    [m.stats.ours,m.stats.opponent].forEach(stats=>{stats.shots??=0;stats.onTarget??=0;stats.corners??=0;stats.fouls??=0;stats.xg??=0;stats.yellow??=0;stats.red??=0;});
+  }
+
+  function startMatch() {
+    const fixture=nextFixture(); if(!fixture||state.retired)return;
+    state.date=fixture.date;
+    const tactic=state.role==="coach"?state.tactic:chooseAiTactic(fixture);
+    const selection=selectMatchLineup(fixture,tactic),lineupIds=selection.lineup.map(player=>player.id),benchIds=selection.bench.map(player=>player.id),playerEvents=Object.fromEntries([...lineupIds,...benchIds].map(id=>[id,emptyMatchEvent()]));
+    const playerRoleNote=selection.controlledSelection?` ${state.person}${selection.controlledSelection.label}：${selection.controlledSelection.reason}。`:"";
+    const opening=`主裁判吹响开场哨，球队排出 ${selection.formation}，采用${({balanced:"平衡控制",press:"高位逼抢",counter:"快速反击",defensive:"稳守阵型"})[tactic]}。${selection.dense?` 面对密集赛程，AI 教练轮换了 ${selection.rotated} 名常规主力。`:""}${playerRoleNote}`;
+    state.activeMatch={fixture,tactic,formation:selection.formation,ourPlayers:fixture.international?selection.pool:null,minute:0,home:0,away:0,possession:tactic==="press"?55:tactic==="defensive"?43:51,shots:0,tactical:70,fitness:Math.round(selection.lineup.reduce((s,p)=>s+p.fitness,0)/Math.max(1,selection.lineup.length)),playerRating:6,ballX:50,ballY:50,finished:false,commentary:[{minute:0,text:opening}],decisionBonus:0,decisionRisk:0,lineupIds,initialLineupIds:[...lineupIds],benchIds,initialBenchIds:[...benchIds],playerEvents,liveRatings:Object.fromEntries([...lineupIds,...benchIds].map(id=>[id,6])),denseSchedule:selection.dense,rotationCount:selection.rotated,controlledSelection:selection.controlledSelection,mvpId:null,aiCoachProfiles:{ours:selection.coachProfile},aiLastSubMinute:{ours:-20,opponent:-20},aiLastTacticalMinute:{ours:-20,opponent:-20},aiNextTacticalMinute:{ours:Math.round(rand(24,38)),opponent:Math.round(rand(24,38))},aiTacticalPlans:{ours:"balanced",opponent:"balanced"},stats:{ours:{shots:0,onTarget:0,corners:0,fouls:0,xg:0,yellow:0,red:0},opponent:{shots:0,onTarget:0,corners:0,fouls:0,xg:0,yellow:0,red:0}},speed:1,paused:true,pauseReason:"kickoff",pendingTalk:null,halfTimeTalkDone:false,postMatchTalkDone:false,stoppageTime:null,heatmap:{},selectedHeatmapPlayer:lineupIds.includes(state.controlledId)?state.controlledId:lineupIds[0],visualTick:0,visualAction:{team:"ours",kind:"build",label:"开球准备",startedAt:Date.now()},narrativeSeed:Math.random()};
+    ensureMatchRuntime(state,state.activeMatch);
+    saveState(); render();
+  }
+
+  function chooseAiTactic(fixture) {
+    const fitness=state.squad.reduce((sum,player)=>sum+player.fitness,0)/Math.max(1,state.squad.length),profile=aiCoachProfile(state,state.clubId,clubById(state.clubId).coach||state.clubId),club=clubById(state.clubId),opponent=findClubByName(fixture.opponent),strengthEdge=club.prestige-(opponent?.prestige||78);
+    if(fitness<72)return "defensive";
+    if(strengthEdge>=7&&fixture.home&&profile.risk>.38)return "press";
+    if(strengthEdge<=-6)return profile.risk>.62?"counter":"defensive";
+    return profile.risk>.62?"press":profile.risk<.34?"counter":"balanced";
+  }
+
+  function registerControlledDecisionGoal(m,player) {
+    scoreForUs(m);addPlayerEvent(m,player,"goals",1.2);return player;
+  }
+
+  function resolvePlayerDecision(m,decision,event) {
+    const player=controlledPlayer(),resolution=decision.resolution,e=decision.effect;if(!player||!resolution)return {success:true,text:decision.text||decision.label};
+    const attribute=Number(player[resolution.skill]??player.overall??70),chance=clamp(resolution.chance+(attribute-70)*.004+(m.fitness-70)*.0015-Math.max(0,e.risk)*.004,0.24,.93),success=Math.random()<chance;
+    const playerMatchEvent=ensureMatchEvent(m.playerEvents,player.id),requestedRating=success?resolution.win:resolution.lose;
+    const ratingDelta=requestedRating>0?Math.min(requestedRating,Math.max(0,1.25-Number(playerMatchEvent.decisionRating||0))):requestedRating;
+    playerMatchEvent.decisionRating=Number((Number(playerMatchEvent.decisionRating||0)+ratingDelta).toFixed(2));
+    m.possession=clamp(m.possession+(success?e.possession:-Math.sign(e.possession)*Math.min(2,Math.abs(e.possession))),30,70);
+    m.fitness=clamp(m.fitness+e.fitness,30,100);
+    m.decisionBonus=clamp(m.decisionBonus+(success?e.bonus:Math.min(0,e.bonus-3)),-5,20);
+    m.decisionRisk=clamp((m.decisionRisk||0)+(success?e.risk:Math.max(2,Math.abs(e.risk)*.7)),-8,18);
+    adjustRating(m.liveRatings,player.id,ratingDelta);m.playerRating=Number(m.liveRatings[player.id]||m.playerRating);
+    const ours=m.stats.ours,opponent=m.stats.opponent,stat=resolution.stat;
+    let outcomeText=success?resolution.successText:resolution.failureText,scored=false,conceded=false;
+    if(["shot","dribbleShot"].includes(stat)){
+      const shotXg=stat==="dribbleShot" ? .32 : .17;ours.shots++;ours.xg=Number((ours.xg+shotXg).toFixed(2));m.shots=ours.shots;
+      if(success){ours.onTarget++;const goalChance=(stat==="dribbleShot" ? .31 : .19)+(Number(player.shooting||player.overall)-70)/250;if(Math.random()<goalChance){registerControlledDecisionGoal(m,player);scored=true;outcomeText=`进球！${player.name} 的选择直接改写了比分。`;}}
+    }else if(["pass","cross"].includes(stat)&&success&&Math.random()<.34){ours.shots++;ours.xg=Number((ours.xg+(stat==="cross" ? .12 : .16)).toFixed(2));if(Math.random()<.42)ours.onTarget++;m.shots=ours.shots;}
+    if(stat==="save"){
+      opponent.shots++;opponent.onTarget++;opponent.xg=Number((opponent.xg+(event?.threat||.2)).toFixed(2));
+      if(success)playerMatchEvent.saves++;
+      if(!success&&Math.random()<(event?.threat||.25)){const scorer=registerOpponentGoal(m);conceded=true;outcomeText=`${resolution.failureText} ${scorer.name} 抓住机会完成进球。`;}
+    }else if(!success&&["clear","tackle","intercept","distribution"].includes(stat)&&Math.random()<(event?.threat||.2)*.6){opponent.shots++;opponent.xg=Number((opponent.xg+.11).toFixed(2));if(Math.random()<.3)opponent.onTarget++;}
+    if(["tackle","intercept","clear"].includes(stat))recordDefensiveAction(m,false,player,({intercept:"interception",clear:"clearance"})[stat]||stat,success,0);
+    if(stat==="foul"){m.stats.ours.fouls++;if(!success&&Math.random()<.55){const playerEvent=m.playerEvents[player.id]||{};if(!playerEvent.yellow&&!playerEvent.red){addPlayerEvent(m,player,"yellow",-.25);outcomeText+=` ${player.name} 领到黄牌。`;}}}
+    const mark=ratingDelta>=0?`+${ratingDelta.toFixed(2)}`:ratingDelta.toFixed(2);
+    return {success,scored,conceded,text:`${event?.title||"关键场景"}：${outcomeText} 个人评分 ${mark}。`};
+  }
+
+  function applyDecision(type) {
+    const m=state.activeMatch; if(!m||m.finished)return;
+    if(state.role==="player"&&!(m.lineupIds||[]).includes(state.controlledId)){toast("你未进入本场比赛名单");return;}
+    const event=ensureDecisionEvent(m),decision=matchDecisions(m).find(item=>item.id===type);if(!decision||!event)return;
+    const e=decision.effect;
+    let resultText;
+    if(state.role==="coach"){
+      m.possession=clamp(m.possession+e.possession,30,70);m.fitness=clamp(m.fitness+e.fitness,30,100);m.decisionBonus=clamp(m.decisionBonus+e.bonus,-5,20);m.decisionRisk=clamp((m.decisionRisk||0)+e.risk,-8,18);m.tactical=clamp(m.tactical+e.tactical*.7,45,98);resultText=decision.text;
+    }else resultText=resolvePlayerDecision(m,decision,event).text;
+    m.lastDecisionMinute=m.minute;m.nextDecisionMinute=Math.min(88,m.minute+Math.round(rand(8,16)));m.decisionEvent=null;m.pauseReason=null;m.paused=false;m.commentary.push({minute:m.minute,text:resultText});saveState();render();
+  }
+
+  function performSubstitution(m,teamKey,outId,inId,reason="战术调整") {
+    const opponent=teamKey==="opponent",lineup=opponent?m.opponentLineupIds:m.lineupIds,bench=opponent?m.opponentBenchIds:m.benchIds;
+    const substitutions=m.substitutions.filter(item=>item.team===teamKey);if(substitutions.length>=5)return false;
+    const outIndex=lineup.indexOf(outId),inIndex=bench.indexOf(inId);if(outIndex<0||inIndex<0||outId===inId)return false;
+    const players=opponent?m.opponentPlayers:matchOurPlayers(m),outPlayer=players.find(player=>player.id===outId),inPlayer=players.find(player=>player.id===inId);if(!outPlayer||!inPlayer)return false;
+    lineup[outIndex]=inId;bench.splice(inIndex,1);
+    if(opponent){m.opponentRatings[inId]??=6;ensureMatchEvent(m.opponentEvents,inId);}
+    else{m.liveRatings[inId]??=6;ensureMatchEvent(m.playerEvents,inId);}
+    m.substitutions.push({team:teamKey,minute:m.minute,outId,inId,outName:outPlayer.name,inName:inPlayer.name,reason});
+    m.aiLastSubMinute||={ours:-20,opponent:-20};m.aiLastSubMinute[teamKey]=m.minute;
+    m.commentary.push({minute:m.minute,text:`${opponent?m.fixture.opponent:clubById(state.clubId).name} 换人：${inPlayer.name} 换下 ${outPlayer.name}（${reason}）。`});
+    return true;
+  }
+
+  function makeManualSubstitution() {
+    const m=state.activeMatch;if(!m||m.finished||state.role!=="coach")return;
+    const outId=document.getElementById("sub-out")?.value,inId=document.getElementById("sub-in")?.value;
+    const outPlayer=matchOurPlayers(m).find(player=>player.id===outId),inPlayer=matchOurPlayers(m).find(player=>player.id===inId);
+    if(!outPlayer||!inPlayer||(outPlayer.position==="GK")!==(inPlayer.position==="GK")){toast("门将只能与门将互换");return;}
+    if(!performSubstitution(m,"ours",outId,inId,"教练指令")){toast("无法完成这次换人");return;}
+    saveState();render();toast("换人已经生效");
+  }
+
+  function syncSubstitutionOptions() {
+    const out=document.getElementById("sub-out"),incoming=document.getElementById("sub-in");if(!out||!incoming)return;
+    const outPosition=out.selectedOptions[0]?.dataset.position;
+    [...incoming.options].forEach(option=>{option.disabled=(outPosition==="GK")!==(option.dataset.position==="GK");});
+    if(incoming.selectedOptions[0]?.disabled){const first=[...incoming.options].find(option=>!option.disabled);if(first)incoming.value=first.value;}
+  }
+
+  function matchScoreDifference(m,teamKey) {
+    const ours=m.fixture.home?m.home:m.away,theirs=m.fixture.home?m.away:m.home,difference=ours-theirs;
+    return teamKey==="ours"?difference:-difference;
+  }
+
+  function matchPlayerEnergy(player,m,teamKey) {
+    const entered=m.substitutions.find(item=>item.team===teamKey&&item.inId===player.id)?.minute??0,minutes=Math.max(0,m.minute-entered);
+    const roleDrain=player.position==="GK"?.035:["RB","LB","FB","RW","LW","WG","CM","MF"].includes(player.position)?.145:.105;
+    return clamp(Number(player.fitness||88)-minutes*roleDrain,32,100);
+  }
+
+  function aiSubstitutionRoleFit(inPlayer,outPlayer,mode) {
+    const incomingUnit=positionUnit(inPlayer.position),samePosition=inPlayer.position===outPlayer.position,sameUnit=incomingUnit===positionUnit(outPlayer.position);
+    if(mode==="attack")return (samePosition?8:sameUnit?4:0)+(incomingUnit==="attack"?14:incomingUnit==="midfield"?7:-8);
+    if(mode==="protect")return (samePosition?8:sameUnit?4:0)+(incomingUnit==="defence"?14:incomingUnit==="midfield"?6:-8);
+    return samePosition?13:sameUnit?7:-15;
+  }
+
+  function chooseAiSubstitution(m,teamKey,context={}) {
+    const opponent=teamKey==="opponent",lineup=opponent?m.opponentLineupIds:m.lineupIds,bench=opponent?m.opponentBenchIds:m.benchIds,players=opponent?m.opponentPlayers:matchOurPlayers(m),ratings=opponent?m.opponentRatings:m.liveRatings,events=opponent?m.opponentEvents:m.playerEvents;
+    if(!lineup.length||!bench.length)return false;
+    const profile=m.aiCoachProfiles?.[teamKey]||aiCoachProfile(state,opponent?(findClubByName(m.fixture.opponent)?.id||m.fixture.opponent):state.clubId,opponent?m.fixture.opponent:null),difference=matchScoreDifference(m,teamKey),minute=m.minute;
+    const mode=difference<0&&minute>=52?"attack":difference>0&&minute>=68?"protect":"balance";
+    const substitutionIds=new Set(m.substitutions.filter(item=>item.team===teamKey).flatMap(item=>[item.inId,item.outId]));
+    const active=lineup.map(id=>players.find(player=>player.id===id)).filter(Boolean).filter(player=>player.position!=="GK");
+    const eligibleOut=active.filter(player=>{
+      const entrance=m.substitutions.find(item=>item.team===teamKey&&item.inId===player.id);
+      if(!entrance)return true;
+      const minutesSinceEntrance=minute-entrance.minute,emergency=Boolean(player.injured||player.matchInjured)||Number(events[player.id]?.red||0)>0||matchPlayerEnergy(player,m,teamKey)<42;
+      return emergency||minutesSinceEntrance>=35&&Number(ratings[player.id]||6)<5.25;
+    });
+    if(!eligibleOut.length)return false;
+    const outgoing=eligibleOut.map(player=>{
+      const event=events[player.id]||{},energy=matchPlayerEnergy(player,m,teamKey),rating=Number(ratings[player.id]||6),unit=positionUnit(player.position),injured=Boolean(player.injured||player.matchInjured);
+      let urgency=(injured?70:0)+(72-energy)*.18+(6.25-rating)*4+(event.yellow?1.8:0)+(event.red?30:0)+(event.mistakes||0)*4;
+      if(mode==="attack")urgency+=unit==="defence"?2.3:unit==="attack"&&rating>=6.7?-2.5:0;
+      if(mode==="protect")urgency+=unit==="attack"?2.2:unit==="defence"&&rating>=6.7?-2.5:0;
+      if(substitutionIds.has(player.id))urgency-=18;
+      return {player,energy,rating,event,injured,urgency};
+    }).sort((a,b)=>b.urgency-a.urgency);
+    const out=outgoing[0];if(!out)return false;
+    const available=bench.map(id=>players.find(player=>player.id===id)).filter(Boolean).filter(player=>player.position!=="GK");
+    const incoming=available.map(player=>{
+      const fit=aiSubstitutionRoleFit(player,out.player,mode),energy=Number(player.fitness||88),growth=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
+      return {player,score:fit+Number(player.overall||68)*.32+energy*.12+(player.age<=22?profile.youthTrust*growth*.16:0)};
+    }).filter(item=>item.score>(context.forced?10:20)).sort((a,b)=>b.score-a.score)[0];
+    if(!incoming)return false;
+    const upgrade=incoming.score-(Number(out.player.overall||68)*.32+out.energy*.12),urgencyThreshold=minute>=82?-.5:mode!=="balance"&&minute>=65?.8:2.5;
+    if(out.urgency+upgrade*.25<urgencyThreshold&&!context.forced)return false;
+    const reason=out.injured?"伤病被迫调整":out.event.red?"红牌后调整阵型":out.event.yellow&&minute>=55?"规避第二张黄牌":out.energy<62?"体能下降":mode==="attack"?"加强进攻":mode==="protect"?"稳固防守":out.rating<5.8?"改善场上表现":"保持比赛强度";
+    return performSubstitution(m,teamKey,out.player.id,incoming.player.id,reason);
+  }
+
+  function ensureAiSubstitutionPlan(m,teamKey) {
+    m.aiSubstitutionPlans||={};
+    if(m.aiSubstitutionPlans[teamKey])return m.aiSubstitutionPlans[teamKey];
+    const profile=m.aiCoachProfiles?.[teamKey]||coachDecisionProfile(teamKey),dense=teamKey==="ours"&&Boolean(m.denseSchedule);
+    const firstMinute=clamp(Math.round(57+rand(-7,7)-profile.substitutionActivity*4-(dense?3:0)),48,64);
+    return m.aiSubstitutionPlans[teamKey]={nextMinute:firstMinute,appetite:rand(-4,5),createdMinute:m.minute,lastReason:"观察比赛"};
+  }
+
+  function aiSubstitutionSignals(m,teamKey) {
+    const opponent=teamKey==="opponent",ids=opponent?m.opponentLineupIds:m.lineupIds,players=opponent?m.opponentPlayers:matchOurPlayers(m),ratings=opponent?m.opponentRatings:m.liveRatings,events=opponent?m.opponentEvents:m.playerEvents;
+    const active=ids.map(id=>players.find(player=>player.id===id)).filter(player=>player&&player.position!=="GK");
+    const energies=active.map(player=>matchPlayerEnergy(player,m,teamKey)),criticalEnergy=energies.filter(value=>value<56).length,tired=energies.filter(value=>value<64).length;
+    const cardRisk=active.filter(player=>Boolean(events[player.id]?.yellow)&&matchPlayerEnergy(player,m,teamKey)<76).length,poor=active.filter(player=>Number(ratings[player.id]||6)<5.55).length,injuryRisk=active.filter(player=>Boolean(player.injured||player.matchInjured)).length;
+    return {criticalEnergy,tired,cardRisk,poor,injuryRisk,difference:matchScoreDifference(m,teamKey)};
+  }
+
+  function aiSubstitutionDemand(m,teamKey,count,plan,profile,signals) {
+    const opponent=teamKey==="opponent",bench=opponent?m.opponentBenchIds:m.benchIds,dense=teamKey==="ours"&&Boolean(m.denseSchedule);
+    const elapsed=clamp((m.minute-50)/37,0,1),losing=signals.difference<0,leading=signals.difference>0;
+    let demand=elapsed*34+profile.substitutionActivity*13+plan.appetite+(dense?4:0);
+    demand+=signals.tired*1.35+signals.criticalEnergy*5.5+signals.cardRisk*7+signals.poor*2.3;
+    if(losing&&m.minute>=55)demand+=6+Math.min(6,Math.abs(signals.difference)*2);
+    if(leading&&m.minute>=72)demand+=2.5;
+    if(m.minute>=82)demand+=2;if(m.minute>=88)demand+=2.5;
+    const thresholds=[9,18,27,35,43],desired=thresholds.filter(value=>demand>=value).length;
+    const emergency=signals.injuryRisk>0||signals.cardRisk>0||signals.criticalEnergy>0||signals.poor>=2&&m.minute>=54;
+    return Math.min(5,(bench||[]).length,emergency?Math.max(count+1,desired):desired);
+  }
+
+  function maybeAutoSubstitutions(m) {
+    const consider=teamKey=>{
+      const count=m.substitutions.filter(item=>item.team===teamKey).length;if(count>=5||m.minute<48||m.minute>90)return;
+      const plan=ensureAiSubstitutionPlan(m,teamKey),profile=m.aiCoachProfiles?.[teamKey]||coachDecisionProfile(teamKey),signals=aiSubstitutionSignals(m,teamKey),desired=aiSubstitutionDemand(m,teamKey,count,plan,profile,signals),remaining=Math.max(0,desired-count);if(!remaining)return;
+      const emergency=signals.injuryRisk>0||signals.cardRisk>0||signals.criticalEnergy>0||signals.poor>=2&&m.minute>=54,urgentScore=signals.difference<0&&m.minute>=55,protectLead=signals.difference>0&&m.minute>=68;
+      if(urgentScore)plan.nextMinute=Math.min(plan.nextMinute,m.minute+Math.round(rand(0,5)));
+      if(emergency)plan.nextMinute=Math.min(plan.nextMinute,m.minute);
+      if(m.minute<plan.nextMinute&&!emergency)return;
+      let batch=1;
+      if(remaining>=2&&m.minute>=70&&(signals.difference<=-2||signals.criticalEnergy>=2||signals.cardRisk>=2)&&Math.random()<.58)batch=2;
+      let completed=0;
+      while(completed<batch&&chooseAiSubstitution(m,teamKey,{forced:true})){completed++;}
+      if(!completed){plan.nextMinute=m.minute+2;return;}
+      const stateDelay=urgentScore?-2:protectLead?2:signals.tired>=3?-1:0,baseDelay=rand(5,11)+(1-profile.substitutionActivity)*3+stateDelay;
+      plan.nextMinute=m.minute>=88?90:clamp(Math.round(m.minute+baseDelay),m.minute+2,90);plan.lastReason=emergency?"球员状态":urgentScore?"追赶比分":protectLead?"保护领先":"比赛节奏";
+    };
+    consider("opponent");if(state.role==="player"||m.skipMode)consider("ours");
+  }
+
+  function maybeAiTacticalAdjustments(m) {
+    const adjust=teamKey=>{
+      if(m.minute<18||m.minute>90)return;
+      m.aiLastTacticalMinute||={ours:-20,opponent:-20};m.aiNextTacticalMinute||={ours:Math.round(rand(24,38)),opponent:Math.round(rand(24,38))};
+      const difference=matchScoreDifference(m,teamKey),profile=m.aiCoachProfiles?.[teamKey]||coachDecisionProfile(teamKey),late=m.minute>=70,opponent=teamKey==="opponent",ourStats=m.stats[teamKey],theirStats=m.stats[opponent?"ours":"opponent"],teamPossession=opponent?100-m.possession:m.possession;
+      const teamDismissals=(m.dismissals||[]).filter(item=>item.team===teamKey).length,theirDismissals=(m.dismissals||[]).filter(item=>item.team!==teamKey).length,xgEdge=Number(ourStats.xg||0)-Number(theirStats.xg||0),urgent=teamDismissals!==theirDismissals||m.minute>=58&&Math.abs(difference)>=2||m.minute>=74&&difference!==0;
+      if(m.minute<Number(m.aiNextTacticalMinute[teamKey]||30)&&!urgent)return;
+      if(m.minute-Number(m.aiLastTacticalMinute[teamKey]??-20)<(urgent?7:11))return;
+      m.aiNextTacticalMinute[teamKey]=m.minute+Math.round(rand(urgent?7:11,urgent?13:20));
+      let key="balanced",label="保持平衡",possession=0,bonus=0,risk=0;
+      if(teamDismissals>theirDismissals){key="counter";label="少一人后压缩阵型寻找反击";possession=-2;bonus=1;risk=-3;}
+      else if(theirDismissals>teamDismissals&&difference<=0){key="push";label="利用人数优势扩大进攻宽度";possession=2;bonus=2;risk=2;}
+      else if(difference<0&&(late||profile.risk>.56||xgEdge<-.55)){key="press";label=difference<=-2?"增加前场人数全力追分":"提高压迫强度";possession=2;bonus=3;risk=4;}
+      else if(difference>0&&late){key="protect";label="降低防线风险保护领先";possession=-1;bonus=-1;risk=-4;}
+      else if(difference===0&&late&&profile.risk>.58){key="push";label="主动争取制胜球";possession=1;bonus=2;risk=3;}
+      else if(teamPossession<43&&xgEdge<-.25){key=profile.risk>.5?"press":"counter";label=key==="press"?"前移阵线争夺中场":"减少无效控球转向快速反击";possession=key==="press"?2:-1;bonus=2;risk=key==="press"?3:-2;}
+      else if(profile.risk<.34){key="counter";label="降低节奏等待反击";possession=-1;bonus=1;risk=-2;}
+      m.aiTacticalPlans||={ours:"balanced",opponent:"balanced"};if(m.aiTacticalPlans[teamKey]===key)return;
+      const direction=teamKey==="ours"?1:-1;m.possession=clamp(m.possession+possession*direction,30,70);m.decisionBonus=clamp(m.decisionBonus+bonus*direction,-8,20);m.decisionRisk=clamp((m.decisionRisk||0)+risk,-12,18);
+      m.aiLastTacticalMinute[teamKey]=m.minute;m.aiTacticalPlans[teamKey]=key;
+      m.commentary.push({minute:m.minute,text:`${teamKey==="ours"?clubById(state.clubId).name:m.fixture.opponent} 教练组作出调整：${label}。`});
+    };
+    adjust("opponent");if(state.role==="player"||m.skipMode)adjust("ours");
+  }
+
+  function defensiveRoleWeight(position) {
+    if(["CB","DF"].includes(position))return 6;
+    if(["RB","LB","FB","DM"].includes(position))return 4.5;
+    if(["CM","MF"].includes(position))return 2.4;
+    if(position==="GK")return .35;
+    return 1;
+  }
+
+  function defensiveAbility(player) {
+    return matchAttribute(player,"defending");
+  }
+
+  function matchAttribute(player,key) {
+    const modifiers={
+      pace:{GK:-18,CB:-3,DF:-3,RB:6,LB:6,FB:6,DM:-2,CM:2,MF:2,AM:5,RW:9,LW:9,WG:9,ST:5,CF:5},
+      shooting:{GK:-28,CB:-16,DF:-16,RB:-9,LB:-9,FB:-9,DM:-7,CM:-2,MF:-2,AM:5,RW:7,LW:7,WG:7,ST:12,CF:12},
+      passing:{GK:-2,CB:-3,DF:-3,RB:2,LB:2,FB:2,DM:5,CM:8,MF:8,AM:9,RW:4,LW:4,WG:4,ST:-4,CF:-3},
+      dribbling:{GK:-22,CB:-9,DF:-9,RB:3,LB:3,FB:3,DM:-2,CM:3,MF:3,AM:9,RW:11,LW:11,WG:11,ST:4,CF:5},
+      defending:{GK:-12,CB:11,DF:11,RB:7,LB:7,FB:7,DM:9,CM:3,MF:3,AM:-9,RW:-13,LW:-13,WG:-13,ST:-16,CF:-15},
+      physical:{GK:1,CB:8,DF:8,RB:3,LB:3,FB:3,DM:5,CM:3,MF:3,AM:-1,RW:0,LW:0,WG:0,ST:6,CF:5},
+      goalkeeping:{GK:8}
+    };
+    const directKey=key==="goalkeeping"?null:key,direct=directKey?Number(player[directKey]):NaN;
+    if(Number.isFinite(direct)&&direct>0)return clamp(direct,1,99);
+    const modifier=modifiers[key]?.[player.position]||0;
+    if(key==="goalkeeping"){
+      if(player.position!=="GK")return clamp(Number(player.overall||55)-30,1,60);
+      const attributes=["reflexes","handling","oneOnOnes","positioning","concentration"].map(attribute=>Number(player[attribute])).filter(value=>Number.isFinite(value)&&value>0);
+      if(attributes.length)return clamp(attributes.reduce((sum,value)=>sum+value,0)/attributes.length,1,99);
+    }
+    return profileAttribute(player,key,modifier,directKey);
+  }
+
+  function effectiveMatchAttribute(player,key,m,teamKey) {
+    const base=matchAttribute(player,key),energy=matchPlayerEnergy(player,m,teamKey),morale=Number(player.morale??75);
+    return clamp(base+(energy-78)*.075+(morale-75)*.025,25,99);
+  }
+
+  function pickDefensivePlayer(players) {
+    const weighted=players.map(player=>({player,weight:defensiveRoleWeight(player.position)*(1+(defensiveAbility(player)-65)/80)}));
+    const total=weighted.reduce((sum,item)=>sum+item.weight,0);let cursor=Math.random()*total;
+    for(const item of weighted){cursor-=item.weight;if(cursor<=0)return item.player;}
+    return weighted.at(-1)?.player;
+  }
+
+  function recordDefensiveAction(m,opponent,player,action,success,ratingDelta) {
+    if(!player)return;
+    const events=opponent?m.opponentEvents:m.playerEvents,ratings=opponent?m.opponentRatings:m.liveRatings,event=ensureMatchEvent(events,player.id);
+    if(action==="tackle"){event.tackles++;event.duels++;if(success){event.tacklesWon++;event.duelsWon++;}}
+    else if(action==="duel"){event.duels++;if(success)event.duelsWon++;}
+    else if(success&&action==="interception")event.interceptions++;
+    else if(success&&action==="clearance")event.clearances++;
+    else if(success&&action==="block")event.blocks++;
+    const requested=Number(ratingDelta)||0,current=Number(event.defensiveRating||0),applied=requested>0?Math.min(requested,Math.max(0,1.7-current)):requested;
+    event.defensiveRating=Number((current+applied).toFixed(2));event.ratingDelta=Number((Number(event.ratingDelta||0)+applied).toFixed(2));
+    adjustRating(ratings,player.id,applied);
+    if(!opponent&&player.id===state.controlledId)m.playerRating=Number(m.liveRatings[player.id]||m.playerRating);
+  }
+
+  function simulateDefensiveActions(m,opponent) {
+    const ids=opponent?m.opponentLineupIds:m.lineupIds,players=opponent?m.opponentPlayers:matchOurPlayers(m);
+    const active=ids.map(id=>players.find(player=>player.id===id)).filter(Boolean);if(!active.length)return;
+    const pressure=opponent?m.possession:100-m.possession,attempts=1+(Math.random()<clamp((pressure-38)/100,.08,.34)?1:0);
+    for(let index=0;index<attempts;index++){
+      const player=pickDefensivePlayer(active);if(!player)continue;
+      const roll=Math.random(),action=roll<.31?"tackle":roll<.54?"interception":roll<.74?"duel":roll<.91?"clearance":"block";
+      const teamKey=opponent?"opponent":"ours",ability=effectiveMatchAttribute(player,"defending",m,teamKey),physical=effectiveMatchAttribute(player,"physical",m,teamKey),fitness=matchPlayerEnergy(player,m,teamKey);
+      const successChance=clamp(.52+(ability-68)*.006+(physical-68)*.002+(fitness-70)*.0015, .4,.87),success=Math.random()<successChance;
+      const reward=({tackle:.085,interception:.075,duel:.055,clearance:.06,block:.12})[action]+Math.max(0,pressure-50)/700;
+      recordDefensiveAction(m,opponent,player,action,success,success?reward:["tackle","duel"].includes(action)?-.025:-.012);
+    }
+  }
+
+  function registerGoalkeeperSave(m,opponent,shotXg=.12) {
+    const ids=opponent?m.opponentLineupIds:m.lineupIds,players=opponent?m.opponentPlayers:matchOurPlayers(m);
+    const keeper=ids.map(id=>players.find(player=>player.id===id)).find(player=>player?.position==="GK");if(!keeper)return null;
+    const event=ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,keeper.id);event.saves++;
+    recordDefensiveAction(m,opponent,keeper,"save",true,clamp(.09+Number(shotXg)*.18,.1,.18));return keeper;
+  }
+
+  function sideMinutesPlayed(m,playerId,opponent=false) {
+    const team=opponent?"opponent":"ours",initial=opponent?m.opponentInitialLineupIds:m.initialLineupIds;
+    const entered=(initial||[]).includes(playerId)?0:m.substitutions.find(item=>item.team===team&&item.inId===playerId)?.minute;
+    if(entered==null)return 0;const left=m.substitutions.find(item=>item.team===team&&item.outId===playerId)?.minute??m.dismissals?.find(item=>item.team===team&&item.playerId===playerId)?.minute??90;return clamp(left-entered,0,90);
+  }
+
+  function applyCleanSheetBonuses(m) {
+    if(m.cleanSheetBonusesApplied)return;m.cleanSheetBonusesApplied=true;
+    const oursConceded=m.fixture.home?m.away:m.home,opponentConceded=m.fixture.home?m.home:m.away;
+    const apply=(opponent,conceded)=>{
+      if(conceded)return;
+      const players=opponent?m.opponentPlayers:matchOurPlayers(m),initial=opponent?m.opponentInitialLineupIds:m.initialLineupIds,team=opponent?"opponent":"ours";
+      const ids=[...new Set([...(initial||[]),...m.substitutions.filter(item=>item.team===team).map(item=>item.inId)])];
+      ids.forEach(id=>{
+        const player=players.find(item=>item.id===id),minutes=sideMinutesPlayed(m,id,opponent);if(!player||minutes<60)return;
+        const bonus=player.position==="GK" ? .35 : ["CB","DF","RB","LB","FB"].includes(player.position) ? .28 : player.position==="DM" ? .2 : ["CM","MF"].includes(player.position) ? .08 : 0;
+        if(!bonus)return;const event=ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,id);event.cleanSheets=1;recordDefensiveAction(m,opponent,player,"cleanSheet",true,bonus);
+      });
+    };
+    apply(false,oursConceded);apply(true,opponentConceded);
+  }
+
+  function adjustRating(map,id,delta) { if(id!=null)map[id]=Number(clamp(Number(map[id]||6)+delta,1,10).toFixed(2)); }
+
+  function contributionProfile(position) {
+    if(position==="GK")return [{stat:"progressivePasses",weight:4,reward:.055,skill:"passing"},{stat:"recoveries",weight:1,reward:.045,skill:"overall"}];
+    if(["CB","DF","RB","LB","FB"].includes(position))return [{stat:"recoveries",weight:4,reward:.055,skill:"defending"},{stat:"progressivePasses",weight:3,reward:.045,skill:"passing"},{stat:"pressuresWon",weight:2,reward:.045,skill:"physical"}];
+    if(position==="DM")return [{stat:"recoveries",weight:4,reward:.06,skill:"defending"},{stat:"progressivePasses",weight:4,reward:.05,skill:"passing"},{stat:"keyPasses",weight:1,reward:.075,skill:"passing"}];
+    if(["CM","MF"].includes(position))return [{stat:"progressivePasses",weight:4,reward:.055,skill:"passing"},{stat:"keyPasses",weight:3,reward:.08,skill:"passing"},{stat:"chancesCreated",weight:2,reward:.1,skill:"passing"},{stat:"recoveries",weight:2,reward:.05,skill:"defending"}];
+    if(["AM","RW","LW","WG"].includes(position))return [{stat:"successfulDribbles",weight:4,reward:.065,skill:"dribbling"},{stat:"keyPasses",weight:3,reward:.08,skill:"passing"},{stat:"chancesCreated",weight:3,reward:.1,skill:"passing"},{stat:"pressuresWon",weight:1,reward:.045,skill:"physical"}];
+    return [{stat:"pressuresWon",weight:3,reward:.05,skill:"physical"},{stat:"chancesCreated",weight:2,reward:.09,skill:"passing"},{stat:"successfulDribbles",weight:2,reward:.06,skill:"dribbling"},{stat:"keyPasses",weight:1,reward:.075,skill:"passing"}];
+  }
+
+  function weightedPick(items,weightOf) {
+    const weighted=items.map(item=>({item,weight:Math.max(.01,Number(weightOf(item))||0)})),total=weighted.reduce((sum,entry)=>sum+entry.weight,0);
+    let cursor=Math.random()*total;
+    for(const entry of weighted){cursor-=entry.weight;if(cursor<=0)return entry.item;}
+    return weighted.at(-1)?.item;
+  }
+
+  function recordPlayerContribution(m,opponent,player,action,success) {
+    const events=opponent?m.opponentEvents:m.playerEvents,ratings=opponent?m.opponentRatings:m.liveRatings,event=ensureMatchEvent(events,player.id);
+    const teamKey=opponent?"opponent":"ours",ability=action.skill==="overall"?Number(player.overall||70):effectiveMatchAttribute(player,action.skill,m,teamKey),requested=success?action.reward:-.012,current=Number(event.impactRating||0);
+    if(success)event[action.stat]=(event[action.stat]||0)+1;
+    const applied=requested>0?Math.min(requested,Math.max(0,1.05-current)):requested;
+    event.impactRating=Number((current+applied).toFixed(2));event.ratingDelta=Number((Number(event.ratingDelta||0)+applied).toFixed(2));
+    adjustRating(ratings,player.id,applied);
+    if(!opponent&&player.id===state.controlledId)m.playerRating=Number(m.liveRatings[player.id]||m.playerRating);
+    return ability;
+  }
+
+  function simulatePlayerContributions(m,opponent) {
+    const ids=opponent?m.opponentLineupIds:m.lineupIds,players=opponent?m.opponentPlayers:matchOurPlayers(m),events=opponent?m.opponentEvents:m.playerEvents;
+    const active=ids.map(id=>players.find(player=>player.id===id)).filter(Boolean);if(!active.length)return;
+    const possession=opponent?100-m.possession:m.possession,teamKey=opponent?"opponent":"ours",minutesFactor=clamp(.75+(possession-50)*.012,.48,1.35);
+    active.forEach(player=>{
+      const event=ensureMatchEvent(events,player.id),passing=effectiveMatchAttribute(player,"passing",m,teamKey),roleVolume=player.position==="GK"?1.15:["CB","DF","DM","CM","MF"].includes(player.position)?2.35:["RB","LB","FB","AM"].includes(player.position)?1.8:1.25,attempted=Math.max(1,Math.round(roleVolume*minutesFactor+rand(0,1.6))),accuracy=clamp(.69+(passing-60)*.0048+(possession-50)*.0015,player.position==="GK"?.62:.68,.96),completed=Array.from({length:attempted}).filter(()=>Math.random()<accuracy).length;
+      event.passes+=attempted;event.accuratePasses+=completed;event.possessionLost+=attempted-completed;
+    });
+    const attempts=1+(Math.random()<.72?1:0)+(Math.random()<.16?1:0);
+    for(let index=0;index<attempts;index++){
+      const player=weightedPick(active,item=>{
+        const event=ensureMatchEvent(events,item.id),profile=contributionProfile(item.position),quality=profile.reduce((sum,action)=>sum+matchAttribute(item,action.skill),0)/profile.length,roleBoost=["CM","MF","AM","RW","LW","WG","ST","CF"].includes(item.position)?1.14:1,controlledBoost=!opponent&&state.role==="player"&&item.id===state.controlledId?1.08:1;
+        return controlledBoost*roleBoost*Math.pow(clamp(quality/70,.55,1.45),2)*(1+Math.min(.35,Number(event.impactRating||0)*.25));
+      });
+      if(!player)continue;
+      const profiles=contributionProfile(player.position),action=weightedPick(profiles,item=>item.weight);
+      const ability=action.skill==="overall"?Number(player.overall||70):effectiveMatchAttribute(player,action.skill,m,teamKey),fitness=matchPlayerEnergy(player,m,teamKey);
+      const chance=clamp(.55+(ability-68)*.006+(fitness-72)*.0015+(possession-50)*.002,.4,.88);
+      const success=Math.random()<chance,event=ensureMatchEvent(events,player.id);if(action.stat==="successfulDribbles")event.dribblesAttempted++;
+      if(!success&&["successfulDribbles","progressivePasses","keyPasses"].includes(action.stat))event.possessionLost++;
+      recordPlayerContribution(m,opponent,player,action,success);
+    }
+  }
+
+  function updateLiveRatings(m) {
+    m.lineupIds.forEach(id=>adjustRating(m.liveRatings,id,rand(-.025,.035)+(m.possession-50)/7000));
+    m.opponentLineupIds.forEach(id=>adjustRating(m.opponentRatings,id,rand(-.025,.035)+(50-m.possession)/7000));
+    if(state.role==="player"&&(m.lineupIds||[]).includes(state.controlledId))m.playerRating=Number(m.liveRatings[state.controlledId]||m.playerRating);
+  }
+
+  function activeMatchPlayers(m,teamKey) {
+    const opponent=teamKey==="opponent",ids=opponent?m.opponentLineupIds:m.lineupIds,players=opponent?m.opponentPlayers:matchOurPlayers(m);
+    return ids.map(id=>players.find(player=>player.id===id)).filter(Boolean);
+  }
+
+  function attackRoleWeight(position,creator=false) {
+    if(creator)return ({GK:.08,CB:.42,DF:.42,RB:.92,LB:.92,FB:.92,DM:1.05,CM:1.8,MF:1.8,AM:2.35,RW:2.05,LW:2.05,WG:2.05,ST:1.15,CF:1.35})[position]||1;
+    return ({GK:.02,CB:.22,DF:.22,RB:.5,LB:.5,FB:.5,DM:.55,CM:.8,MF:.8,AM:1.55,RW:2.05,LW:2.05,WG:2.05,ST:3.1,CF:2.8})[position]||1;
+  }
+
+  function teamMatchQuality(m,teamKey,mode) {
+    const players=activeMatchPlayers(m,teamKey);if(!players.length)return 60;
+    const values=players.map(player=>{
+      if(mode==="attack")return effectiveMatchAttribute(player,"passing",m,teamKey)*.42+effectiveMatchAttribute(player,"dribbling",m,teamKey)*.28+effectiveMatchAttribute(player,"pace",m,teamKey)*.15+effectiveMatchAttribute(player,"shooting",m,teamKey)*.15;
+      if(player.position==="GK")return effectiveMatchAttribute(player,"goalkeeping",m,teamKey);
+      return effectiveMatchAttribute(player,"defending",m,teamKey)*.68+effectiveMatchAttribute(player,"physical",m,teamKey)*.32;
+    }).sort((a,b)=>b-a);
+    const relevant=mode==="attack"?values.slice(0,7):values.slice(0,8);
+    return relevant.reduce((sum,value)=>sum+value,0)/Math.max(1,relevant.length);
+  }
+
+  function teamOverallStrength(m,teamKey) {
+    const players=activeMatchPlayers(m,teamKey),club=teamKey==="ours"?(m.fixture.international?{prestige:NATIONAL_TEAM_STRENGTH[m.fixture.teamName]||74}:clubById(state.clubId)):(m.fixture.international?{prestige:m.fixture.opponentStrength||74}:findClubByName(m.fixture.opponent));
+    if(!players.length)return Number(club?.prestige||65);
+    const ability=players.reduce((sum,player)=>sum+Number(player.overall||65),0)/players.length;
+    const energy=players.reduce((sum,player)=>sum+matchPlayerEnergy(player,m,teamKey),0)/players.length;
+    const numbers=Math.min(0,players.length-11)*3.5;
+    return ability*.78+Number(club?.prestige||ability)*.22+(energy-78)*.045+numbers;
+  }
+
+  function matchStrengthEdge(m,teamKey) {
+    const other=teamKey==="ours"?"opponent":"ours";
+    return teamOverallStrength(m,teamKey)-teamOverallStrength(m,other);
+  }
+
+  function selectAttackPlayer(m,teamKey,creator=false,exclude=null) {
+    const candidates=activeMatchPlayers(m,teamKey).filter(player=>player.position!=="GK"&&player!==exclude);if(!candidates.length)return null;
+    return weightedPick(candidates,player=>{
+      const passing=effectiveMatchAttribute(player,"passing",m,teamKey),dribbling=effectiveMatchAttribute(player,"dribbling",m,teamKey),pace=effectiveMatchAttribute(player,"pace",m,teamKey),shooting=effectiveMatchAttribute(player,"shooting",m,teamKey);
+      const skill=creator?passing*.6+dribbling*.28+pace*.12:shooting*.68+pace*.18+dribbling*.14;
+      const opponent=teamKey==="opponent",event=ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,player.id),usage=creator?Number(event.keyPasses||0):Number(event.shots||0),usageBalance=1/(1+usage*(creator ? .075 : .18)),controlledBoost=teamKey==="ours"&&state.role==="player"&&player.id===state.controlledId?1.08:1;
+      return usageBalance*controlledBoost*attackRoleWeight(player.position,creator)*Math.pow(clamp(skill/70,.45,1.5),2.35);
+    });
+  }
+
+  function recordShot(m,teamKey,shooter,onTarget) {
+    if(!shooter)return;const opponent=teamKey==="opponent",events=opponent?m.opponentEvents:m.playerEvents,ratings=opponent?m.opponentRatings:m.liveRatings,event=ensureMatchEvent(events,shooter.id);
+    event.shots++;if(onTarget)event.onTarget++;
+    const delta=onTarget?.035:-.012;event.ratingDelta=Number((Number(event.ratingDelta||0)+delta).toFixed(2));adjustRating(ratings,shooter.id,delta);
+    if(!opponent&&shooter.id===state.controlledId)m.playerRating=Number(m.liveRatings[shooter.id]||m.playerRating);
+  }
+
+  function recordChanceCreation(m,teamKey,creator,shooter) {
+    if(!creator||creator===shooter)return;const opponent=teamKey==="opponent",events=opponent?m.opponentEvents:m.playerEvents,ratings=opponent?m.opponentRatings:m.liveRatings,event=ensureMatchEvent(events,creator.id),passing=effectiveMatchAttribute(creator,"passing",m,teamKey);
+    event.keyPasses++;if(Math.random()<clamp(.34+(passing-65)*.009,.28,.78))event.chancesCreated++;
+    const delta=.055;event.ratingDelta=Number((Number(event.ratingDelta||0)+delta).toFixed(2));adjustRating(ratings,creator.id,delta);
+    if(!opponent&&creator.id===state.controlledId)m.playerRating=Number(m.liveRatings[creator.id]||m.playerRating);
+  }
+
+  function simulateTeamAttack(m,teamKey) {
+    const opponent=teamKey==="opponent",possession=opponent?100-m.possession:m.possession,attack=teamMatchQuality(m,teamKey,"attack"),defence=teamMatchQuality(m,opponent?"ours":"opponent","defence"),strengthEdge=matchStrengthEdge(m,teamKey),dominance=Math.sign(strengthEdge)*Math.pow(Math.abs(strengthEdge)/10,1.25),plan=m.aiTacticalPlans?.[teamKey]||"balanced",planModifier=({press:.012,push:.02,counter:-.004,protect:-.028,balanced:0})[plan]||0,risk=teamKey==="ours"?Number(m.decisionRisk||0):-Number(m.decisionRisk||0);
+    const chance=clamp(.118+(possession-50)*.0016+(attack-defence)*.0025+strengthEdge*.0025+dominance*.008+planModifier+risk*.0012,.035,.29);if(Math.random()>=chance)return false;
+    const creator=selectAttackPlayer(m,teamKey,true),shooter=selectAttackPlayer(m,teamKey,false);if(!shooter)return false;
+    const shooterSkill=effectiveMatchAttribute(shooter,"shooting",m,teamKey),creatorSkill=creator?effectiveMatchAttribute(creator,"passing",m,teamKey):attack,pace=effectiveMatchAttribute(shooter,"pace",m,teamKey),defencePressure=defence-70;
+    const xg=clamp(rand(.025,.16)+(shooterSkill-70)*.0015+(creatorSkill-70)*.0008+(pace-70)*.0004-defencePressure*.001+strengthEdge*.0014+Math.max(0,dominance)*.006,.015,.48),stats=m.stats[teamKey];stats.shots++;stats.xg=Number((stats.xg+xg).toFixed(2));if(teamKey==="ours")m.shots=stats.shots;
+    const targetChance=clamp(.29+(shooterSkill-68)*.0045+xg*.35-(defence-70)*.0012,.2,.6),onTarget=Math.random()<targetChance;recordShot(m,teamKey,shooter,onTarget);recordChanceCreation(m,teamKey,creator,shooter);
+    if(creator&&["AM","RW","LW","WG"].includes(creator.position)&&Math.random()<clamp((effectiveMatchAttribute(creator,"dribbling",m,teamKey)-45)/100,.18,.56)){
+      const event=ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,creator.id);event.successfulDribbles++;
+    }
+    if(!onTarget){if(xg>=.24)ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,shooter.id).bigChancesMissed++;const corner=Math.random()<clamp(.2+(defence-65)*.003,.18,.38);if(corner)stats.corners++;setMatchVisualAction(m,teamKey,"shot",`${shooter.name} 完成射门`);const missTemplates=corner?[`${shooter.name} 的射门被后卫封堵后出了底线。`,`${creator&&creator!==shooter?`${creator.name} 送出传球，`:""}${shooter.name} 起脚，防守球员伸腿将球挡出。`,`${shooter.name} 在禁区边缘尝试远射，皮球折射出底线。`]:[`${creator&&creator!==shooter?`${creator.name} 送出传球，`:""}${shooter.name} 的射门稍稍偏出。`,`${shooter.name} 在防守压力下起脚，皮球高出横梁。`,`${shooter.name} 抢到落点，但仓促攻门没有压住。`,`${shooter.name} 从肋部内切后低射，皮球擦柱而出。`];m.commentary.push({minute:m.minute,text:missTemplates[Math.floor(rand(0,missTemplates.length))]});return true;}
+    stats.onTarget++;const defendingKey=opponent?"ours":"opponent",keeper=activeMatchPlayers(m,defendingKey).find(player=>player.position==="GK"),keeperSkill=keeper?effectiveMatchAttribute(keeper,"goalkeeping",m,defendingKey):60,finishingEdge=clamp(1+(shooterSkill-keeperSkill)*.008+strengthEdge*.008,.58,1.45),goalChance=clamp(xg*finishingEdge,.015,.62),goal=Math.random()<clamp(goalChance/targetChance,.04,.78);
+    if(goal){const scorer=opponent?registerOpponentGoal(m,shooter,creator):registerOurGoal(m,shooter,creator);setMatchVisualAction(m,teamKey,"goal",`${scorer.name} 破门`);m.commentary.push({minute:m.minute,text:`进球！${creator&&creator!==scorer?`${creator.name} 创造机会，`:""}${scorer.name} 用${shooterSkill>=84?"高质量":"果断"}射门攻破球门。`});}
+    else{if(xg>=.28)ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,shooter.id).bigChancesMissed++;registerGoalkeeperSave(m,!opponent,xg);setMatchVisualAction(m,teamKey,"save",`${shooter.name} 的射门被扑出`);m.commentary.push({minute:m.minute,text:`${shooter.name} 的射门命中目标，${keeper?.name||"门将"} 完成扑救。`});}
+    return true;
+  }
+
+  function stopMatchClock() { if(matchTimer){clearInterval(matchTimer);matchTimer=null;}if(matchCanvasFrame){cancelAnimationFrame(matchCanvasFrame);matchCanvasFrame=null;} }
+  function startMatchClock() {
+    const m=state?.activeMatch;if(!m||m.finished||m.paused)return;
+    const delay=({1:1050,2:520,4:260})[m.speed]||1050;
+    matchTimer=setInterval(()=>{if(!state?.activeMatch||state.activeMatch.paused||state.activeMatch.finished){stopMatchClock();return;}advanceMatchMinute();},delay);
+  }
+  function toggleMatchPlay() { const m=state.activeMatch;if(!m||m.finished||m.pendingTalk)return;m.paused=!m.paused;m.pauseReason=m.paused?"manual":null;saveState();render(); }
+  function setMatchSpeed(speed) { const m=state.activeMatch;if(!m)return;m.speed=[1,2,4].includes(Number(speed))?Number(speed):1;saveState();render(); }
+  function calculateStoppageTime(m) {
+    const substitutions=(m.substitutions||[]).length,cards=Number(m.stats.ours.yellow||0)+Number(m.stats.opponent.yellow||0)+Number(m.stats.ours.red||0)+Number(m.stats.opponent.red||0),goals=m.home+m.away,dismissals=(m.dismissals||[]).length;
+    return clamp(Math.round(rand(1.4,2.9)+substitutions*.17+cards*.18+goals*.24+dismissals*.5),3,9);
+  }
+  function advanceMatchMinute(options={}) {
+    const m=state.activeMatch;if(!m||m.finished)return;
+    m.minute+=1;simulateSegment(m);sampleMatchHeatmap(m);
+    if(m.minute===45&&!m.halfTimeTalkDone&&!options.skipPauses){m.paused=true;m.pauseReason="halfTime";m.pendingTalk="halfTime";m.commentary.push({minute:45,text:"上半场结束，双方球员返回更衣室。"});}
+    if(m.minute===90&&m.stoppageTime==null){m.stoppageTime=calculateStoppageTime(m);m.commentary.push({minute:90,text:`第四官员示意下半场补时 ${m.stoppageTime} 分钟。`});}
+    if(m.minute>=90+Number(m.stoppageTime||0)){applyCleanSheetBonuses(m);m.finished=true;m.paused=true;m.pauseReason="fullTime";m.pendingTalk="postMatch";m.commentary.push({minute:m.minute,text:"全场比赛结束。球员们向看台致意。"});}
+    if(m.minute%3===0||m.paused||m.finished){saveState();render();}else{updateMatchHud(m);drawMatchCanvasFrame();}
+  }
+  function skipMatch() {
+    const m=state.activeMatch;if(!m||m.finished)return;m.paused=true;m.pendingTalk=null;m.skipMode=true;
+    let guard=0;while(!m.finished&&guard++<110)advanceMatchMinute({skipPauses:true});
+    m.pendingTalk=null;m.postMatchTalkDone=true;m.pauseReason="fullTime";finishMatch({openReport:true});
+  }
+  function aiTeamTalkChoice(m,profile=m.aiCoachProfiles?.ours||coachDecisionProfile("AI")) {
+    const ours=m.fixture.home?m.home:m.away,theirs=m.fixture.home?m.away:m.home,difference=ours-theirs,xgEdge=Number(m.stats.ours.xg||0)-Number(m.stats.opponent.xg||0);
+    if(difference<=-2)return profile.people>=76?"inspire":"criticize";
+    if(difference<0)return xgEdge>.35?"encourage":"inspire";
+    if(difference>=2)return "calm";
+    if(difference>0)return profile.risk>.64?"encourage":"calm";
+    return xgEdge<-.45&&profile.people<76?"criticize":"encourage";
+  }
+  function teamTalkReaction(m,type,profile) {
+    const ours=m.fixture.home?m.home:m.away,theirs=m.fixture.home?m.away:m.home,difference=ours-theirs,lineup=matchOurPlayers(m).filter(player=>m.lineupIds.includes(player.id)),morale=lineup.reduce((sum,player)=>sum+Number(player.morale||75),0)/Math.max(1,lineup.length);
+    let fit=0;
+    if(type==="inspire")fit=difference<0?.75:difference===0?.35:difference>=2?-.35:0;
+    else if(type==="encourage")fit=Math.abs(difference)<=1?.55:difference<=-2?-.15:.2;
+    else if(type==="criticize")fit=difference<=-2?.7:difference<0?.35:difference>0?-.75:-.15;
+    else if(type==="calm")fit=difference>0?.7:difference===0?.15:difference<=-2?-.55:-.15;
+    if(type==="criticize"&&morale<68)fit-=.45;
+    return clamp(fit+(Number(profile.people||70)-72)/55+rand(-.28,.28),-1,1);
+  }
+  function applyTeamTalk(type) {
+    const m=state.activeMatch;if(!m||!m.pendingTalk)return;const half=m.pendingTalk==="halfTime",profile=m.aiCoachProfiles?.ours||coachDecisionProfile(state.person||"AI"),actualType=type==="listen"?aiTeamTalkChoice(m,profile):type,reaction=teamTalkReaction(m,actualType,profile),scale=clamp(.7+reaction*.45,.2,1.2);
+    if(actualType==="inspire"){m.tactical=clamp(m.tactical+3*scale,45,98);m.decisionBonus=clamp(m.decisionBonus+4*scale,-5,20);m.decisionRisk=clamp(m.decisionRisk+3,-8,18);}
+    else if(actualType==="encourage"){m.fitness=clamp(m.fitness+3*scale,30,100);m.tactical=clamp(m.tactical+1.5*scale,45,98);}
+    else if(actualType==="criticize"){m.tactical=clamp(m.tactical+(reaction>=0?4*scale:reaction*2),45,98);m.fitness=clamp(m.fitness-1,30,100);}
+    else if(actualType==="calm"){m.decisionRisk=clamp(m.decisionRisk-4*scale,-8,18);m.fitness=clamp(m.fitness+1.5*scale,30,100);}
+    const moraleDelta=Math.round((actualType==="criticize"?2.5:1.8)*reaction);matchOurPlayers(m).forEach(player=>{if(m.lineupIds.includes(player.id))player.morale=clamp(player.morale+moraleDelta,0,100);});
+    const labels={inspire:"激昂讲话",encourage:"鼓励全队",criticize:"严厉批评",calm:"要求冷静"},response=reaction>.45?"球员反应积极":reaction<-.35?"部分球员反应消极":"更衣室反应平静";m.commentary.push({minute:m.minute,text:`更衣室：${labels[actualType]||"完成讲话"}，${response}。`});m.pendingTalk=null;
+    if(half){m.halfTimeTalkDone=true;m.pauseReason=null;m.paused=false;saveState();render();return;}
+    m.postMatchTalkDone=true;m.pauseReason="fullTime";m.paused=true;finishMatch();
+  }
+  function updateMatchHud(m) {
+    const clock=document.querySelector(".match-clock"),scores=document.querySelectorAll(".score-number");if(clock)clock.textContent=matchClockLabel(m.minute);if(scores[0])scores[0].textContent=m.home;if(scores[1])scores[1].textContent=m.away;
+  }
+
+  function ambientMatchCommentary(m) {
+    const ours=clubById(state.clubId).name,opponent=m.fixture.opponent,difference=matchScoreDifference(m,"ours"),ourPlan=m.aiTacticalPlans?.ours||"balanced",opponentPlan=m.aiTacticalPlans?.opponent||"balanced",ourPlayers=activeMatchPlayers(m,"ours").filter(player=>player.position!=="GK"),opponentPlayers=activeMatchPlayers(m,"opponent").filter(player=>player.position!=="GK"),ourPlayer=ourPlayers[Math.floor(rand(0,ourPlayers.length))],opponentPlayer=opponentPlayers[Math.floor(rand(0,opponentPlayers.length))];
+    let templates;
+    if(m.minute<18)templates=[`${ours} 开场后耐心倒脚，试图确认对手的压迫方式。`,`${opponent} 的两条线保持紧凑，暂时没有轻易前压。`,`${ourPlayer?.name||"本队中场"} 回撤接应，球队从后场重新组织。`,`双方在中场连续争夺第二落点，比赛节奏尚未完全打开。`];
+    else if(m.minute>=78&&difference<0)templates=[`${ours} 明显加快出球速度，边后卫的位置已经接近边锋。`,`对手开始压缩禁区前沿，${ourPlayer?.name||"本队球员"} 很难获得从容起脚的空间。`,`${opponent} 退守后留下反击通道，下一次丢球可能非常危险。`,`本队连续把球送入禁区，落点争夺变得越来越激烈。`];
+    else if(m.minute>=78&&difference>0)templates=[`${ours} 主动降低节奏，控球重点转向边线和安全区域。`,`${opponent} 提高前场人数，${opponentPlayer?.name||"对方前锋"} 不断冲击防线身后。`,`本队阵型回收得更紧，首先保护禁区中路。`,`比赛进入守胜阶段，每一次界外球都在消耗对手的进攻时间。`];
+    else if(ourPlan==="press"||opponentPlan==="press")templates=[`${ourPlan==="press"?ours:opponent} 提高压迫强度，后场出球空间明显缩小。`,`${ourPlayer?.name||"本队中场"} 在高压下快速转移，试图绕开第一道防线。`,`双方阵线前移，攻防转换开始频繁出现。`,`${opponentPlayer?.name||"对方中场"} 接球时立即遭到夹击，只能回传保护球权。`];
+    else if(m.possession>=57)templates=[`${ours} 通过连续传递把对手压回半场。`,`边后卫套上接球，传中被第一点解围。`,`${ourPlayer?.name||"本队中场"} 抢下第二落点，进攻继续组织。`,`前锋回撤做球，边路获得向前推进空间。`,`一次直塞被对方中卫提前判断并截断。`];
+    else if(m.possession<=43)templates=[`${opponent} 掌握较多球权，本队暂时保持紧凑阵型。`,`门将短传发动进攻，后场耐心寻找安全出口。`,`中卫在禁区前完成关键拦截，化解对手的连续推进。`,`对手快速转移到边路，本队边后卫及时回追破坏传中。`,`双方在中场连续争夺球权，比赛暂时陷入拉锯。`];
+    else templates=[`双方都没有贸然压上，中场空间被压缩得很小。`,`${ourPlayer?.name||"本队球员"} 转身摆脱后向前输送，防线及时封住线路。`,`${opponentPlayer?.name||"对手球员"} 尝试纵向推进，但队友接应距离过远。`,`球权几次易手，双方都在等待更清晰的进攻机会。`,`一次边路配合形成传中，禁区内没有人抢到第一点。`];
+    const recent=new Set(m.commentary.slice(-8).map(item=>item.text)),available=templates.filter(text=>!recent.has(text));return (available.length?available:templates)[Math.floor(rand(0,(available.length?available:templates).length))];
+  }
+
+  function createMatchInjury(player,energy,contact=false) {
+    const profiles=contact?[{name:"脚踝扭伤",min:8,max:28,weight:4},{name:"膝关节扭伤",min:18,max:75,weight:1.2},{name:"小腿挫伤",min:4,max:14,weight:3},{name:"肩部撞伤",min:5,max:18,weight:1.5}]:[{name:"腿筋拉伤",min:12,max:42,weight:4},{name:"内收肌拉伤",min:10,max:35,weight:2.5},{name:"小腿肌肉拉伤",min:8,max:28,weight:2.2},{name:"肌肉疲劳",min:3,max:10,weight:3}];
+    const profile=weightedPick(profiles,item=>item.weight),ageFactor=player.age>=32?1.2:player.age<=23?.9:1,physicalFactor=clamp(1.12-(matchAttribute(player,"physical")-65)/180,.82,1.18),fatigueFactor=clamp(1+(68-energy)/100,.9,1.3);
+    return {injury:profile.name,days:clamp(Math.round(rand(profile.min,profile.max)*ageFactor*physicalFactor*fatigueFactor),3,120)};
+  }
+
+  function maybeMatchInjury(m,contactTeam=null) {
+    if(m.minute<10||m.minute>88||m.minute-Number(m.lastInjuryMinute||-30)<18)return;
+    const base=.00125*(m.denseSchedule?1.28:1)*(m.tactic==="press"?1.12:1),contactBoost=contactTeam?.teamKey ? .0017 : 0;if(Math.random()>=base+contactBoost)return;
+    const teamKey=contactTeam?.teamKey?contactTeam.teamKey==="ours"?"opponent":"ours":Math.random()<.5?"ours":"opponent",players=activeMatchPlayers(m,teamKey).filter(player=>player.position!=="GK"&&!player.injured&&!player.matchInjured);if(!players.length)return;
+    const player=weightedPick(players,item=>{const energy=matchPlayerEnergy(item,m,teamKey),ageRisk=item.age>=31?1.25:item.age<=23?.85:1;return ageRisk*(1+Math.max(0,70-energy)/24)*(1.18-matchAttribute(item,"physical")/180);}),energy=matchPlayerEnergy(player,m,teamKey),detail=createMatchInjury(player,energy,Boolean(contactTeam));
+    if(teamKey==="ours"){player.injured=detail.days;player.injury=detail.injury;ensurePlayerDevelopment(player,state.season).injuryDays+=detail.days;}else player.matchInjured=detail.injury;
+    m.matchInjuries||=[];m.matchInjuries.push({team:teamKey,playerId:player.id,name:player.name,injury:detail.injury,days:detail.days,minute:m.minute});m.lastInjuryMinute=m.minute;
+    m.commentary.push({minute:m.minute,text:`${player.name} 在一次${contactTeam?"对抗":"跑动"}后无法继续坚持，医疗组初步判断为${detail.injury}。`});
+    if(teamKey==="opponent"||state.role==="player"||m.skipMode)chooseAiSubstitution(m,teamKey,{forced:true,injury:true});
+  }
+
+  function simulateSegment(m) {
+    const strengthEdge=matchStrengthEdge(m,"ours"),tacticPossession=({press:4,balanced:0,counter:-4,defensive:-7})[m.tactic]||0,planPossession=({press:3,push:2,counter:-2,protect:-3,balanced:0})[m.aiTacticalPlans?.ours||"balanced"]-({press:3,push:2,counter:-2,protect:-3,balanced:0})[m.aiTacticalPlans?.opponent||"balanced"],dismissalEdge=((m.dismissals||[]).filter(item=>item.team==="opponent").length-(m.dismissals||[]).filter(item=>item.team==="ours").length)*5,targetPossession=clamp(50+strengthEdge*.72+(m.fixture.home?2:-2)+tacticPossession+planPossession+dismissalEdge,27,73),visualTeam=Math.random()<m.possession/100?"ours":"opponent";setMatchVisualAction(m,visualTeam,Math.random()<.35?"attack":"build",visualTeam==="ours"?"本队组织推进":"对手持球推进");m.ballX=clamp(rand(12,88)+m.decisionBonus*.25,8,92);m.ballY=rand(12,88);
+    m.fitness=clamp(m.fitness-rand(.11,.24)*(m.tactic==="press"?1.18:1),30,100);
+    m.possession=clamp(Math.round(m.possession+(targetPossession-m.possession)*.045+rand(-.8,.8)),29,71);
+    const firstTeam=Math.random()<m.possession/100?"ours":"opponent",secondTeam=firstTeam==="ours"?"opponent":"ours",majorEvent=simulateTeamAttack(m,firstTeam)||simulateTeamAttack(m,secondTeam);
+    let foulContext=null;if(Math.random()<.215){const teamKey=Math.random()<(100-m.possession)/100?"ours":"opponent";m.stats[teamKey].fouls++;foulContext={teamKey};if(Math.random()<.1)registerCard(m,teamKey);}
+    maybeMatchInjury(m,foulContext);
+    if(!majorEvent&&Math.random()<.075)m.commentary.push({minute:m.minute,text:ambientMatchCommentary(m)});
+    if(m.minute%3===0){simulateDefensiveActions(m,false);simulateDefensiveActions(m,true);simulatePlayerContributions(m,false);simulatePlayerContributions(m,true);updateLiveRatings(m);}
+    maybeAiTacticalAdjustments(m);maybeAutoSubstitutions(m);
+    m.decisionBonus*=.96;m.decisionRisk=(m.decisionRisk||0)*.94;m.commentary=m.commentary.slice(-90);
+  }
+  function recordScoreTimeline(m,team){m.scoreTimeline||=[];m.scoreTimeline.push({team,minute:m.minute,home:m.home,away:m.away});}
+  function scoreForUs(m){if(m.fixture.home)m.home++;else m.away++;recordScoreTimeline(m,"ours");}
+  function scoreForOpponent(m){if(m.fixture.home)m.away++;else m.home++;recordScoreTimeline(m,"opponent");}
+
+  function addPlayerEvent(m,player,type,delta) {
+    const event=ensureMatchEvent(m.playerEvents,player.id);
+    event[type]=(event[type]||0)+1;event.ratingDelta=Number(((event.ratingDelta||0)+delta).toFixed(2));
+    adjustRating(m.liveRatings,player.id,delta);
+    if(player.id===state.controlledId)m.playerRating=Number(m.liveRatings[player.id]||m.playerRating);
+  }
+
+  function addOpponentEvent(m,player,type,delta) {
+    const event=ensureMatchEvent(m.opponentEvents,player.id);
+    event[type]=(event[type]||0)+1;event.ratingDelta=Number(((event.ratingDelta||0)+delta).toFixed(2));adjustRating(m.opponentRatings,player.id,delta);
+  }
+
+  function registerOurGoal(m,selectedScorer=null,selectedAssister=null) {
+    scoreForUs(m);const lineup=m.lineupIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(Boolean);
+    if(!lineup.length)return {name:"本队球员"};
+    const attackers=lineup.filter(player=>["ST","RW","LW","WG","AM","CM"].includes(player.position)),pool=attackers.length?attackers:lineup;
+    const scorer=selectedScorer||weightedPick(pool,player=>attackRoleWeight(player.position,false)*Math.pow(matchAttribute(player,"shooting")/70,2.2));
+    addPlayerEvent(m,scorer,"goals",1.2);
+    const assistPool=lineup.filter(player=>player!==scorer&&player.position!=="GK");
+    if(assistPool.length&&Math.random()<.74){const assister=selectedAssister&&selectedAssister!==scorer?selectedAssister:weightedPick(assistPool,player=>attackRoleWeight(player.position,true)*Math.pow(matchAttribute(player,"passing")/70,2.1));addPlayerEvent(m,assister,"assists",.7);}
+    if(Math.random()<.22){const defenders=m.opponentLineupIds.map(id=>m.opponentPlayers.find(player=>player.id===id)).filter(player=>player&&["GK","CB","DF","FB","RB","LB","DM"].includes(player.position));const mistake=defenders[Math.floor(rand(0,defenders.length))];if(mistake){addOpponentEvent(m,mistake,"mistakes",-1);ensureMatchEvent(m.opponentEvents,mistake.id).errorsLeadingToGoal++;}}
+    return scorer;
+  }
+
+  function registerOpponentGoal(m,selectedScorer=null,selectedAssister=null) {
+    scoreForOpponent(m);const lineup=m.opponentLineupIds.map(id=>m.opponentPlayers.find(player=>player.id===id)).filter(Boolean);
+    if(!lineup.length)return {name:"对手球员"};
+    const attackers=lineup.filter(player=>["ST","RW","LW","WG","AM","CM"].includes(player.position)),pool=attackers.length?attackers:lineup,scorer=selectedScorer||weightedPick(pool,player=>attackRoleWeight(player.position,false)*Math.pow(matchAttribute(player,"shooting")/70,2.2));addOpponentEvent(m,scorer,"goals",1.2);
+    const assistPool=lineup.filter(player=>player!==scorer&&player.position!=="GK");if(assistPool.length&&Math.random()<.72){const assister=selectedAssister&&selectedAssister!==scorer?selectedAssister:weightedPick(assistPool,player=>attackRoleWeight(player.position,true)*Math.pow(matchAttribute(player,"passing")/70,2.1));addOpponentEvent(m,assister,"assists",.7);}
+    if(Math.random()<.2){const defenders=m.lineupIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(player=>player&&["GK","CB","DF","FB","RB","LB","DM"].includes(player.position));const mistake=defenders[Math.floor(rand(0,defenders.length))];if(mistake){addPlayerEvent(m,mistake,"mistakes",-1);ensureMatchEvent(m.playerEvents,mistake.id).errorsLeadingToGoal++;}}
+    return scorer;
+  }
+
+  function registerMistake(m,risk) {
+    const lineup=m.lineupIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(Boolean),controlled=controlledPlayer();
+    if(!lineup.length)return null;
+    if(Math.random()>clamp(.18+risk/60,.18,.46))return null;
+    const defenders=lineup.filter(player=>["GK","CB","DF","FB","RB","LB","DM"].includes(player.position)),pool=defenders.length?defenders:lineup;
+    const player=state.role==="player"&&controlled&&lineup.includes(controlled)&&Math.random()<.2?controlled:pool[Math.floor(rand(0,pool.length))];addPlayerEvent(m,player,"mistakes",-1);return player;
+  }
+
+  function registerCard(m,teamKey=null) {
+    const opponent=teamKey?teamKey==="opponent":Math.random()<.5,lineup=opponent?m.opponentLineupIds.map(id=>m.opponentPlayers.find(player=>player.id===id)).filter(Boolean):m.lineupIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(Boolean);if(!lineup.length)return;
+    const player=weightedPick(lineup,item=>item.position==="GK"?.25:["CB","DF","RB","LB","FB","DM"].includes(item.position)?1.55:1),events=opponent?m.opponentEvents:m.playerEvents,event=events[player.id]||{},addEvent=opponent?addOpponentEvent:addPlayerEvent,stats=m.stats[opponent?"opponent":"ours"];
+    if(event.red)return;const secondYellow=Boolean(event.yellow)&&Math.random()<.34,red=secondYellow||Math.random()<.035;
+    if(red){
+      if(secondYellow){addEvent(m,player,"yellow",-.25);stats.yellow++;}
+      addEvent(m,player,"red",-1.25);
+      const team=opponent?"opponent":"ours",ids=opponent?m.opponentLineupIds:m.lineupIds,index=ids.indexOf(player.id);if(index>=0)ids.splice(index,1);
+      stats.red++;
+      m.dismissals||=[];m.dismissals.push({team,playerId:player.id,playerName:player.name,minute:m.minute});
+      m.commentary.push({minute:m.minute,text:`${player.name} ${secondYellow?"累计两张黄牌":"被直接红牌"}罚下，球队将少一人作战。`});
+    }
+    else if(!event.yellow){addEvent(m,player,"yellow",-.25);stats.yellow++;m.commentary.push({minute:m.minute,text:`${player.name} 因犯规领到黄牌。`});}
+  }
+
+  function positionAwareRating(player,event,minutes,context) {
+    const unit=positionUnit(player.position),passRate=event.passes?event.accuratePasses/event.passes:0,duelLosses=Math.max(0,(event.duels||0)-(event.duelsWon||0)),failedTackles=Math.max(0,(event.tackles||0)-(event.tacklesWon||0));
+    let rating=6+(context.result>0?.08:context.result<0?-.05:0)+(Math.min(90,minutes)-60)*.0008;
+    rating+=(event.goals||0)*(unit==="defence"||player.position==="GK"?1.45:unit==="midfield"?1.28:1.14)+(event.assists||0)*.68;
+    rating+=(event.onTarget||0)*.055-Math.max(0,(event.shots||0)-(event.onTarget||0))*.018-(event.bigChancesMissed||0)*.32-(event.penaltiesMissed||0)*.72;
+    rating+=(event.keyPasses||0)*.085+(event.chancesCreated||0)*.13+(event.progressivePasses||0)*.026+(event.successfulDribbles||0)*.065+(event.recoveries||0)*.025+(event.pressuresWon||0)*.02;
+    rating+=(event.tacklesWon||0)*.07-failedTackles*.022+(event.interceptions||0)*.075+(event.clearances||0)*.04+(event.blocks||0)*.11+(event.duelsWon||0)*.027-duelLosses*.014;
+    if(event.passes>=10)rating+=clamp((passRate-(player.position==="GK"?.72:.79))*1.25,-.22,.2)*Math.min(1,event.passes/38);
+    rating-=Math.min(.42,(event.possessionLost||0)*(unit==="attack"?.011:.016));
+    if(player.position==="GK")rating+=(event.saves||0)*.14+(event.cleanSheets? .34:0)-context.conceded*.22;
+    else if(unit==="defence")rating+=(event.cleanSheets? .26:0)-Math.max(0,context.conceded-1)*.08;
+    else if(player.position==="DM")rating+=(event.cleanSheets? .12:0)-Math.max(0,context.conceded-2)*.025;
+    rating-=(event.mistakes||0)*.62+(event.errorsLeadingToGoal||0)*.55+(event.yellow||0)*.22+(event.red||0)*1.18;
+    const reasons=[];
+    if(event.goals)reasons.push(`${event.goals} 个进球`);if(event.assists)reasons.push(`${event.assists} 次助攻`);if(event.saves>=3)reasons.push(`${event.saves} 次扑救`);if(event.cleanSheets)reasons.push("完成零封");if(event.keyPasses>=2)reasons.push(`${event.keyPasses} 次关键传球`);if(event.chancesCreated)reasons.push(`${event.chancesCreated} 次创造良机`);if(event.successfulDribbles>=3)reasons.push(`${event.successfulDribbles} 次成功过人`);if((event.tacklesWon||0)+(event.interceptions||0)+(event.clearances||0)>=5)reasons.push("防守贡献突出");if(event.bigChancesMissed)reasons.push(`错失 ${event.bigChancesMissed} 次良机`);if(event.errorsLeadingToGoal)reasons.push("失误导致丢球");if(event.red)reasons.push("红牌罚下");else if(event.yellow)reasons.push("领到黄牌");
+    event.ratingReasons=reasons.slice(0,4);return Number(clamp(rating,3,10).toFixed(2));
+  }
+
+  function finalizeMatchRatings(m) {
+    if(m.ratingsFinalized)return;m.ratingsFinalized=true;applyCleanSheetBonuses(m);
+    const ourGoals=m.fixture.home?m.home:m.away,opponentGoals=m.fixture.home?m.away:m.home,ourResult=Math.sign(ourGoals-opponentGoals);
+    const apply=(teamKey,players,initial,ratings,events,conceded,result)=>{
+      const participantIds=[...new Set([...(initial||[]),...(m.substitutions||[]).filter(item=>item.team===teamKey).map(item=>item.inId)])];
+      participantIds.forEach(id=>{const player=players.find(item=>item.id===id),minutes=sideMinutesPlayed(m,id,teamKey==="opponent");if(!player||!minutes)return;ratings[id]=positionAwareRating(player,ensureMatchEvent(events,id),minutes,{conceded,result});});
+    };
+    apply("ours",matchOurPlayers(m),m.initialLineupIds,m.liveRatings,m.playerEvents,opponentGoals,ourResult);apply("opponent",m.opponentPlayers||[],m.opponentInitialLineupIds,m.opponentRatings,m.opponentEvents,ourGoals,-ourResult);
+    if(state.role==="player")m.playerRating=Number(m.liveRatings[state.controlledId]||6);
+  }
+
+  function matchMinutesPlayed(m,playerId) {
+    const entered=m.initialLineupIds.includes(playerId)?0:m.substitutions.find(item=>item.team==="ours"&&item.inId===playerId)?.minute;
+    if(entered==null)return 0;const left=m.substitutions.find(item=>item.team==="ours"&&item.outId===playerId)?.minute??m.dismissals?.find(item=>item.team==="ours"&&item.playerId===playerId)?.minute??90;return clamp(left-entered,0,90);
+  }
+
+  function matchFitnessDrain(player,minutes,tactic) {
+    const ranges={
+      GK:[3,6],CB:[11,17],DF:[11,17],RB:[17,24],LB:[17,24],FB:[17,24],
+      DM:[15,21],CM:[18,25],AM:[17,24],RW:[19,27],LW:[19,27],WG:[19,27],ST:[16,23]
+    };
+    const [low,high]=ranges[player.position]||[15,22];
+    const tacticFactor=tactic==="press"?1.12:tactic==="defensive"?.92:tactic==="counter"?1.02:1;
+    const ageFactor=player.age>=34?1.12:player.age>=30?1.06:player.age<=23?.97:1;
+    return Math.max(1,Math.round(rand(low,high)*(minutes/90)*tacticFactor*ageFactor));
+  }
+
+  function heatmapZone(player,points) {
+    if(!points.length)return "暂无数据";
+    const averageX=points.reduce((sum,item)=>sum+item[0],0)/points.length;
+    const zoneX=averageX<35?"后场":averageX>65?"前场":"中场";
+    const lane=({RB:"右路",RW:"右路",LB:"左路",LW:"左路"})[player?.position]||(() => {
+      const averageY=points.reduce((sum,item)=>sum+item[1],0)/points.length;
+      return averageY<34?"左路":averageY>66?"右路":"中路";
+    })();
+    return `${zoneX}${lane}`;
+  }
+
+  function normalizeLegacyReportHeatmaps(report) {
+    if(!Array.isArray(report?.heatmapSummary))return;
+    const away=report.teamName===report.awayName,positions=new Map((report.ratings||[]).map(item=>[item.id,item.position]));
+    report.heatmapSummary.forEach(item=>{
+      if(away&&Array.isArray(item.points))item.points=item.points.map(([x,y])=>[Number((100-x).toFixed(1)),y]);
+      const player={position:item.position||positions.get(item.id)};item.position=player.position||item.position;item.zone=heatmapZone(player,item.points||[]);
+    });
+  }
+
+  function createMatchReport(m,mvp,result) {
+    const f=m.fixture,club=clubById(state.clubId),ourStats={...m.stats.ours,possession:m.possession},opponentStats={...m.stats.opponent,possession:100-m.possession};
+    const participantIds=[...new Set([...(m.initialLineupIds||[]),...(m.substitutions||[]).filter(item=>item.team==="ours").map(item=>item.inId)])];
+    const ratings=participantIds.map(id=>{
+      const player=matchOurPlayers(m).find(item=>item.id===id),events=m.playerEvents?.[id]||{};if(!player)return null;
+      return {id,name:player.name,position:player.position,minutes:matchMinutesPlayed(m,id),goals:events.goals||0,assists:events.assists||0,shots:events.shots||0,onTarget:events.onTarget||0,bigChancesMissed:events.bigChancesMissed||0,passes:events.passes||0,accuratePasses:events.accuratePasses||0,possessionLost:events.possessionLost||0,tackles:events.tackles||0,tacklesWon:events.tacklesWon||0,interceptions:events.interceptions||0,clearances:events.clearances||0,blocks:events.blocks||0,duels:events.duels||0,duelsWon:events.duelsWon||0,saves:events.saves||0,cleanSheets:events.cleanSheets||0,keyPasses:events.keyPasses||0,chancesCreated:events.chancesCreated||0,successfulDribbles:events.successfulDribbles||0,progressivePasses:events.progressivePasses||0,recoveries:events.recoveries||0,pressuresWon:events.pressuresWon||0,ratingReasons:[...(events.ratingReasons||[])],rating:Number(m.liveRatings?.[id]??6)};
+    }).filter(player=>player&&player.minutes>0).sort((a,b)=>positionSortRank(a.position)-positionSortRank(b.position)||b.minutes-a.minutes||b.rating-a.rating);
+    const recordedInjuries=(m.matchInjuries||[]).map(item=>({...item})),recordedIds=new Set(recordedInjuries.filter(item=>item.team==="ours").map(item=>item.playerId)),injuries=[...recordedInjuries,...participantIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(player=>player?.injured&&!recordedIds.has(player.id)).map(player=>({team:"ours",playerId:player.id,name:player.name,injury:player.injury,days:player.injured,minute:null}))];
+    const heatmapSummary=participantIds.map(id=>{const player=matchOurPlayers(m).find(item=>item.id===id),points=(m.heatmap?.[id]||[]).slice(-90);if(!player||!points.length)return null;return {id,name:player.name,position:player.position,zone:heatmapZone(player,points),intensity:clamp(Math.round(points.length/90*100),12,100),points:points.filter((_,index)=>index%3===0)};}).filter(Boolean);
+    return {
+      id:`report-${f.id}-${Date.now()}`,fixtureId:f.id,date:f.date,competition:f.competition,round:f.round,result,
+      teamName:f.teamName||club.name,homeName:f.home?(f.teamName||club.name):f.opponent,awayName:f.home?f.opponent:(f.teamName||club.name),score:{home:m.home,away:m.away},penalties:f.penalties?{...f.penalties}:null,
+      homeStats:f.home?ourStats:opponentStats,awayStats:f.home?opponentStats:ourStats,mvp:{...mvp},ratings,
+      substitutions:(m.substitutions||[]).map(item=>({...item})),injuries,formation:m.formation,opponentFormation:m.opponentFormation,heatmapSummary,teamTalks:{halfTime:Boolean(m.halfTimeTalkDone),postMatch:Boolean(m.postMatchTalkDone)}
+    };
+  }
+
+  function knockoutDecisionContext(fixture,ours,theirs) {
+    if(!(fixture.knockout||fixture.phase==="knockout"))return {requiresWinner:false,ours,theirs,aggregate:false};
+    if(EUROPEAN_COMPETITION_BY_NAME[fixture.competition]&&fixture.leg===1)return {requiresWinner:false,ours,theirs,aggregate:true};
+    if(EUROPEAN_COMPETITION_BY_NAME[fixture.competition]&&fixture.leg===2){
+      const first=state.schedule.find(item=>item.tieId===fixture.tieId&&item.leg===1&&item.status==="played"&&item.score),firstOurs=first?(first.home?first.score.home:first.score.away):0,firstTheirs=first?(first.home?first.score.away:first.score.home):0;
+      return {requiresWinner:true,ours:firstOurs+ours,theirs:firstTheirs+theirs,aggregate:true,firstOurs,firstTheirs};
+    }
+    return {requiresWinner:true,ours,theirs,aggregate:false};
+  }
+
+  function simulatePenaltyShootout(m) {
+    const chanceFor=teamKey=>{
+      const other=teamKey==="ours"?"opponent":"ours",takers=activeMatchPlayers(m,teamKey).filter(player=>player.position!=="GK").map(player=>effectiveMatchAttribute(player,"shooting",m,teamKey)).sort((a,b)=>b-a).slice(0,5),keeper=activeMatchPlayers(m,other).find(player=>player.position==="GK"),finishing=takers.reduce((sum,value)=>sum+value,0)/Math.max(1,takers.length),goalkeeping=keeper?effectiveMatchAttribute(keeper,"goalkeeping",m,other):68;
+      return clamp(.74+(finishing-goalkeeping)*.0032,.62,.86);
+    };
+    const oursChance=chanceFor("ours"),opponentChance=chanceFor("opponent");let ours=0,opponent=0;
+    for(let kick=0;kick<5;kick++){if(Math.random()<oursChance)ours++;if(Math.random()<opponentChance)opponent++;}
+    let suddenDeath=0;while(ours===opponent&&suddenDeath++<8){const ourKick=Math.random()<oursChance,opponentKick=Math.random()<opponentChance;if(ourKick)ours++;if(opponentKick)opponent++;}
+    if(ours===opponent){if(Math.random()<clamp(.5+matchStrengthEdge(m,"ours")*.008,.38,.62))ours++;else opponent++;}
+    return {ours,opponent,winner:ours>opponent?"us":"opponent"};
+  }
+
+  function createMatchMediaStory(m,fixture,ours,theirs,won,draw,result,mvp) {
+    const club=clubById(state.clubId),ourName=fixture.teamName||club.name,strengthEdge=matchStrengthEdge(m,"ours"),shotEdge=Number(m.stats.ours.shots||0)-Number(m.stats.opponent.shots||0),xgEdge=Number(m.stats.ours.xg||0)-Number(m.stats.opponent.xg||0),timeline=m.scoreTimeline||[],wasBehind=timeline.some(item=>{const ourScore=fixture.home?item.home:item.away,opponentScore=fixture.home?item.away:item.home;return ourScore<opponentScore;}),lastGoal=timeline.at(-1),lateGoal=lastGoal&&lastGoal.minute>=80,redCards=Number(m.stats.ours.red||0)+Number(m.stats.opponent.red||0),penaltyText=fixture.penalties?`（点球 ${fixture.penalties.home}-${fixture.penalties.away}）`:"";
+    const european=EUROPEAN_COMPETITION_BY_NAME[fixture.competition],sources=european?[`${fixture.competition}之夜`,"欧洲赛场","战术观察"]:fixture.international?["国家队比赛日","国际赛场","赛后复盘"]:["Matchday Live","赛后复盘","Football Daily"],source=sources[Math.floor(rand(0,sources.length))];
+    let angle="常规",headline=`${ourName} ${ours}-${theirs}${penaltyText} ${result} ${fixture.opponent}`,lead=`双方完成一场节奏多变的比赛。${ourName} 控球率 ${m.possession}%，射门 ${m.stats.ours.shots} 次，预期进球 ${m.stats.ours.xg.toFixed(2)}。`;
+    if(european&&["晋级","点球晋级"].includes(result)){angle=`${fixture.competition}晋级`;headline=`${fixture.competition}：${ourName} 淘汰 ${fixture.opponent}，挺进下一轮`;lead=`比赛的压力一直延续到终场。${fixture.aggregate?`两回合总比分 ${fixture.aggregate.ours}-${fixture.aggregate.theirs}。`:"球队在决定性比赛中把握住了机会。"}`;}
+    else if(won&&strengthEdge<=-5){angle="爆冷";headline=`爆冷：${ourName} ${ours}-${theirs} 击败实力占优的 ${fixture.opponent}`;lead=`赛前并不被看好的 ${ourName} 依靠执行力改变了实力对比，比赛计划和关键机会把握成为胜负分水岭。`;}
+    else if(won&&wasBehind){angle="逆转";headline=`逆转取胜：${ourName} ${ours}-${theirs} 击败 ${fixture.opponent}`;lead=`球队在落后局面下改变节奏，临场调整和替补球员的贡献推动了比赛转折。`;}
+    else if(won&&shotEdge>=6&&xgEdge>=.75){angle="压制";headline=`场面占优：${ourName} ${ours}-${theirs} 战胜 ${fixture.opponent}`;lead=`${ourName} 在射门和机会质量上占据优势，全场 ${m.stats.ours.shots} 次射门创造 ${m.stats.ours.xg.toFixed(2)} xG。`;}
+    else if(won&&xgEdge<=-.35){angle="效率";headline=`把握机会：${ourName} ${ours}-${theirs} 击败 ${fixture.opponent}`;lead=`对手创造了更多预期进球，但 ${ourName} 的终结效率和门将表现改变了结果。`;}
+    else if(lateGoal){angle="终场转折";headline=`${lastGoal.minute>=90?"补时":"末段"}定局：${ourName} ${ours}-${theirs} ${result} ${fixture.opponent}`;lead=`比赛直到最后阶段才分出方向，${lastGoal.minute>=90?"补时进球":"终场前的关键进球"}成为赛后讨论中心。`;}
+    else if(redCards){angle="红牌转折";headline=`红牌改变走势：${ourName} ${ours}-${theirs} ${result} ${fixture.opponent}`;lead=`本场出现 ${redCards} 张红牌，人数变化迫使双方重新调整阵型和比赛计划。`;}
+    else if(draw&&Math.abs(xgEdge)>=.7){angle="结果偏离场面";headline=`${ourName} ${ours}-${theirs} 战平 ${fixture.opponent}，场面与结果并不完全一致`;lead=`双方的预期进球为 ${m.stats.ours.xg.toFixed(2)}-${m.stats.opponent.xg.toFixed(2)}，机会质量与最终比分存在明显差异。`;}
+    const controlledMinutes=state.role==="player"?matchMinutesPlayed(m,state.controlledId):0,roleNote=state.role==="player"?(controlledMinutes?`${state.person} 出场 ${controlledMinutes} 分钟，评分 ${m.playerRating.toFixed(2)}。`:`${state.person} 本场未出场。`):`教练组战术执行评分 ${m.tactical.toFixed(0)}。`;
+    return {source,title:headline,body:`${lead}${roleNote} 本场最佳为 ${mvp.name}（${Number(mvp.rating).toFixed(2)}）。`,date:fixture.date,type:"match",angle};
+  }
+
+  function finishMatch(options={}) {
+    const m=state.activeMatch,f=m.fixture,club=clubById(state.clubId),ours=f.home?m.home:m.away,theirs=f.home?m.away:m.home,draw=ours===theirs,decision=knockoutDecisionContext(f,ours,theirs),decidingDraw=decision.ours===decision.theirs;
+    if(decision.requiresWinner&&decidingDraw){
+      const shootout=simulatePenaltyShootout(m);
+      f.penalties={home:f.home?shootout.ours:shootout.opponent,away:f.home?shootout.opponent:shootout.ours,winner:shootout.winner};
+    }
+    const won=decision.requiresWinner?(decision.ours>decision.theirs||(decidingDraw&&f.penalties?.winner==="us")):ours>theirs;
+    if(decision.aggregate)f.aggregate={ours:decision.ours,theirs:decision.theirs};
+    finalizeMatchRatings(m);
+    f.status="played";f.score={home:m.home,away:m.away};
+    const scheduledFixture=state.schedule.find(item=>item.id===f.id);
+    if(scheduledFixture&&scheduledFixture!==f)Object.assign(scheduledFixture,{status:"played",score:{...f.score},...(f.penalties?{penalties:{...f.penalties}}:{})});
+    state.played++;
+    if(ours>theirs)state.wins++;else if(draw)state.draws++;else state.losses++;
+    const league=leagueOf(clubById(state.clubId)),isLeague=f.competition===league.short;
+    if(isLeague){if(ours>theirs)state.points+=3;else if(draw)state.points++;recordUserLeagueRound(state,f,m);}
+    const participantIds=[...new Set([...(m.initialLineupIds||m.lineupIds||[]),...m.substitutions.filter(item=>item.team==="ours").map(item=>item.inId)])];
+    const matchParticipants=participantIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(Boolean),lineup=participantIds.map(id=>state.squad.find(player=>player.id===id)).filter(Boolean);
+    const starters=new Set(m.initialLineupIds||[]),workloadPlayers=f.international?state.squad.filter(player=>player.id===state.controlledId):state.squad;
+    workloadPlayers.forEach(player=>{
+      const minutes=matchMinutesPlayed(m,player.id),started=starters.has(player.id);
+      player.consecutiveStarts=started?Number(player.consecutiveStarts||0)+1:0;
+      player.lastMatchMinutes=minutes;
+      if(minutes>0)player.lastMatchDate=f.date;
+      player.lastSelectionStatus=started?"starter":minutes>0?"substitute":participantIds.includes(player.id)?"unused-substitute":"rest";
+    });
+    lineup.forEach((p,i)=>{
+      const minutes=matchMinutesPlayed(m,p.id);if(minutes<=0)return;if(f.international)p.internationalAppearances=Number(p.internationalAppearances||0)+1;else p.appearances++;
+      recordPlayerDevelopment(p,minutes);
+      p.fitness=clamp(p.fitness-matchFitnessDrain(p,minutes,m.tactic),25,100);
+      const events=m.playerEvents?.[p.id]||{goals:0,assists:0,mistakes:0,yellow:0,red:0,ratingDelta:0};
+      if(f.international){p.internationalGoals=Number(p.internationalGoals||0)+(events.goals||0);p.internationalAssists=Number(p.internationalAssists||0)+(events.assists||0);}else{p.goals+=(events.goals||0);p.assists+=(events.assists||0);}
+      ["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=Number(p[key]||0)+Number(events[key]||0);});
+      p.lastRating=Number(clamp(m.liveRatings?.[p.id]??(p.id==="controlled"?m.playerRating:6),1,10).toFixed(2));
+      p.form=p.lastRating;if(f.international)p.internationalRatingTotal=Number((Number(p.internationalRatingTotal||0)+p.lastRating).toFixed(2));else p.ratingTotal=Number((Number(p.ratingTotal||0)+p.lastRating).toFixed(2));
+      const resultMorale=won?2:draw?0:-2,performanceMorale=p.lastRating>=7.5?2:p.lastRating<5.8?-2:p.lastRating>=6.8?1:0,minutesMorale=minutes<25&&["核心主力","常规主力"].includes(p.contract?.role)?-1:0;p.morale=clamp(Number(p.morale||75)+resultMorale+performanceMorale+minutesMorale,25,100);
+      if(!p.injured&&Math.random()<Math.max(.005,(70-p.fitness)/1300)){
+        const detail=createMatchInjury(p,p.fitness,false);p.injured=detail.days;p.injury=detail.injury;
+        ensurePlayerDevelopment(p,state.season).injuryDays+=detail.days;
+      }
+    });
+    if(!f.international)state.squad.filter(player=>!participantIds.includes(player.id)&&!player.injured&&["核心主力","常规主力"].includes(player.contract?.role)).forEach(player=>{if(Math.random()<.38)player.morale=clamp(Number(player.morale||75)-1,25,100);});
+    const ourBest=[...matchParticipants].filter(player=>matchMinutesPlayed(m,player.id)>0).sort((a,b)=>(m.liveRatings[b.id]||0)-(m.liveRatings[a.id]||0))[0],opponentBest=(m.opponentPlayers||[]).filter(player=>(m.opponentInitialLineupIds||[]).includes(player.id)||m.substitutions.some(item=>item.team==="opponent"&&item.inId===player.id)).sort((a,b)=>(m.opponentRatings[b.id]||0)-(m.opponentRatings[a.id]||0))[0];
+    const mvp=opponentBest&&(m.opponentRatings[opponentBest.id]||0)>(m.liveRatings[ourBest?.id]||0)?{id:opponentBest.id,name:opponentBest.name,rating:m.opponentRatings[opponentBest.id],ours:false}:{id:ourBest?.id,name:ourBest?.name||"待评定",rating:m.liveRatings[ourBest?.id]||6,ours:true};m.mvpId=mvp.id;
+    if(state.role==="player") {const p=controlledPlayer();if(lineup.includes(p)){updatePlayerAbility(p,m.playerRating);if(mvp.ours&&mvp.id===p.id){state.mvpCount=(state.mvpCount||0)+1;state.honors.unshift({name:"单场 MVP",season:state.season,scope:`${f.competition} · ${f.opponent}`});}}}
+    else updateCoachAbility(won,draw,m.tactical);
+    handleCompetitionProgress(f,{won,draw,ours,theirs,decision});
+    const decidingEuropeanTie=Boolean(EUROPEAN_COMPETITION_BY_NAME[f.competition])&&f.phase==="knockout"&&(f.leg===2||f.round==="决赛");
+    const decidingKnockout=(Boolean(EUROPEAN_COMPETITION_BY_NAME[f.competition])||f.international)&&f.phase==="knockout"&&(f.leg!==1),result=f.penalties?(won?"点球晋级":"点球出局"):(decidingEuropeanTie||decidingKnockout)?(won?"晋级":"出局"):won?"取胜":draw?"战平":"告负";
+    const penaltyText=f.penalties?`（点球 ${f.penalties.home}-${f.penalties.away}）`:"";
+    state.media.unshift(createMatchMediaStory(m,f,ours,theirs,won,draw,result,mvp));
+    const injured=lineup.find(p=>p.injured&&Math.random()<.5);if(injured)state.media.unshift({source:"Club Medical",title:`${injured.name} 将因${injured.injury}缺阵`,body:`医疗组预计恢复时间约 ${injured.injured} 天。康复质量将影响体能与能力变化。`,date:f.date,type:"injury"});
+    const report=createMatchReport(m,mvp,result);state.matchReports.unshift(report);state.matchReports=state.matchReports.slice(0,30);
+    addNotification({title:"医疗组：恢复计划已生成",type:"medical",date:f.date,detail:"医疗组已经根据本场出场时间、体能消耗和伤病情况生成恢复计划。下一场选人会自动考虑球员体能与赛程密度。",facts:report.injuries.length?report.injuries.map(item=>`${item.name}：${item.injury}，预计缺阵 ${item.days} 天`):["本场没有新增伤病","低体能球员将优先安排恢复训练"]});
+    const reportNotification={title:`赛后分析：${ours}-${theirs} ${result}`,type:"match",date:f.date,detail:`${f.teamName||club.name} 已完成本场比赛，完整技术统计、球员评分、换人与医疗记录如下。`,reportId:report.id};addNotification(reportNotification);
+    const reportNotice=state.notifications[0];state.date=addDays(f.date,1);state.continueStatus=null;simulateMajorLeagueWorld(state,state.date);simulateBackgroundWorld(state.date);simulateTransferMarket(state,state.date);state.activeMatch=null;if(state.calendarRepairPending){repairCompetitionCalendar(state);delete state.calendarRepairPending;}
+    if(options.openReport&&reportNotice){reportNotice.read=true;state.inboxUnread=state.notifications.filter(item=>!item.read).length;modal={type:"notification",id:reportNotice.id};}
+    saveState();render();toast(options.openReport?"已直接生成赛后分析":"比赛已记录，赛后报告已生成");
+  }
+
+  const EUROPEAN_KNOCKOUT_ROUNDS=["淘汰赛附加赛","十六强","八强","半决赛","决赛"];
+
+  function createEuropeanProgress(club,season) {
+    const config=qualifiedEuropeanCompetition(club,season);return config?{[config.key]:{played:0,points:0,gf:0,ga:0,position:null,eliminated:false,knockoutStage:-1}}:{};
+  }
+
+  function drawEuropeanKnockoutOpponent(config,round,stageIndex) {
+    const used=new Set(state.schedule.filter(item=>item.competition===config.name).map(item=>comparableClubName(item.opponent))),club=clubById(state.clubId);
+    const minimum=config.key==="ucl"?82:config.key==="uel"?75:68,pool=[...new Set([...CLUBS.filter(item=>leagueOf(item)?.tier===1&&item.id!==club.id&&item.prestige>=minimum).map(item=>item.name),...EUROPEAN_OPPONENTS])].filter(name=>!used.has(comparableClubName(name))&&comparableClubName(name)!==comparableClubName(club.name));
+    return seededShuffle(pool,`${config.key}-ko|${state.season}|${round}|${stageIndex}`)[0]||`${config.name}淘汰赛对手`;
+  }
+
+  function scheduleEuropeanKnockoutRound(config,round,stageIndex,afterDate,waitDays) {
+    const opponent=drawEuropeanKnockoutOpponent(config,round,stageIndex),baseDate=findAvailableFixtureDate(addDays(afterDate,waitDays)),tieId=`${config.key}-tie-${state.season}-${stageIndex}-${Date.now()}`;
+    if(round==="决赛")state.schedule.push({id:`${tieId}-final`,date:baseDate,competition:config.name,competitionKey:config.key,round,stageIndex,phase:"knockout",knockout:true,neutral:true,opponent,home:Math.random()<.5,status:"upcoming",score:null});
+    else{
+      const firstHome=stableScoutingUnit(`${tieId}|home`)>.5,secondDate=findAvailableFixtureDate(addDays(baseDate,7));
+      state.schedule.push({id:`${tieId}-1`,tieId,leg:1,date:baseDate,competition:config.name,competitionKey:config.key,round:`${round}·首回合`,stageName:round,stageIndex,phase:"knockout",knockout:true,opponent,home:firstHome,status:"upcoming",score:null});
+      state.schedule.push({id:`${tieId}-2`,tieId,leg:2,date:secondDate,competition:config.name,competitionKey:config.key,round:`${round}·次回合`,stageName:round,stageIndex,phase:"knockout",knockout:true,opponent,home:!firstHome,status:"upcoming",score:null});
+    }
+    state.schedule.sort((a,b)=>a.date.localeCompare(b.date));return opponent;
+  }
+
+  function estimateEuropeanLeaguePosition(progress,club,config) {
+    const season=state?.season||2026,field=europeanCompetitionField(club,season,config);
+    const rows=field.map(team=>{
+      let points=0,gf=0,ga=0;const baseline=config.fieldTarget,winChance=clamp(.35+(team.prestige-baseline)*.014,.18,.62),drawChance=clamp(.24-(team.prestige-baseline)*.001,.19,.27);
+      for(let round=0;round<config.matches;round++){
+        const result=stableScoutingUnit(`${config.key}-result|${round*7919}|${team.name}|${season}`),goals=stableScoutingUnit(`${config.key}-goals|${round*3571}|${team.name}|${season}`),conceded=stableScoutingUnit(`${config.key}-against|${round*1877}|${team.name}|${season}`);
+        if(result<winChance){points+=3;const scored=1+Math.floor(goals*3);gf+=scored;ga+=Math.floor(conceded*Math.min(3,scored));}
+        else if(result<winChance+drawChance){points++;const scored=Math.floor(goals*3);gf+=scored;ga+=scored;}
+        else{const allowed=1+Math.floor(conceded*3);ga+=allowed;gf+=Math.floor(goals*Math.min(3,allowed));}
+      }
+      return {name:team.name,points,gf,ga,gd:gf-ga,user:false};
+    });
+    rows.push({name:club.name,points:Number(progress.points||0),gf:Number(progress.gf||0),ga:Number(progress.ga||0),gd:Number(progress.gf||0)-Number(progress.ga||0),user:true});
+    rows.sort((a,b)=>b.points-a.points||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name));
+    return rows.findIndex(row=>row.user)+1;
+  }
+
+  const NATIONAL_KNOCKOUT_ROUNDS={世界杯:["三十二强","十六强","八强","半决赛","决赛"],欧洲杯:["十六强","八强","半决赛","决赛"],美洲杯:["八强","半决赛","决赛"],非洲杯:["十六强","八强","半决赛","决赛"],亚洲杯:["十六强","八强","半决赛","决赛"],洲际国家杯:["八强","半决赛","决赛"],欧国联:["八强","半决赛","决赛"]};
+  function scheduleNationalKnockoutRound(competition,round,stageIndex,afterDate) {
+    const nation=primaryNationality(controlledPlayer()),pool=(NATIONAL_OPPONENTS[nationalConfederation(nation)]||NATIONAL_OPPONENTS.other).filter(item=>item!==nation&&!state.schedule.some(fixture=>fixture.international&&fixture.opponent===item)),opponent=seededShuffle(pool,`national-ko|${competition}|${state.season}|${round}`)[0]||"国家队淘汰赛对手",date=findAvailableFixtureDate(addDays(afterDate,round==="决赛"?5:4));
+    state.schedule.push({id:`nat-ko-${state.season}-${stageIndex}-${Date.now()}`,date,competition,round,stageIndex,phase:"knockout",knockout:true,international:true,teamName:nation,opponent,opponentStrength:NATIONAL_TEAM_STRENGTH[opponent]||76,home:stableScoutingUnit(`${competition}|${round}|home`)>.5,neutral:true,status:"upcoming",score:null});state.schedule.sort((a,b)=>a.date.localeCompare(b.date));return opponent;
+  }
+
+  function handleCompetitionProgress(fixture,result) {
+    const club=clubById(state.clubId),league=leagueOf(club);
+    const domesticCups=[league.cup,league.extraCup].filter(Boolean);
+    if(domesticCups.includes(fixture.competition)){
+      const rounds=CUP_ROUNDS[fixture.competition];
+      const stage=fixture.stageIndex||0;
+      state.competitionProgress.cups[fixture.competition]={stage,eliminated:!result.won};
+      if(!result.won)return;
+      if(stage>=rounds.length-1){state.honors.unshift({name:`${fixture.competition}冠军`,season:state.season,scope:"俱乐部"});return;}
+      const used=state.schedule.filter(item=>item.competition===fixture.competition).map(item=>item.opponent);
+      state.schedule.push({id:`cup-${fixture.competition}-${state.season}-${stage+1}`,date:findAvailableFixtureDate(cupRoundTargetDate(fixture.competition,stage+1,state.season)),competition:fixture.competition,round:rounds[stage+1],stageIndex:stage+1,phase:"knockout",knockout:true,opponent:drawDomesticOpponent(club,used),home:Math.random()<.5,status:"upcoming",score:null});
+      state.schedule.sort((a,b)=>a.date.localeCompare(b.date));
+      return;
+    }
+    if(fixture.international){
+      const progress=state.competitionProgress.international[fixture.competition]||=( {played:0,points:0,gf:0,ga:0,eliminated:false,stageIndex:-1} );progress.played++;progress.gf+=result.ours;progress.ga+=result.theirs;
+      if(fixture.phase!=="knockout")progress.points+=result.ours>result.theirs?3:result.draw?1:0;
+      if(fixture.phase==="group"&&progress.played===3){
+        const qualifies=progress.points>=4||(progress.points===3&&stableScoutingUnit(`national-third|${fixture.competition}|${state.season}|${fixture.teamName}`)>.46);if(!qualifies){progress.eliminated=true;addNotification({title:`${fixture.competition}：小组赛出局`,type:"competition",date:fixture.date,detail:"球队未能进入小组前两名或成绩最好的小组第三名行列。",facts:[`小组赛：${progress.points} 分`,`进 ${progress.gf} 球 / 失 ${progress.ga} 球`]});return;}
+        const rounds=NATIONAL_KNOCKOUT_ROUNDS[fixture.competition]||["八强","半决赛","决赛"],opponent=scheduleNationalKnockoutRound(fixture.competition,rounds[0],0,fixture.date);progress.stageIndex=0;addNotification({title:`${fixture.competition}：晋级${rounds[0]}`,type:"competition",date:fixture.date,detail:`国家队从小组赛出线，下一场对阵 ${opponent}。`,facts:[`小组赛：${progress.points} 分`,`进 ${progress.gf} 球 / 失 ${progress.ga} 球`]});return;
+      }
+      if(fixture.phase==="league"){
+        const target=fixture.competition==="欧国联"?6:8;if(progress.played<target)return;
+        if(fixture.competition==="欧国联"&&progress.points>=10){const opponent=scheduleNationalKnockoutRound(fixture.competition,"八强",0,fixture.date);progress.stageIndex=0;addNotification({title:"欧国联：晋级八强",type:"competition",date:fixture.date,detail:`国家队完成联赛阶段，八强将对阵 ${opponent}。`,facts:[`联赛阶段：${progress.points} 分`,`进 ${progress.gf} 球 / 失 ${progress.ga} 球`]});}
+        else if(fixture.competition==="世界杯预选赛"){const qualified=progress.points>=13;if(qualified)state.honors.unshift({name:"晋级世界杯正赛",season:state.season,scope:"国家队"});addNotification({title:`世界杯预选赛：${qualified?"获得正赛资格":"未能直接晋级"}`,type:"competition",date:fixture.date,detail:qualified?"国家队在预选赛中达到晋级线。":"国家队积分未达到直接晋级线。",facts:[`预选赛：${progress.points} 分`,`进 ${progress.gf} 球 / 失 ${progress.ga} 球`]});}
+        return;
+      }
+      if(fixture.phase==="knockout"){
+        const rounds=NATIONAL_KNOCKOUT_ROUNDS[fixture.competition]||["八强","半决赛","决赛"],index=Math.max(0,rounds.findIndex(round=>fixture.round.includes(round)));if(!result.won){progress.eliminated=true;addNotification({title:`${fixture.competition}：${fixture.round}出局`,type:"competition",date:fixture.date,detail:`国家队未能战胜 ${fixture.opponent}。`,facts:[`比分：${result.ours}-${result.theirs}`]});return;}
+        if(index>=rounds.length-1){state.honors.unshift({name:`${fixture.competition}冠军`,season:state.season,scope:"国家队"});addNotification({title:`${fixture.competition}：国家队夺冠`,type:"competition",date:fixture.date,detail:`国家队在决赛中击败 ${fixture.opponent}。`,facts:[`决赛比分：${result.ours}-${result.theirs}`]});return;}
+        const opponent=scheduleNationalKnockoutRound(fixture.competition,rounds[index+1],index+1,fixture.date);progress.stageIndex=index+1;addNotification({title:`${fixture.competition}：晋级${rounds[index+1]}`,type:"competition",date:fixture.date,detail:`国家队淘汰 ${fixture.opponent}，下一场对阵 ${opponent}。`,facts:[`本场比分：${result.ours}-${result.theirs}`]});return;
+      }
+      return;
+    }
+    const config=EUROPEAN_COMPETITION_BY_NAME[fixture.competition];if(!config)return;
+    state.competitionProgress.europe||={};const progress=state.competitionProgress.europe[config.key]||=( {played:0,points:0,gf:0,ga:0,position:null,eliminated:false,knockoutStage:-1} );
+    if(fixture.phase==="league"){
+      progress.played++;progress.points+=result.ours>result.theirs?3:result.draw?1:0;progress.gf+=result.ours;progress.ga+=result.theirs;
+      if(progress.played<config.matches)return;
+      progress.position=estimateEuropeanLeaguePosition(progress,club,config);
+      if(progress.position>24){progress.eliminated=true;addNotification({title:`${config.name}：联赛阶段第 ${progress.position} 名，未能晋级`,type:"competition",date:fixture.date,detail:`${config.name}联赛阶段已经结束。第 25 至 36 名直接出局，不会降入其他欧战。`,facts:[`战绩：${progress.points} 分，进 ${progress.gf} 球 / 失 ${progress.ga} 球`,`联赛阶段排名：第 ${progress.position} 名`,`赛事状态：已出局`]});return;}
+      const direct=progress.position<=8,round=direct?"十六强":"淘汰赛附加赛",stageIndex=direct?1:0,opponent=scheduleEuropeanKnockoutRound(config,round,stageIndex,fixture.date,direct?35:14);
+      progress.knockoutStage=stageIndex;
+      addNotification({title:`${config.name}：联赛阶段第 ${progress.position} 名，${direct?"直接晋级十六强":"进入淘汰赛附加赛"}`,type:"competition",date:fixture.date,detail:`${config.name}联赛阶段已经结束。球队将对阵 ${opponent}，${direct?"无需参加附加赛":"通过两回合比赛争夺十六强席位"}。`,facts:[`战绩：${progress.points} 分，进 ${progress.gf} 球 / 失 ${progress.ga} 球`,`联赛阶段排名：第 ${progress.position} 名`,direct?"晋级路径：直接进入十六强":"晋级路径：淘汰赛附加赛"]});
+      return;
+    }
+    if(fixture.phase==="knockout"){
+      const round=fixture.stageName||fixture.round,currentIndex=Math.max(0,EUROPEAN_KNOCKOUT_ROUNDS.findIndex(item=>round.includes(item)));
+      if(fixture.leg===1)return;
+      if(!result.won){progress.eliminated=true;addNotification({title:`${config.name}：${round}出局`,type:"competition",date:fixture.date,detail:`球队未能越过 ${fixture.opponent}。${fixture.aggregate?`两回合总比分 ${fixture.aggregate.ours}-${fixture.aggregate.theirs}。`:"本场比赛已结束。"}`,facts:[`对手：${fixture.opponent}`,"赛事状态：已出局"]});return;}
+      if(currentIndex>=EUROPEAN_KNOCKOUT_ROUNDS.length-1){state.honors.unshift({name:`${config.fullName}冠军`,season:state.season,scope:"俱乐部"});addNotification({title:`${config.name}：球队夺得冠军`,type:"competition",date:fixture.date,detail:`球队赢得${config.fullName}决赛。`,facts:[`决赛对手：${fixture.opponent}`,"赛事状态：冠军"]});return;}
+      const nextIndex=currentIndex+1,nextRound=EUROPEAN_KNOCKOUT_ROUNDS[nextIndex],opponent=scheduleEuropeanKnockoutRound(config,nextRound,nextIndex,fixture.date,nextRound==="决赛"?24:21);
+      progress.knockoutStage=nextIndex;addNotification({title:`${config.name}：晋级${nextRound}`,type:"competition",date:fixture.date,detail:`球队淘汰 ${fixture.opponent}，下一轮将对阵 ${opponent}。`,facts:[fixture.aggregate?`两回合总比分：${fixture.aggregate.ours}-${fixture.aggregate.theirs}`:`本场比分：${result.ours}-${result.theirs}`,`下一轮：${nextRound}`]});
+    }
+  }
+
+  function updatePlayerAbility(p,rating) {
+    ensurePlayerDevelopment(p,state.season);
+    state.reputation=clamp(Math.round(state.reputation+(rating-6)*.08),1,99);
+  }
+  function updateCoachAbility(won,draw,tactical) {const c=state.coachProfile;const chance=(won?.12:draw?.035:-.025)+(tactical-70)/800;if(chance>0&&Math.random()<chance){c.overall=clamp(c.overall+1,1,99);c.tactics=clamp(c.tactics+(Math.random()<.5?1:0),1,99);}if(chance<0&&Math.random()<Math.abs(chance)){c.overall=clamp(c.overall-1,1,99);}state.reputation=c.overall;}
+
+  function settlePlayerSeason(player) {
+    const development=ensurePlayerDevelopment(player,state.season),start=Number(development.startOverall||player.overall||65),score=playerDevelopmentScore(player),gap=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
+    let change=score>=1.85?4:score>=1.45?3:score>=.75?2:score>=.4?1:score<=-1.1?-2:score<=-.35?-1:0;
+    if(change>0&&!gap)change=0;
+    if(change>gap)change=gap;
+    player.overall=clamp(Number(player.overall||65)+change,40,99);
+    if(development.injuryDays>=120&&player.potential>player.overall&&Math.random()<.24)player.potential=Math.max(player.overall,player.potential-1);
+    const seasonRecord={season:state.season,club:clubById(state.clubId).name,appearances:Number(player.appearances||0),goals:Number(player.goals||0),assists:Number(player.assists||0),average:Number((averageRating(player)||0).toFixed(2)),overallStart:start,overallEnd:player.overall,change};
+    player.careerStats=[...(player.careerStats||[]),seasonRecord].slice(-12);
+    return {player,change,score};
+  }
+
+  function confirmTransfer() {
+    const p=modal?.player;if(!p){modal=null;render();return;}
+    if(state.role==="player"){addNotification({title:`教练组已收到关于 ${p.name} 的引援建议`,type:"transfer",date:state.date,detail:"教练组已经把建议交给球探部门评估。是否提交报价将由球队预算、位置需求、球员意愿和俱乐部声望共同决定。",facts:[`${p.name} · ${playerRoleLabel(p.position)} · 能力 ${p.overall} / 潜力 ${p.potential}`,`参考身价：${money(p.value)}`]});state.media.unshift({source:"Inside Training",title:`${state.person} 建议球队关注 ${p.name}`,body:"这项建议已经交给球探部门评估，是否推进仍取决于预算与阵容规划。",date:state.date,type:"transfer"});modal=null;saveState();render();toast("引援建议已提交");return;}
+    startNegotiation(p);
+  }
+
+  function requestTransfer() {const p=controlledPlayer();if(!p||p.transferRequestStatus==="submitted")return;state.transferRequests++;p.transferRequestStatus="submitted";p.morale=clamp(p.morale-4,0,100);const club=clubById(state.clubId),likely=clamp((p.overall-club.prestige+20)*3,8,82);state.transferRequestsLog.unshift({id:`request-${Date.now()}`,date:state.date,type:"player-request",playerId:p.id,playerName:p.name,status:"submitted"});addNotification({title:`董事会：已受理 ${state.person} 的转会申请`,type:"transfer",date:state.date,detail:`俱乐部会正式评估潜在报价、合同剩余年限和更衣室影响。当前匹配到合适报价的估计概率为 ${likely}%。`,facts:[`合同至 ${p.contract?.endSeason||state.season+2} 年`,`当前角色：${p.contract?.role||"轮换球员"}`,`解约金：${money(p.contract?.releaseClause||0)}`]});state.media.unshift({source:"Transfer Desk",title:`${state.person} 向 ${club.name} 提交正式转会申请`,body:`董事会已受理申请。按照当前能力与球队地位，获得合适报价的估计概率为 ${likely}%。`,date:state.date,type:"transfer"});saveState();render();toast("正式转会申请已提交");}
+  function retire() {state.retired=true;state.history.unshift({season:state.season,club:clubById(state.clubId).name,played:state.played,wins:state.wins,position:state.leaguePosition});state.media.unshift({source:"Football Daily",title:`${state.person} 宣布结束职业生涯`,body:"一段足球生涯在今天落幕，完整比赛、数据和荣誉记录将永久保留。",date:state.date,type:"career"});modal=null;saveState();render();toast("职业生涯已归档");}
+
+  function newSeason() {
+    state.history.unshift({season:state.season,club:clubById(state.clubId).name,played:state.played,wins:state.wins,position:state.leaguePosition});
+    if(state.leaguePosition===1)state.honors.unshift({name:LEAGUES[clubById(state.clubId).league].name+"冠军",season:state.season,scope:"俱乐部"});
+    if(state.role==="player"&&averageRating(controlledPlayer())>=7.6)state.honors.unshift({name:"赛季最佳球员",season:state.season,scope:"个人"});
+    const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3);
+    state.season++;state.date=`${state.season}-08-01`;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season);simulateTransferMarket(state,state.date);
+    state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});
+    if(growthLeaders.length)state.media.unshift({source:"Player Development",title:"赛季球员发展报告已发布",body:growthLeaders.map(item=>`${item.player.name} ${item.change>0?`提升 ${item.change} 点`:`下降 ${Math.abs(item.change)} 点`}`).join("；"),date:state.date,type:"career"});
+    state.media.unshift({source:"Football Daily",title:`${state.season}/${String(state.season+1).slice(2)} 赛季正式开启`,body:"全新的联赛和杯赛日程已经生成，阵容状态与赛季目标也已重置。",date:state.date,type:"career"});saveState();render();toast("新赛季赛程已生成");
+  }
+
+  render();
+})();

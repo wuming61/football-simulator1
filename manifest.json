@@ -1,0 +1,20 @@
+{
+  "name": "Football Simulator",
+  "short_name": "FS 26",
+  "description": "跨平台足球生涯模拟游戏",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#08100d",
+  "theme_color": "#0b1812",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "assets/trophies/league.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

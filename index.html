@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1812" />
+    <meta name="description" content="Football Simulator - 可在手机与电脑浏览器中游玩的足球生涯模拟游戏。" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Football Simulator" />
+    <title>Football Simulator</title>
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="assets/trophies/league.png" type="image/png" />
+    <link rel="apple-touch-icon" href="assets/trophies/league.png" />
+    <link rel="stylesheet" href="styles.css?v=47" />
+  </head>
+  <body>
+    <div id="app" aria-live="polite"></div>
+    <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <script src="vendor/lucide.min.js"></script>
+    <script src="data/dongqiudi-data.js"></script>
+    <script src="app.js?v=47"></script>
+    <script>
+      if ("serviceWorker" in navigator && location.protocol !== "file:") {
+        addEventListener("load", () => navigator.serviceWorker.register("service-worker.js?v=47", { updateViaCache:"none" }));
+      }
+    </script>
+  </body>
+</html>
