@@ -5,6 +5,23 @@
   const SAVE_KEY = "football-simulator-v0-save";
   const MOD_KEY = "football-simulator-mod-packs";
   const START_DATE = "2026-08-01";
+  const PLAYER_WEEKLY_PLANS = {
+    balanced:{label:"均衡训练",icon:"scale",summary:"维持体能、状态与技术稳定",training:"balanced",fitness:0,morale:.08,trust:.05,tactical:.08,development:.07},
+    finishing:{label:"终结加练",icon:"target",summary:"提高射门成长和进攻信心，体能恢复稍慢",training:"intense",fitness:-.35,morale:.12,trust:.08,tactical:.03,development:.16,attribute:"shooting"},
+    creativity:{label:"组织与技术",icon:"route",summary:"强化传球、盘带和战术理解",training:"balanced",fitness:-.12,morale:.08,trust:.07,tactical:.16,development:.13,attribute:"passing"},
+    defending:{label:"防守职责",icon:"shield-check",summary:"提高防守执行和教练信任",training:"intense",fitness:-.28,morale:.04,trust:.17,tactical:.12,development:.12,attribute:"defending"},
+    recovery:{label:"恢复周期",icon:"battery-charging",summary:"优先恢复体能并降低伤病风险",training:"recovery",fitness:.65,morale:.16,trust:-.02,tactical:.02,development:.02},
+    competition:{label:"争取首发",icon:"shirt",summary:"用额外训练和录像分析挑战位置竞争",training:"intense",fitness:-.42,morale:.1,trust:.2,tactical:.18,development:.1},
+    chemistry:{label:"队友合练",icon:"users-round",summary:"增强更衣室关系、默契与无球协作",training:"balanced",fitness:-.08,morale:.18,trust:.08,tactical:.1,development:.06}
+  };
+  const PLAYER_MATCH_PLANS = {
+    balanced:{label:"完成职责",icon:"circle-dot",summary:"按教练部署稳定比赛",attributes:{},trust:.3,risk:0},
+    safe:{label:"稳健发挥",icon:"shield",summary:"减少冒险与失误，保住位置",attributes:{passing:2,defending:1,dribbling:-2,shooting:-1},trust:.45,risk:-1},
+    attack:{label:"主动进攻",icon:"swords",summary:"更多前插和射门，承担丢失球权风险",attributes:{shooting:3,pace:2,dribbling:1,defending:-2},trust:.1,risk:2},
+    creative:{label:"承担组织",icon:"sparkles",summary:"增加持球与关键传球尝试",attributes:{passing:3,dribbling:2,physical:-1},trust:.2,risk:1},
+    defensive:{label:"专注防守",icon:"scan-line",summary:"提高对抗和位置纪律",attributes:{defending:3,physical:2,shooting:-2},trust:.4,risk:0},
+    conserve:{label:"控制负荷",icon:"battery-medium",summary:"减少冲刺，降低疲劳和伤病风险",attributes:{pace:-2,physical:-1,passing:1},trust:0,risk:-2}
+  };
   const DQD_DATA = window.DQD_DATA || { meta:{ teamCount:0, playerCount:0 }, leagues:{}, teams:[] };
   const LEGACY_TEAM_MAP = {
     mci:"dqd-529", ars:"dqd-513", liv:"dqd-516", mun:"dqd-515", lee:"dqd-534", sun:"dqd-536",
@@ -854,7 +871,7 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:25, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:26, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
@@ -866,7 +883,8 @@
         { source:"The Tactical Room", title:`${club.name} 季前展望：稳定性将决定上限`, body:`球队需要在密集赛程中管理体能，并在两个转会窗口做出准确判断。`, date:START_DATE, type:"analysis" }
       ],
       honors:[], history:[], notifications:initialNotifications(club,schedule),matchReports:[],squadSort:{key:"position",direction:"asc"},squadSearch:"",fixtureFilter:"all",
-      activeMatch:null, selectedTransfer:null, transferNegotiations:[],transferRequestsLog:[],transferHistory:[],retired:false
+      activeMatch:null, selectedTransfer:null, transferNegotiations:[],transferRequestsLog:[],transferHistory:[],retired:false,
+      playerCareer:setup.role==="player"?createPlayerCareer(controlled,club):null
     };
     created.transferMarket=createTransferMarket(created.season);
     simulateTransferMarket(created,START_DATE);
@@ -966,13 +984,216 @@
     }
     if(previousVersion<20&&saved.activeMatch?.fixture?.international&&Number(saved.activeMatch.minute||0)===0)saved.activeMatch=null;
     saved.schedule?.sort((a,b)=>a.date.localeCompare(b.date));
-    saved.version=25;
+    if(saved.role==="player")saved.playerCareer=ensurePlayerCareer(saved);
+    saved.version=26;
     return saved;
   }
   function saveState() { if (state) localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }
   function resetSave() { localStorage.removeItem(SAVE_KEY); state = null; modal = null; render(); }
   function controlledPlayer() { return state?.squad.find(p => p.id === state.controlledId); }
   function nextFixture() { return state?.schedule.filter(f=>f.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date))[0]; }
+
+  function createPlayerCareer(player,club) {
+    const status=player?.overall>=club.prestige-2?"常规主力":player?.overall>=club.prestige-7?"轮换竞争":"一线队候选";
+    return {
+      weeklyPlan:"balanced",weeklyPlanSetDate:START_DATE,weeklyPlanChanges:0,matchPlan:"balanced",matchPlanFixtureId:null,
+      trust:clamp(Math.round(58+(Number(player?.overall||65)-Number(club?.prestige||70))*.7),38,78),confidence:72,tactical:62,professionalism:68,
+      relationships:{coach:62,teammates:66,captain:60,agent:70,fans:55,media:52},status,
+      lastInteractionDate:null,interactionHistory:[],pendingIssues:[],requests:[],story:null,storyHistory:[],nextStoryDate:addDays(START_DATE,9),
+      trainingDays:0,weeklyReportDate:START_DATE,selectionStreak:0,benchStreak:0,lastOutcome:"新赛季报到",seasonObjectives:createPlayerObjectives(player),
+      objectiveProgress:{appearances:0,ratings:0,goals:0,assists:0},contractStance:"留队竞争"
+    };
+  }
+
+  function createPlayerObjectives(player) {
+    const attacker=["ST","CF","RW","LW","WG","AM"].includes(player?.position),creator=["CM","MF","AM","RW","LW","WG"].includes(player?.position);
+    return [
+      {id:"appearances",label:"稳定进入比赛名单",target:player?.overall>=84?28:20,unit:"场"},
+      {id:"rating",label:"保持赛季平均评分",target:6.8,unit:"评分"},
+      {id:attacker?"goals":creator?"assists":"trust",label:attacker?"直接贡献进球":creator?"创造助攻":"赢得教练信任",target:attacker?10:creator?8:76,unit:attacker||creator?"次":"%"}
+    ];
+  }
+
+  function ensurePlayerCareer(save=state) {
+    if(!save||save.role!=="player")return null;
+    const player=(save.squad||[]).find(item=>item.id===save.controlledId),club=clubById(save.clubId),base=createPlayerCareer(player,club);
+    const career=save.playerCareer||(save.playerCareer={});
+    Object.entries(base).forEach(([key,value])=>{if(career[key]===undefined||career[key]===null)career[key]=Array.isArray(value)?[...value]:value&&typeof value==="object"?{...value}:value;});
+    career.relationships={...base.relationships,...(career.relationships||{})};
+    career.interactionHistory=Array.isArray(career.interactionHistory)?career.interactionHistory:[];
+    career.pendingIssues=Array.isArray(career.pendingIssues)?career.pendingIssues:[];
+    career.requests=Array.isArray(career.requests)?career.requests:[];
+    career.storyHistory=Array.isArray(career.storyHistory)?career.storyHistory:[];
+    career.seasonObjectives=Array.isArray(career.seasonObjectives)&&career.seasonObjectives.length?career.seasonObjectives:createPlayerObjectives(player);
+    career.objectiveProgress={...base.objectiveProgress,...(career.objectiveProgress||{})};
+    career.lastInteractions={...(career.lastInteractions||{})};
+    ["trust","confidence","tactical","professionalism"].forEach(key=>career[key]=clamp(Number(career[key]??base[key]),0,100));
+    Object.keys(career.relationships).forEach(key=>career.relationships[key]=clamp(Number(career.relationships[key]),0,100));
+    return career;
+  }
+
+  function careerRelationshipLabel(key) {
+    return ({coach:"主教练",teammates:"队友",captain:"队长",agent:"经纪人",fans:"球迷",media:"媒体"})[key]||key;
+  }
+
+  function careerValueLabel(value) {
+    return value>=85?"非常稳固":value>=72?"良好":value>=58?"正常":value>=42?"承压":"关系紧张";
+  }
+
+  function changePlayerCareer(changes={}) {
+    const career=ensurePlayerCareer();if(!career)return;
+    Object.entries(changes).forEach(([key,delta])=>{
+      if(key.startsWith("relationship:")){
+        const relation=key.split(":")[1];career.relationships[relation]=clamp(Number(career.relationships[relation]||50)+Number(delta||0),0,100);
+      }else if(["trust","confidence","tactical","professionalism"].includes(key))career[key]=clamp(Number(career[key]||50)+Number(delta||0),0,100);
+    });
+  }
+
+  function careerDaysSince(date) { return date?daysBetween(date,state.date):999; }
+
+  function playerPlanTrainingMode() {
+    const career=ensurePlayerCareer(),plan=PLAYER_WEEKLY_PLANS[career?.weeklyPlan]||PLAYER_WEEKLY_PLANS.balanced;return plan.training;
+  }
+
+  function applyPlayerCareerDay(targetDate) {
+    if(state.role!=="player")return null;
+    const career=ensurePlayerCareer(),player=controlledPlayer(),plan=PLAYER_WEEKLY_PLANS[career.weeklyPlan]||PLAYER_WEEKLY_PLANS.balanced;if(!player)return null;
+    career.trainingDays=Number(career.trainingDays||0)+1;
+    player.fitness=clamp(Number(player.fitness||70)+plan.fitness,25,100);
+    player.morale=clamp(Number(player.morale||75)+plan.morale,25,100);
+    career.trust=clamp(career.trust+plan.trust,0,100);career.tactical=clamp(career.tactical+plan.tactical,0,100);
+    if(career.weeklyPlan==="chemistry")career.relationships.teammates=clamp(career.relationships.teammates+.22,0,100);
+    const development=ensurePlayerDevelopment(player,state.season);development.trainingScore=Number((Number(development.trainingScore||0)+plan.development).toFixed(2));
+    const focusAttribute=plan.attribute;if(focusAttribute)development.attributeFocus={...(development.attributeFocus||{}),[focusAttribute]:Number((development.attributeFocus?.[focusAttribute]||0)+plan.development)};
+    const dueRequest=career.requests.find(item=>item.status==="pending"&&item.dueDate<=targetDate);
+    if(dueRequest)return resolveCareerRequest(dueRequest,targetDate);
+    if(career.story&&career.story.status==="waiting"&&career.story.nextDate<=targetDate){career.story.status="active";return {type:"player-career",title:career.story.title,view:"home"};}
+    if(!career.story&&targetDate>=career.nextStoryDate){startPlayerStory(targetDate);return {type:"player-career",title:career.story.title,view:"home"};}
+    return null;
+  }
+
+  function startPlayerStory(date) {
+    const career=ensurePlayerCareer(),player=controlledPlayer(),form=Number(player.lastRating||player.form||6.4),type=career.benchStreak>=2?"selection":form<6.2?"form":player.contract?.endSeason<=state.season+1?"contract":career.trust<55?"coach":"competition";
+    const content={
+      selection:["位置竞争加剧","教练组正在重新评估这个位置的出场顺序。接下来一周的态度和训练会影响轮换。"],
+      form:["低迷期的回应","连续表现没有达到预期，媒体和教练组都在等待你的回应。"],
+      contract:["未来需要决定","经纪人提醒你合同进入关键阶段，俱乐部正在观察你的长期态度。"],
+      coach:["教练信任出现波动","主教练希望看到更稳定的战术执行，而不只是个人数据。"],
+      competition:["队内竞争者状态出色","同位置队友近期训练表现很好，你需要决定如何回应竞争。"]
+    }[type];
+    career.story={id:`story-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,type,stage:1,status:"active",date,title:content[0],detail:content[1],nextDate:null,choices:[]};
+  }
+
+  function playerStoryChoices(story) {
+    const stage=Number(story?.stage||1),type=story?.type;
+    if(stage===1){
+      if(type==="contract")return [{id:"agent",icon:"briefcase",label:"让经纪人接触俱乐部",detail:"推动续约，但会把未来问题公开化"},{id:"wait",icon:"clock-3",label:"专注球场表现",detail:"暂不施压，用比赛赢得筹码"},{id:"exit",icon:"door-open",label:"评估离队可能",detail:"扩大市场选择，也会影响教练关系"}];
+      if(type==="form")return [{id:"review",icon:"video",label:"加看比赛录像",detail:"提升战术理解并修正失误"},{id:"train",icon:"dumbbell",label:"进行额外训练",detail:"争取信任，但增加短期疲劳"},{id:"calm",icon:"heart-pulse",label:"接受心理辅导",detail:"先恢复信心和稳定性"}];
+      return [{id:"compete",icon:"flame",label:"正面竞争",detail:"增加训练投入，争取教练认可"},{id:"team",icon:"handshake",label:"保持团队态度",detail:"维护更衣室关系和职业形象"},{id:"talk",icon:"message-circle",label:"与教练沟通",detail:"询问明确的改进方向"}];
+    }
+    return [{id:"commit",icon:"check-circle",label:"接受教练安排",detail:"稳定位置并继续兑现承诺"},{id:"demand",icon:"megaphone",label:"要求更多机会",detail:"高风险地争取出场时间"},{id:"agent",icon:"briefcase",label:"交给经纪人处理",detail:"减少正面冲突，推动职业方案"}];
+  }
+
+  function resolvePlayerStoryChoice(choice) {
+    const career=ensurePlayerCareer(),story=career?.story;if(!story||story.status!=="active")return;
+    const effects={
+      review:{trust:2,tactical:4,confidence:1,professionalism:2},train:{trust:4,confidence:2,professionalism:2},calm:{confidence:6,"relationship:coach":1},
+      compete:{trust:3,confidence:3,professionalism:1},team:{trust:2,"relationship:teammates":5,"relationship:captain":3},talk:{trust:2,"relationship:coach":5,tactical:2},
+      wait:{trust:1,professionalism:3},exit:{trust:-4,"relationship:agent":4,"relationship:coach":-3},
+      commit:{trust:4,"relationship:coach":4,professionalism:2},demand:{trust:-3,confidence:3,"relationship:coach":-5},agent:{"relationship:agent":4,"relationship:coach":-1}
+    }[choice]||{};
+    changePlayerCareer(effects);
+    const player=controlledPlayer();if(["train","compete"].includes(choice))player.fitness=clamp(player.fitness-5,25,100);
+    if(choice==="agent"&&story.type==="contract")queueCareerRequest("contract");
+    if(choice==="exit")career.contractStance="考虑离队";
+    career.storyHistory.unshift({id:story.id,type:story.type,stage:story.stage,date:state.date,choice,title:story.title});
+    if(story.stage===1){story.stage=2;story.status="waiting";story.nextDate=addDays(state.date,7);story.title="职业事件后续";story.detail="教练组和更衣室已经注意到你的选择，下一次沟通将决定这段事件如何收尾。";}
+    else{story.status="completed";career.lastOutcome=`${story.title}已经结束`;career.story=null;career.nextStoryDate=addDays(state.date,18+Math.floor(Math.random()*15));}
+    modal=null;saveState();render();toast("你的选择已经记录，后续会随时间发展");
+  }
+
+  function queueCareerRequest(type) {
+    const career=ensurePlayerCareer();if(!career||career.requests.some(item=>item.type===type&&item.status==="pending"))return false;
+    const labels={contract:"续约与待遇评估",loan:"外租申请",market:"市场兴趣调查"};career.requests.unshift({id:`request-${type}-${Date.now()}`,type,label:labels[type],date:state.date,dueDate:addDays(state.date,type==="market"?3:5),status:"pending"});return true;
+  }
+
+  function resolveCareerRequest(request,date) {
+    const career=ensurePlayerCareer(),player=controlledPlayer(),average=averageRating(player)||6.35,club=clubById(state.clubId);request.status="resolved";request.resolvedDate=date;
+    if(request.type==="contract"){
+      const accepted=career.trust>=64&&average>=6.55;if(accepted){player.contract.weeklyWage=Math.round(Number(player.contract.weeklyWage||player.wage||25)*(1.1+Math.max(0,average-6.5)*.08));player.contract.endSeason=Math.max(Number(player.contract.endSeason||state.season+2),state.season+3);career.contractStance="续约达成";changePlayerCareer({trust:2,"relationship:agent":3});request.outcome=`俱乐部同意续约至 ${player.contract.endSeason} 年，周薪调整为 €${player.contract.weeklyWage}K。`;}
+      else{career.contractStance="等待机会";changePlayerCareer({confidence:-2,"relationship:agent":1});request.outcome="俱乐部暂时拒绝续约，要求先改善出场时间和表现。";}
+    }else if(request.type==="loan"){
+      const accepted=career.trust<72||player.contract?.role==="替补球员";career.contractStance=accepted?"允许寻求外租":"留队竞争";request.outcome=accepted?"俱乐部同意在下一个转会窗口评估外租报价。":"教练希望你继续留队竞争，本次外租申请被拒绝。";changePlayerCareer({trust:accepted?-2:1,"relationship:agent":2});
+    }else{const interest=clamp(Math.round((player.overall-club.prestige+16)*3+(average-6.3)*18),5,92);request.outcome=`经纪人评估：当前获得合适报价的概率约为 ${interest}%，${interest>=55?"已有同级别俱乐部关注。":"现阶段更适合先提高比赛影响力。"}`;changePlayerCareer({"relationship:agent":2});}
+    addNotification({title:`经纪人：${request.label}已有结果`,type:"transfer",date,detail:request.outcome,facts:[`当前立场：${career.contractStance}`,`教练信任：${Math.round(career.trust)}%`,`赛季评分：${average.toFixed(2)}`]});
+    return {type:"player-request",title:`经纪人回复：${request.label}`,view:"home"};
+  }
+
+  function canCareerAction(action) {
+    const career=ensurePlayerCareer(),last=career?.lastInteractions?.[action];return !last||daysBetween(last,state.date)>=5;
+  }
+
+  function setPlayerWeeklyPlan(planId) {
+    const career=ensurePlayerCareer(),plan=PLAYER_WEEKLY_PLANS[planId];if(!career||!plan)return;
+    if(career.weeklyPlan===planId){modal=null;render();return;}
+    if(daysBetween(career.weeklyPlanSetDate,state.date)<7&&career.weeklyPlanChanges>0)changePlayerCareer({professionalism:-2,trust:-1});
+    career.weeklyPlan=planId;career.weeklyPlanSetDate=state.date;career.weeklyPlanChanges=Number(career.weeklyPlanChanges||0)+1;
+    career.interactionHistory.unshift({date:state.date,type:"plan",title:`周计划改为${plan.label}`});modal=null;saveState();render();toast(`本周重点：${plan.label}`);
+  }
+
+  function setPlayerMatchPlan(planId) {
+    const career=ensurePlayerCareer(),plan=PLAYER_MATCH_PLANS[planId],fixture=nextFixture();if(!career||!plan||!fixture)return;
+    career.matchPlan=planId;career.matchPlanFixtureId=fixture.id;career.interactionHistory.unshift({date:state.date,type:"match-plan",title:`对阵 ${fixture.opponent}：${plan.label}`});saveState();render();toast(`比赛计划：${plan.label}`);
+  }
+
+  function resolveCareerAction(action,choice) {
+    const career=ensurePlayerCareer(),player=controlledPlayer();if(!career||!player||!canCareerAction(action)){toast("这项沟通刚刚进行过，请先推进几天");return;}
+    const effects={
+      coach:{feedback:{trust:2,tactical:3,"relationship:coach":4},chance:{trust:-1,confidence:2,"relationship:coach":-1},role:{trust:1,"relationship:coach":2,professionalism:1}},
+      training:{technical:{trust:2,professionalism:2},physical:{trust:2,confidence:2},recovery:{confidence:2,professionalism:1}},
+      teammates:{mentor:{"relationship:teammates":4,"relationship:captain":4,professionalism:2},social:{"relationship:teammates":6,confidence:3},competition:{"relationship:teammates":-1,confidence:4,trust:2}},
+      support:{psychology:{confidence:7,professionalism:1},captain:{confidence:3,"relationship:captain":5},media:{"relationship:fans":4,"relationship:media":4,trust:-1}},
+      agent:{contract:{"relationship:agent":2},loan:{"relationship:agent":2,trust:-1},market:{"relationship:agent":3}}
+    }[action]?.[choice]||{};
+    changePlayerCareer(effects);
+    if(action==="training"){
+      player.fitness=clamp(player.fitness+(choice==="recovery"?6:-4),25,100);const development=ensurePlayerDevelopment(player,state.season);development.trainingScore=Number((Number(development.trainingScore||0)+(choice==="technical"?.8:.45)).toFixed(2));
+    }
+    if(action==="agent")queueCareerRequest(choice);
+    career.lastInteractions[action]=state.date;career.lastInteractionDate=state.date;career.interactionHistory.unshift({date:state.date,type:action,title:careerActionOutcome(action,choice)});career.lastOutcome=careerActionOutcome(action,choice);
+    modal=null;saveState();render();toast(career.lastOutcome);
+  }
+
+  function careerActionOutcome(action,choice) {
+    return ({feedback:"教练给出了明确的录像改进意见",chance:"你向教练表达了争取首发的态度",role:"你与教练讨论了队内定位",technical:"完成了一次专项技术加练",physical:"完成了一次身体强化训练",recovery:"完成恢复与理疗",mentor:"你参加了队长组织的小组交流",social:"你主动融入了更衣室",competition:"你在对抗训练中展示了竞争心",psychology:"心理团队帮助你重新建立比赛节奏",captain:"队长与你进行了单独沟通",media:"你接受采访并正面回应了近况",contract:"经纪人已经提交续约评估",loan:"经纪人已经提交外租申请",market:"经纪人开始调查市场兴趣"})[choice]||"职业安排已更新";
+  }
+
+  function createPerformanceIssue(rating,minutes,fixture) {
+    const career=ensurePlayerCareer();if(!career)return;
+    const existing=career.pendingIssues.some(item=>item.status==="open");if(existing)return;
+    let type,title,detail;
+    if(minutes===0&&career.benchStreak>=2){type="selection";title="连续未获出场机会";detail="你连续没有得到出场时间，需要决定如何回应教练的轮换安排。";}
+    else if(minutes>0&&rating<6.15){type="poor-form";title=`${rating.toFixed(2)} 分后的回应`;detail=`对阵 ${fixture.opponent} 的表现没有达到要求。下一步行动会影响信心和教练信任。`;}
+    else return;
+    career.pendingIssues.unshift({id:`issue-${Date.now()}`,type,title,detail,date:fixture.date,status:"open"});
+  }
+
+  function resolvePerformanceIssue(choice) {
+    const career=ensurePlayerCareer(),issue=career?.pendingIssues.find(item=>item.id===modal?.id&&item.status==="open"),player=controlledPlayer();if(!issue||!player)return;
+    const effects={review:{trust:3,tactical:4,professionalism:2},extra:{trust:4,confidence:2,professionalism:2},coach:{trust:2,"relationship:coach":5,confidence:2},support:{confidence:7,"relationship:captain":2},media:{"relationship:fans":4,"relationship:media":3,trust:-2}}[choice]||{};changePlayerCareer(effects);
+    if(choice==="extra")player.fitness=clamp(player.fitness-6,25,100);if(choice==="support")player.morale=clamp(player.morale+4,25,100);
+    issue.status="resolved";issue.choice=choice;issue.resolvedDate=state.date;career.lastOutcome=careerActionOutcome(choice==="extra"?"training":"support",choice);modal=null;saveState();render();toast("恢复方案已经开始执行");
+  }
+
+  function updatePlayerCareerAfterMatch(player,rating,minutes,fixture) {
+    const career=ensurePlayerCareer();if(!career||!player)return;
+    if(minutes>0){career.selectionStreak=Number(career.selectionStreak||0)+1;career.benchStreak=0;changePlayerCareer({trust:rating>=7.3?3:rating>=6.7?1:rating<6.15?-3:-1,confidence:rating>=7.3?5:rating>=6.7?2:rating<6.15?-5:-2,professionalism:rating>=6.5?.5:0});}
+    else{career.selectionStreak=0;career.benchStreak=Number(career.benchStreak||0)+1;changePlayerCareer({confidence:-1,trust:career.benchStreak>=3?-1:0});}
+    const plan=PLAYER_MATCH_PLANS[fixture.playerMatchPlan||career.matchPlan]||PLAYER_MATCH_PLANS.balanced;changePlayerCareer({trust:rating>=6.5?plan.trust:Math.min(0,plan.trust-1)});
+    career.status=career.trust>=82?"核心成员":career.trust>=70?"常规主力":career.trust>=58?"轮换竞争":career.trust>=45?"替补顺位":"边缘球员";
+    career.objectiveProgress={appearances:Number(player.appearances||0),ratings:Number((averageRating(player)||0).toFixed(2)),goals:Number(player.goals||0),assists:Number(player.assists||0),trust:Math.round(career.trust)};
+    createPerformanceIssue(rating,minutes,fixture);
+  }
 
   function weekdayLabel(date) {
     return new Date(`${date}T12:00:00`).toLocaleDateString("zh-CN",{weekday:"short"});
@@ -981,7 +1202,7 @@
   function ensurePlayerDevelopment(player,season=state?.season||2026) {
     player.careerStats=Array.isArray(player.careerStats)?player.careerStats:[];
     if(!player.development||player.development.season!==season)player.development={season,startOverall:Number(player.overall||65),minutes:0,injuryDays:0};
-    player.development.startOverall??=Number(player.overall||65);player.development.minutes??=0;player.development.injuryDays??=0;
+    player.development.startOverall??=Number(player.overall||65);player.development.minutes??=0;player.development.injuryDays??=0;player.development.trainingScore??=0;player.development.attributeFocus||={};
     return player.development;
   }
 
@@ -1083,6 +1304,7 @@
   function notificationIcon(type) { return ({match:"clipboard-list",medical:"briefcase-medical",board:"landmark",schedule:"calendar-days",competition:"trophy",transfer:"arrow-right-left"})[type]||"bell"; }
 
   function renderHome() {
+    if(state.role==="player")return renderPlayerHome();
     const club=clubById(state.clubId), next=nextFixture(), p=controlledPlayer();
     const nextOurTeam=next?.teamName||club;
     const played=state.schedule.filter(fixture=>fixture.status==="played"&&fixture.competition===leagueOf(club).short).length;
@@ -1103,6 +1325,44 @@
           <section class="panel"><div class="panel-header"><h3>${state.role==="coach"?"球队焦点":"个人状态"}</h3></div><div class="panel-body">${state.role==="coach"?renderCoachFocus():renderPlayerFocus(p)}</div></section>
           <section class="panel"><div class="panel-header"><h3>待办</h3><span class="meta">${unread?`${unread} 项未读`:`${state.notifications.length} 项`}</span></div><div class="list">${state.notifications.slice(0,6).map(n=>`<button class="list-row notification-row ${n.read?"":"unread"}" data-notification="${esc(n.id)}"><div class="avatar">${icon(notificationIcon(n.type))}</div><div class="list-row-main"><div class="list-row-title">${esc(n.title)}</div><div class="list-row-sub">${n.read?"已查看":"需要查看"} · ${formatDate(n.date,false)}</div></div>${icon("chevron-right")}</button>`).join("")||`<div class="empty compact">暂无待办事项</div>`}</div></section>
         </div>
+      </div>`;
+  }
+
+  function objectiveCurrent(career,player,objective) {
+    if(objective.id==="rating")return Number(averageRating(player)||0);
+    if(objective.id==="trust")return Math.round(career.trust);
+    return Number(player[objective.id]||career.objectiveProgress?.[objective.id]||0);
+  }
+
+  function playerSelectionForecast(player,career,fixture) {
+    if(!fixture)return {label:"暂无比赛",tone:"neutral",detail:"赛程尚未生成"};
+    if(player.injured)return {label:"无法出场",tone:"danger",detail:`${player.injury||"伤病"} · 预计还需 ${player.injured} 天`};
+    const form=Number(player.lastRating||player.form||6.35),fitness=Number(player.fitness||80),role=player.contract?.role||"轮换球员",score=(player.overall-clubById(state.clubId).prestige)*1.2+(career.trust-60)*.22+(career.tactical-60)*.08+(form-6.3)*5+(fitness-80)*.08+({"核心主力":7,"常规主力":4,"轮换球员":1,"替补球员":-3})[role];
+    if(fitness<68)return {label:"预计轮休",tone:"warn",detail:"体能尚未达到首发要求"};
+    if(score>=3)return {label:"预计首发",tone:"good",detail:"当前状态和教练信任处于首发区间"};
+    if(score>=-4)return {label:"替补竞争",tone:"warn",detail:"训练表现和比赛计划仍能改变顺位"};
+    return {label:"名单边缘",tone:"danger",detail:"需要提升状态、信任或战术适配"};
+  }
+
+  function renderPlayerHome() {
+    const player=controlledPlayer(),career=ensurePlayerCareer(),club=clubById(state.clubId),fixture=nextFixture(),forecast=playerSelectionForecast(player,career,fixture),weekly=PLAYER_WEEKLY_PLANS[career.weeklyPlan]||PLAYER_WEEKLY_PLANS.balanced;
+    const currentMatchPlan=career.matchPlanFixtureId===fixture?.id?career.matchPlan:"balanced",openIssue=career.pendingIssues.find(item=>item.status==="open"),activeStory=career.story?.status==="active"?career.story:null,pendingRequests=career.requests.filter(item=>item.status==="pending");
+    const action=(id,iconName,title,detail)=>`<button class="career-command" data-career-action="${id}" ${canCareerAction(id)?"":"disabled"}>${icon(iconName)}<span><strong>${title}</strong><small>${canCareerAction(id)?detail:"刚刚沟通过，请先推进几天"}</small></span>${icon("chevron-right")}</button>`;
+    return `<div class="player-command-heading"><div><span class="eyebrow">${state.season}/${String(state.season+1).slice(2)} · 球员生涯</span><h2>${esc(player.name)}</h2><p>${clubNameLink(club.name)} · ${playerRoleLabel(player.position)} · ${career.status}</p></div><div class="player-overall"><span>当前能力</span><strong>${player.overall}</strong></div></div>
+      <section class="player-status-strip" aria-label="个人关键状态"><div><span>教练信任</span><strong>${Math.round(career.trust)}%</strong><i><b style="width:${career.trust}%"></b></i></div><div><span>比赛信心</span><strong>${Math.round(career.confidence)}%</strong><i><b style="width:${career.confidence}%"></b></i></div><div><span>体能</span><strong>${Math.round(player.fitness)}%</strong><i><b style="width:${player.fitness}%"></b></i></div><div><span>赛季评分</span><strong>${player.appearances?(averageRating(player)||6).toFixed(2):"—"}</strong><small>${player.appearances||0} 场 · ${player.goals||0} 球 · ${player.assists||0} 助</small></div></section>
+      ${(openIssue||activeStory)?`<section class="career-alert ${openIssue?"urgent":"story"}"><div>${icon(openIssue?"triangle-alert":"radio")}<span><strong>${esc((openIssue||activeStory).title)}</strong><small>${esc((openIssue||activeStory).detail)}</small></span></div><button class="btn btn-primary" data-open-career-event="${openIssue?`issue:${openIssue.id}`:"story"}">处理</button></section>`:""}
+      <div class="player-command-grid">
+        <div class="player-command-main">
+          <section class="panel player-next-match"><div class="panel-header"><div><span class="eyebrow">下一场比赛</span><h3>${fixture?`${esc(fixture.competition)} · ${esc(fixture.opponent)}`:"赛季等待中"}</h3></div><span class="selection-forecast ${forecast.tone}">${forecast.label}</span></div><div class="player-match-brief"><div>${clubBadge(club,"club-badge-command")}<span><small>${fixture?formatDate(fixture.date):"—"}</small><strong>${fixture?`${fixture.home?"主场":"客场"} 对阵 ${esc(fixture.opponent)}`:"暂无待赛比赛"}</strong><em>${esc(forecast.detail)}</em></span></div></div>${fixture?`<div class="match-plan-picker"><div><strong>个人比赛计划</strong><span>计划会影响场上属性、风险和体能消耗</span></div><div class="match-plan-options">${Object.entries(PLAYER_MATCH_PLANS).map(([id,plan])=>`<button class="${currentMatchPlan===id?"active":""}" data-match-plan="${id}" title="${esc(plan.summary)}">${icon(plan.icon)}<span>${plan.label}</span></button>`).join("")}</div></div>`:""}<div class="player-match-actions"><button class="btn btn-primary" id="start-match">${icon(fixture?.date<=state.date?"play":"chevrons-right")}${fixture?.date<=state.date?"进入比赛":"推进至比赛或重要事件"}</button></div></section>
+          <section class="panel career-actions-panel"><div class="panel-header"><div><h3>今日可做</h3><span class="meta">沟通与训练会留下长期后果</span></div></div><div class="career-command-list">${action("coach","messages-square","与主教练沟通","讨论反馈、机会和队内角色")}${action("training","dumbbell","安排个人训练","技术、身体或恢复专项")}${action("teammates","users-round","经营更衣室关系","与队长和队友建立默契")}${action("support","heart-pulse","处理场外状态","心理支持、队长谈话或媒体回应")}${action("agent","briefcase","联系经纪人","续约、外租或调查市场兴趣")}</div></section>
+          <section class="panel career-objectives-panel"><div class="panel-header"><h3>赛季个人目标</h3><span class="meta">表现、出场与发展共同结算</span></div><div class="career-objectives">${career.seasonObjectives.map(objective=>{const current=objectiveCurrent(career,player,objective),progress=clamp(current/objective.target*100,0,100);return `<div><span><strong>${esc(objective.label)}</strong><small>${objective.id==="rating"?current.toFixed(2):Math.round(current)} / ${objective.target}${objective.unit}</small></span><i><b style="width:${progress}%"></b></i></div>`;}).join("")}</div></section>
+        </div>
+        <aside class="player-command-side">
+          <section class="panel weekly-plan-panel"><div class="panel-header"><h3>本周重点</h3><button class="btn btn-sm" data-open-player-modal="weeklyPlan">${icon("pencil")}调整</button></div><div class="weekly-plan-current">${icon(weekly.icon)}<div><strong>${weekly.label}</strong><p>${weekly.summary}</p><small>已执行 ${career.trainingDays||0} 个训练日</small></div></div></section>
+          <section class="panel relationships-panel"><div class="panel-header"><h3>职业关系</h3><span class="meta">实时变化</span></div><div class="relationship-list">${Object.entries(career.relationships).map(([key,value])=>`<div><span>${careerRelationshipLabel(key)}<small>${careerValueLabel(value)}</small></span><strong>${Math.round(value)}</strong><i><b style="width:${value}%"></b></i></div>`).join("")}</div></section>
+          <section class="panel agent-status-panel"><div class="panel-header"><h3>经纪人与未来</h3><span class="meta">${career.contractStance}</span></div><div class="agent-status"><div><span>合同到期</span><strong>${player.contract?.endSeason||state.season+2}</strong></div><div><span>队内角色</span><strong>${esc(player.contract?.role||"轮换球员")}</strong></div>${pendingRequests.length?`<p>${icon("clock-3")} ${pendingRequests.map(item=>`${item.label} · ${formatDate(item.dueDate,false)} 前回复`).join("；")}</p>`:`<p>${icon("check")} 当前没有等待中的经纪事务</p>`}</div></section>
+          <section class="panel career-log-panel"><div class="panel-header"><h3>最近决定</h3></div><div class="career-log">${career.interactionHistory.slice(0,5).map(item=>`<div><time>${formatDate(item.date,false)}</time><span>${esc(item.title)}</span></div>`).join("")||`<div class="empty compact">职业决定会记录在这里</div>`}</div></section>
+        </aside>
       </div>`;
   }
 
@@ -2134,10 +2394,10 @@
   }
 
   function playerDevelopmentScore(player) {
-    const avg=averageRating(player)||6,appearances=Number(player.appearances||0),minutes=Number(player.development?.minutes||appearances*75),injuryDays=Number(player.development?.injuryDays||0),gap=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
+    const avg=averageRating(player)||6,appearances=Number(player.appearances||0),minutes=Number(player.development?.minutes||appearances*75),injuryDays=Number(player.development?.injuryDays||0),trainingScore=Number(player.development?.trainingScore||0),gap=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
     const ageBase=player.age<=19?.78:player.age<=21?.62:player.age<=23?.42:player.age<=26?.18:player.age<=29?.04:player.age<=31?-.18:player.age<=33?-.48:-.82;
-    const performance=clamp((avg-6.45)*.5,-.35,.55),playingTime=minutes>=2400?.25:minutes>=1200?.12:minutes<350?-.14:0,potential=Math.min(.35,gap*.035),injury=Math.min(.6,injuryDays/150);
-    return ageBase+performance+playingTime+potential-injury;
+    const performance=clamp((avg-6.45)*.5,-.35,.55),playingTime=minutes>=2400?.25:minutes>=1200?.12:minutes<350?-.14:0,potential=Math.min(.35,gap*.035),training=clamp(trainingScore/80,0,.32),injury=Math.min(.6,injuryDays/150);
+    return ageBase+performance+playingTime+potential+training-injury;
   }
 
   function developmentOutlook(player) {
@@ -2176,8 +2436,38 @@
     </div></div></div>`;
   }
 
+  function careerActionChoices(action) {
+    return ({
+      coach:[{id:"feedback",icon:"video",label:"要求具体反馈",detail:"请教教练自己在录像和训练中最需要改进的内容"},{id:"chance",icon:"shirt",label:"表达首发意愿",detail:"明确要求更多机会，信任不足时可能适得其反"},{id:"role",icon:"clipboard-list",label:"讨论队内角色",detail:"了解当前顺位和教练对未来的计划"}],
+      training:[{id:"technical",icon:"target",label:"专项技术加练",detail:"积累成长进度，短期消耗体能"},{id:"physical",icon:"activity",label:"身体对抗训练",detail:"提高比赛信心和训练评价"},{id:"recovery",icon:"battery-charging",label:"恢复与理疗",detail:"快速恢复体能，成长收益较低"}],
+      teammates:[{id:"mentor",icon:"shield-check",label:"参加队长小组",detail:"改善队长、队友关系和职业形象"},{id:"social",icon:"coffee",label:"主动融入球队",detail:"明显改善更衣室关系和信心"},{id:"competition",icon:"flame",label:"提高对抗强度",detail:"展示竞争心，但可能让部分队友不满"}],
+      support:[{id:"psychology",icon:"heart-pulse",label:"接受心理辅导",detail:"显著恢复比赛信心"},{id:"captain",icon:"message-circle",label:"找队长谈谈",detail:"得到更衣室支持和建议"},{id:"media",icon:"mic-2",label:"正面回应媒体",detail:"改善球迷与媒体态度，教练未必欢迎"}],
+      agent:[{id:"contract",icon:"file-signature",label:"要求续约评估",detail:"俱乐部会根据表现、信任和合同期限回复"},{id:"loan",icon:"send",label:"申请外租",detail:"争取稳定出场，但可能降低当前教练信任"},{id:"market",icon:"radar",label:"调查市场兴趣",detail:"了解获得合适报价的现实概率"}]
+    })[action]||[];
+  }
+
+  function renderPlayerCareerModal() {
+    const career=ensurePlayerCareer();if(!career)return "";
+    if(modal.type==="weeklyPlan")return `<div class="modal-backdrop"><div class="modal player-career-modal" role="dialog" aria-modal="true"><div class="modal-header"><div><span class="eyebrow">个人训练周期</span><h2>安排本周重点</h2></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body"><div class="career-choice-grid">${Object.entries(PLAYER_WEEKLY_PLANS).map(([id,plan])=>`<button class="career-choice ${career.weeklyPlan===id?"active":""}" data-weekly-plan="${id}">${icon(plan.icon)}<span><strong>${plan.label}</strong><small>${plan.summary}</small></span>${career.weeklyPlan===id?`<b>${icon("check")}当前</b>`:""}</button>`).join("")}</div><div class="data-note">一周内反复更改计划会降低职业态度和教练信任。高强度训练能加快成长，但会影响体能恢复。</div></div></div></div>`;
+    if(modal.type==="careerAction"){
+      const titles={coach:"与主教练沟通",training:"安排个人训练",teammates:"经营更衣室关系",support:"处理场外状态",agent:"联系经纪人"};
+      return `<div class="modal-backdrop"><div class="modal player-career-modal" role="dialog" aria-modal="true"><div class="modal-header"><div><span class="eyebrow">职业行动</span><h2>${titles[modal.action]}</h2></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body"><div class="career-choice-grid compact">${careerActionChoices(modal.action).map(choice=>`<button class="career-choice" data-career-choice="${choice.id}">${icon(choice.icon)}<span><strong>${choice.label}</strong><small>${choice.detail}</small></span>${icon("chevron-right")}</button>`).join("")}</div></div></div></div>`;
+    }
+    if(modal.type==="playerIssue"){
+      const issue=career.pendingIssues.find(item=>item.id===modal.id);if(!issue)return "";
+      const choices=[{id:"review",icon:"video",label:"复盘比赛录像",detail:"提升战术理解和教练信任"},{id:"extra",icon:"dumbbell",label:"立即额外加练",detail:"信任提升最多，但会消耗体能"},{id:"coach",icon:"messages-square",label:"主动找教练沟通",detail:"获得反馈并改善教练关系"},{id:"support",icon:"heart-pulse",label:"接受心理支持",detail:"优先恢复信心和士气"},{id:"media",icon:"mic-2",label:"公开承担责任",detail:"争取球迷支持，但教练可能不喜欢"}];
+      return `<div class="modal-backdrop"><div class="modal player-career-modal" role="dialog" aria-modal="true"><div class="modal-header"><div><span class="eyebrow">表现恢复计划</span><h2>${esc(issue.title)}</h2></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body"><p class="career-modal-lead">${esc(issue.detail)}</p><div class="career-choice-grid compact">${choices.map(choice=>`<button class="career-choice" data-issue-choice="${choice.id}">${icon(choice.icon)}<span><strong>${choice.label}</strong><small>${choice.detail}</small></span>${icon("chevron-right")}</button>`).join("")}</div></div></div></div>`;
+    }
+    if(modal.type==="playerStory"){
+      const story=career.story;if(!story)return "";
+      return `<div class="modal-backdrop"><div class="modal player-career-modal" role="dialog" aria-modal="true"><div class="modal-header"><div><span class="eyebrow">连续职业事件 · 第 ${story.stage} 阶段</span><h2>${esc(story.title)}</h2></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body"><p class="career-modal-lead">${esc(story.detail)}</p><div class="career-choice-grid compact">${playerStoryChoices(story).map(choice=>`<button class="career-choice" data-story-choice="${choice.id}">${icon(choice.icon)}<span><strong>${choice.label}</strong><small>${choice.detail}</small></span>${icon("chevron-right")}</button>`).join("")}</div><div class="data-note">这不是一次性弹窗。选择会在几天后产生后续，并改变教练、队友、经纪人或媒体关系。</div></div></div></div>`;
+    }
+    return "";
+  }
+
   function renderModal() {
     if (!modal) return "";
+    if (["weeklyPlan","careerAction","playerIssue","playerStory"].includes(modal.type)) return renderPlayerCareerModal();
     if (modal.type === "playerProfile") return renderPlayerProfileModal(modal.player);
     if (modal.type === "clubProfile") return renderClubProfileModal(modal.club);
     if (modal.type === "mobileMenu") return `<div class="modal-backdrop mobile-menu-backdrop"><div class="modal mobile-menu" role="dialog" aria-modal="true"><div class="modal-header"><h2>更多页面</h2><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="mobile-menu-grid">${NAV.slice(4).map(navButton).join("")}</div></div></div>`;
@@ -2217,6 +2507,14 @@
     const form=document.getElementById("setup-form"); if(form) form.addEventListener("submit",e=>{ e.preventDefault(); const fd=new FormData(form); for(const [k,v] of fd) setup[k]=v; if(setup.origin==="real") { const item=setup.role==="coach"?COACHES.find(c=>c.name===setup.identity):REAL_PLAYERS.find(p=>p.id===setup.identity); if(!item){toast("请选择有效的球员或教练");return;} setup.clubId=item.club; } state=createState(); saveState(); render(); toast("生涯创建成功"); });
     document.getElementById("continue-save")?.addEventListener("click",()=>{ state=loadState(); render(); });
     document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>{ state.view=b.dataset.view; saveState(); render(); }));
+    document.querySelectorAll("[data-open-player-modal]").forEach(button=>button.addEventListener("click",()=>{modal={type:button.dataset.openPlayerModal};render();}));
+    document.querySelectorAll("[data-career-action]").forEach(button=>button.addEventListener("click",()=>{if(!canCareerAction(button.dataset.careerAction)){toast("这项沟通刚刚进行过，请先推进几天");return;}modal={type:"careerAction",action:button.dataset.careerAction};render();}));
+    document.querySelectorAll("[data-match-plan]").forEach(button=>button.addEventListener("click",()=>setPlayerMatchPlan(button.dataset.matchPlan)));
+    document.querySelectorAll("[data-open-career-event]").forEach(button=>button.addEventListener("click",()=>{const value=button.dataset.openCareerEvent;if(value.startsWith("issue:"))modal={type:"playerIssue",id:value.slice(6)};else modal={type:"playerStory"};render();}));
+    document.querySelectorAll("[data-weekly-plan]").forEach(button=>button.addEventListener("click",()=>setPlayerWeeklyPlan(button.dataset.weeklyPlan)));
+    document.querySelectorAll("[data-career-choice]").forEach(button=>button.addEventListener("click",()=>resolveCareerAction(modal?.action,button.dataset.careerChoice)));
+    document.querySelectorAll("[data-issue-choice]").forEach(button=>button.addEventListener("click",()=>resolvePerformanceIssue(button.dataset.issueChoice)));
+    document.querySelectorAll("[data-story-choice]").forEach(button=>button.addEventListener("click",()=>resolvePlayerStoryChoice(button.dataset.storyChoice)));
     document.getElementById("open-mobile-menu")?.addEventListener("click",()=>{modal={type:"mobileMenu"};render();});
     document.getElementById("continue-game")?.addEventListener("click",continueGame);
     document.getElementById("start-match")?.addEventListener("click",continueGame);
@@ -2318,14 +2616,16 @@
   function advanceCareerDay(targetDate) {
     const market=ensureTransferMarket(state),previousRecordIds=new Set(market.records.map(record=>record.id)),previousRumorIds=new Set(market.rumors.map(rumor=>rumor.id));
     state.squad.forEach(player=>{
-      player.fitness=recoverFitness(player,1,state.training);
+      const training=state.role==="player"&&player.id===state.controlledId?playerPlanTrainingMode():state.training;
+      player.fitness=recoverFitness(player,1,training);
       if(player.injured){player.injured=Math.max(0,player.injured-1);if(!player.injured){player.injury=null;player.morale=clamp(player.morale+3,0,100);}}
     });
     simulateBackgroundWorld(targetDate);
     simulateMajorLeagueWorld(state,targetDate);
     simulateTransferMarket(state,targetDate);
     state.date=targetDate;
-    return importantTransferEvent(previousRecordIds,previousRumorIds);
+    const playerEvent=applyPlayerCareerDay(targetDate);
+    return playerEvent||importantTransferEvent(previousRecordIds,previousRumorIds);
   }
 
   function continueGame() {
@@ -2394,14 +2694,15 @@
     const importance=fixtureSelectionImportance(fixture),form=Number(player.lastRating||player.form||6.35),morale=Number(player.morale??75),fitness=Number(player.fitness??85),role=player.contract?.role||"轮换球员";
     const abilityWeight=.61+importance*.08,fitnessWeight=dense?.2:.13,formWeight=.09,roleBonus=({"核心主力":2.7,"常规主力":1.45,"轮换球员":.35,"替补球员":-.6})[role]||0;
     const youthBonus=player.age<=22?profile.youthTrust*1.15:0,experienceBonus=player.age>=29?(1-profile.risk)*.55:0,variation=(stableScoutingUnit(`lineup|${fixture.id||fixture.date}|${player.id||player.name}|${profile.name||"coach"}`)-.5)*(1.5+profile.rotation*2.4);
-    return Number(player.overall||60)*abilityWeight+fitness*fitnessWeight+(form-5.5)*10*formWeight+(morale-75)*.025+roleBonus+youthBonus+experienceBonus+tacticalSelectionFit(player,tactic)-playerSelectionWorkload(player,fixture,dense,importance)+variation;
+    const career=state?.role==="player"&&player.id===state.controlledId?ensurePlayerCareer(state):null,careerBonus=career?(career.trust-60)*.075+(career.tactical-60)*.035+(career.professionalism-60)*.025:0;
+    return Number(player.overall||60)*abilityWeight+fitness*fitnessWeight+(form-5.5)*10*formWeight+(morale-75)*.025+roleBonus+youthBonus+experienceBonus+tacticalSelectionFit(player,tactic)+careerBonus-playerSelectionWorkload(player,fixture,dense,importance)+variation;
   }
   function controlledSelectionSummary(player,fixture,lineup,bench,dense) {
     if(!player)return null;
-    const status=lineup.includes(player)?"starter":bench.includes(player)?"bench":"rest",form=Number(player.lastRating||player.form||6.35),fitness=Number(player.fitness??100),starts=Number(player.consecutiveStarts||0),importance=fixtureSelectionImportance(fixture);
+    const samePlayer=item=>item===player||item?.id===player.id||item?.sourcePlayerId===player.id||player.sourcePlayerId&&item?.sourcePlayerId===player.sourcePlayerId,status=lineup.some(samePlayer)?"starter":bench.some(samePlayer)?"bench":"rest",form=Number(player.lastRating||player.form||6.35),fitness=Number(player.fitness??100),starts=Number(player.consecutiveStarts||0),importance=fixtureSelectionImportance(fixture);
     let reason;
     if(player.injured)reason=`${player.injury||"伤病"}恢复中，未进入比赛名单`;
-    else if(status==="starter")reason=importance>=.86?"重要比赛采用主力阵容":dense&&starts>=2?"阵容需要，密集赛程继续首发":"综合能力、状态与战术适配达到首发要求";
+    else if(status==="starter")reason=importance>=.86?"重要比赛采用主力阵容":dense&&starts>=2?"阵容需要，密集赛程继续首发":state.role==="player"&&ensurePlayerCareer()?.trust>=72?"近期表现与教练信任达到首发要求":"综合能力、状态与战术适配达到首发要求";
     else if(fitness<72)reason=status==="bench"?"体能尚未恢复到首发标准，进入替补席":"体能恢复计划，安排本场休息";
     else if(dense&&(starts>=2||Number(player.lastMatchMinutes||0)>=75))reason=status==="bench"?"密集赛程控制连续出场负荷，进入替补席":"密集赛程轮休，未进入本场名单";
     else if(form<6.05)reason=status==="bench"?"近期状态影响首发顺位，进入替补席":"近期状态与位置竞争导致轮休";
@@ -2564,10 +2865,10 @@
     const fixture=nextFixture(); if(!fixture||state.retired)return;
     state.date=fixture.date;
     const tactic=state.role==="coach"?state.tactic:chooseAiTactic(fixture);
-    const selection=selectMatchLineup(fixture,tactic),lineupIds=selection.lineup.map(player=>player.id),benchIds=selection.bench.map(player=>player.id),playerEvents=Object.fromEntries([...lineupIds,...benchIds].map(id=>[id,emptyMatchEvent()]));
+    const career=state.role==="player"?ensurePlayerCareer():null,controlledMatchPlan=career&&career.matchPlanFixtureId===fixture.id?career.matchPlan:"balanced",selection=selectMatchLineup(fixture,tactic),lineupIds=selection.lineup.map(player=>player.id),benchIds=selection.bench.map(player=>player.id),playerEvents=Object.fromEntries([...lineupIds,...benchIds].map(id=>[id,emptyMatchEvent()]));
     const playerRoleNote=selection.controlledSelection?` ${state.person}${selection.controlledSelection.label}：${selection.controlledSelection.reason}。`:"";
-    const opening=`主裁判吹响开场哨，球队排出 ${selection.formation}，采用${({balanced:"平衡控制",press:"高位逼抢",counter:"快速反击",defensive:"稳守阵型"})[tactic]}。${selection.dense?` 面对密集赛程，AI 教练轮换了 ${selection.rotated} 名常规主力。`:""}${playerRoleNote}`;
-    state.activeMatch={fixture,tactic,formation:selection.formation,ourPlayers:fixture.international?selection.pool:null,minute:0,home:0,away:0,possession:tactic==="press"?55:tactic==="defensive"?43:51,shots:0,tactical:70,fitness:Math.round(selection.lineup.reduce((s,p)=>s+p.fitness,0)/Math.max(1,selection.lineup.length)),playerRating:6,ballX:50,ballY:50,finished:false,commentary:[{minute:0,text:opening}],decisionBonus:0,decisionRisk:0,lineupIds,initialLineupIds:[...lineupIds],benchIds,initialBenchIds:[...benchIds],playerEvents,liveRatings:Object.fromEntries([...lineupIds,...benchIds].map(id=>[id,6])),denseSchedule:selection.dense,rotationCount:selection.rotated,controlledSelection:selection.controlledSelection,mvpId:null,aiCoachProfiles:{ours:selection.coachProfile},aiLastSubMinute:{ours:-20,opponent:-20},aiLastTacticalMinute:{ours:-20,opponent:-20},aiNextTacticalMinute:{ours:Math.round(rand(24,38)),opponent:Math.round(rand(24,38))},aiTacticalPlans:{ours:"balanced",opponent:"balanced"},stats:{ours:{shots:0,onTarget:0,corners:0,fouls:0,xg:0,yellow:0,red:0},opponent:{shots:0,onTarget:0,corners:0,fouls:0,xg:0,yellow:0,red:0}},speed:1,paused:true,pauseReason:"kickoff",pendingTalk:null,halfTimeTalkDone:false,postMatchTalkDone:false,stoppageTime:null,heatmap:{},selectedHeatmapPlayer:lineupIds.includes(state.controlledId)?state.controlledId:lineupIds[0],visualTick:0,visualAction:{team:"ours",kind:"build",label:"开球准备",startedAt:Date.now()},narrativeSeed:Math.random()};
+    const matchPlanNote=career?` 个人比赛计划：${PLAYER_MATCH_PLANS[controlledMatchPlan].label}。`:"",opening=`主裁判吹响开场哨，球队排出 ${selection.formation}，采用${({balanced:"平衡控制",press:"高位逼抢",counter:"快速反击",defensive:"稳守阵型"})[tactic]}。${selection.dense?` 面对密集赛程，AI 教练轮换了 ${selection.rotated} 名常规主力。`:""}${playerRoleNote}${matchPlanNote}`;
+    state.activeMatch={fixture,tactic,formation:selection.formation,controlledMatchPlan,ourPlayers:fixture.international?selection.pool:null,minute:0,home:0,away:0,possession:tactic==="press"?55:tactic==="defensive"?43:51,shots:0,tactical:70,fitness:Math.round(selection.lineup.reduce((s,p)=>s+p.fitness,0)/Math.max(1,selection.lineup.length)),playerRating:6,ballX:50,ballY:50,finished:false,commentary:[{minute:0,text:opening}],decisionBonus:0,decisionRisk:0,lineupIds,initialLineupIds:[...lineupIds],benchIds,initialBenchIds:[...benchIds],playerEvents,liveRatings:Object.fromEntries([...lineupIds,...benchIds].map(id=>[id,6])),denseSchedule:selection.dense,rotationCount:selection.rotated,controlledSelection:selection.controlledSelection,mvpId:null,aiCoachProfiles:{ours:selection.coachProfile},aiLastSubMinute:{ours:-20,opponent:-20},aiLastTacticalMinute:{ours:-20,opponent:-20},aiNextTacticalMinute:{ours:Math.round(rand(24,38)),opponent:Math.round(rand(24,38))},aiTacticalPlans:{ours:"balanced",opponent:"balanced"},stats:{ours:{shots:0,onTarget:0,corners:0,fouls:0,xg:0,yellow:0,red:0},opponent:{shots:0,onTarget:0,corners:0,fouls:0,xg:0,yellow:0,red:0}},speed:1,paused:true,pauseReason:"kickoff",pendingTalk:null,halfTimeTalkDone:false,postMatchTalkDone:false,stoppageTime:null,heatmap:{},selectedHeatmapPlayer:lineupIds.includes(state.controlledId)?state.controlledId:lineupIds[0],visualTick:0,visualAction:{team:"ours",kind:"build",label:"开球准备",startedAt:Date.now()},narrativeSeed:Math.random()};
     ensureMatchRuntime(state,state.activeMatch);
     saveState(); render();
   }
@@ -2815,7 +3116,9 @@
 
   function effectiveMatchAttribute(player,key,m,teamKey) {
     const base=matchAttribute(player,key),energy=matchPlayerEnergy(player,m,teamKey),morale=Number(player.morale??75);
-    return clamp(base+(energy-78)*.075+(morale-75)*.025,25,99);
+    const controlled=teamKey==="ours"&&state.role==="player"&&player.id===state.controlledId,career=controlled?ensurePlayerCareer():null,plan=controlled?PLAYER_MATCH_PLANS[m.controlledMatchPlan||"balanced"]:null;
+    const planBoost=Number(plan?.attributes?.[key]||0),mentalBoost=career?(career.confidence-60)*.035+(career.tactical-60)*.025:0;
+    return clamp(base+(energy-78)*.075+(morale-75)*.025+planBoost+mentalBoost,25,99);
   }
 
   function pickDefensivePlayer(players) {
@@ -3219,7 +3522,8 @@
     const [low,high]=ranges[player.position]||[15,22];
     const tacticFactor=tactic==="press"?1.12:tactic==="defensive"?.92:tactic==="counter"?1.02:1;
     const ageFactor=player.age>=34?1.12:player.age>=30?1.06:player.age<=23?.97:1;
-    return Math.max(1,Math.round(rand(low,high)*(minutes/90)*tacticFactor*ageFactor));
+    const planFactor=state.role==="player"&&player.id===state.controlledId?({conserve:.78,attack:1.1,creative:1.04,defensive:1.04,safe:.94,balanced:1})[state.activeMatch?.controlledMatchPlan||"balanced"]||1:1;
+    return Math.max(1,Math.round(rand(low,high)*(minutes/90)*tacticFactor*ageFactor*planFactor));
   }
 
   function heatmapZone(player,points) {
@@ -3255,7 +3559,7 @@
       id:`report-${f.id}-${Date.now()}`,fixtureId:f.id,date:f.date,competition:f.competition,round:f.round,result,
       teamName:f.teamName||club.name,homeName:f.home?(f.teamName||club.name):f.opponent,awayName:f.home?f.opponent:(f.teamName||club.name),score:{home:m.home,away:m.away},penalties:f.penalties?{...f.penalties}:null,
       homeStats:f.home?ourStats:opponentStats,awayStats:f.home?opponentStats:ourStats,mvp:{...mvp},ratings,
-      substitutions:(m.substitutions||[]).map(item=>({...item})),injuries,formation:m.formation,opponentFormation:m.opponentFormation,heatmapSummary,teamTalks:{halfTime:Boolean(m.halfTimeTalkDone),postMatch:Boolean(m.postMatchTalkDone)}
+      substitutions:(m.substitutions||[]).map(item=>({...item})),injuries,formation:m.formation,opponentFormation:m.opponentFormation,heatmapSummary,playerMatchPlan:m.controlledMatchPlan||null,teamTalks:{halfTime:Boolean(m.halfTimeTalkDone),postMatch:Boolean(m.postMatchTalkDone)}
     };
   }
 
@@ -3341,7 +3645,7 @@
     if(!f.international)state.squad.filter(player=>!participantIds.includes(player.id)&&!player.injured&&["核心主力","常规主力"].includes(player.contract?.role)).forEach(player=>{if(Math.random()<.38)player.morale=clamp(Number(player.morale||75)-1,25,100);});
     const ourBest=[...matchParticipants].filter(player=>matchMinutesPlayed(m,player.id)>0).sort((a,b)=>(m.liveRatings[b.id]||0)-(m.liveRatings[a.id]||0))[0],opponentBest=(m.opponentPlayers||[]).filter(player=>(m.opponentInitialLineupIds||[]).includes(player.id)||m.substitutions.some(item=>item.team==="opponent"&&item.inId===player.id)).sort((a,b)=>(m.opponentRatings[b.id]||0)-(m.opponentRatings[a.id]||0))[0];
     const mvp=opponentBest&&(m.opponentRatings[opponentBest.id]||0)>(m.liveRatings[ourBest?.id]||0)?{id:opponentBest.id,name:opponentBest.name,rating:m.opponentRatings[opponentBest.id],ours:false}:{id:ourBest?.id,name:ourBest?.name||"待评定",rating:m.liveRatings[ourBest?.id]||6,ours:true};m.mvpId=mvp.id;
-    if(state.role==="player") {const p=controlledPlayer();if(lineup.includes(p)){updatePlayerAbility(p,m.playerRating);if(mvp.ours&&mvp.id===p.id){state.mvpCount=(state.mvpCount||0)+1;state.honors.unshift({name:"单场 MVP",season:state.season,scope:`${f.competition} · ${f.opponent}`});}}}
+    if(state.role==="player") {const p=controlledPlayer(),controlledMinutes=matchMinutesPlayed(m,state.controlledId),controlledRating=controlledMinutes?Number(m.liveRatings[state.controlledId]||m.playerRating||6):6;if(lineup.includes(p)){updatePlayerAbility(p,controlledRating);if(mvp.ours&&mvp.id===p.id){state.mvpCount=(state.mvpCount||0)+1;state.honors.unshift({name:"单场 MVP",season:state.season,scope:`${f.competition} · ${f.opponent}`});}}updatePlayerCareerAfterMatch(p,controlledRating,controlledMinutes,{...f,playerMatchPlan:m.controlledMatchPlan||"balanced"});}
     else updateCoachAbility(won,draw,m.tactical);
     handleCompetitionProgress(f,{won,draw,ours,theirs,decision});
     const decidingEuropeanTie=Boolean(EUROPEAN_COMPETITION_BY_NAME[f.competition])&&f.phase==="knockout"&&(f.leg===2||f.round==="决赛");
@@ -3493,6 +3797,9 @@
     const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3);
     state.season++;state.date=`${state.season}-08-01`;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season);simulateTransferMarket(state,state.date);
     state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});
+    if(state.role==="player"){
+      const career=ensurePlayerCareer(),player=controlledPlayer();career.trainingDays=0;career.weeklyPlanChanges=0;career.weeklyPlanSetDate=state.date;career.matchPlan="balanced";career.matchPlanFixtureId=null;career.pendingIssues=[];career.story=null;career.nextStoryDate=addDays(state.date,10);career.selectionStreak=0;career.benchStreak=0;career.seasonObjectives=createPlayerObjectives(player);career.objectiveProgress={appearances:0,ratings:0,goals:0,assists:0,trust:Math.round(career.trust)};career.requests=career.requests.filter(item=>item.status==="pending");
+    }
     if(growthLeaders.length)state.media.unshift({source:"Player Development",title:"赛季球员发展报告已发布",body:growthLeaders.map(item=>`${item.player.name} ${item.change>0?`提升 ${item.change} 点`:`下降 ${Math.abs(item.change)} 点`}`).join("；"),date:state.date,type:"career"});
     state.media.unshift({source:"Football Daily",title:`${state.season}/${String(state.season+1).slice(2)} 赛季正式开启`,body:"全新的联赛和杯赛日程已经生成，阵容状态与赛季目标也已重置。",date:state.date,type:"career"});saveState();render();toast("新赛季赛程已生成");
   }
