@@ -285,6 +285,7 @@
     const merged={...(real||{}),...(opponent||{}),...(local||{}),...raw},records=playerTransferRecords(state,merged),latestTransfer=records.at(-1);
     merged.name||="未知球员";merged.position||="CM";merged.age=Number(merged.age)||24;
     merged.overall=Number(merged.overall||merged.ca)||65;merged.potential=Math.max(merged.overall,Number(merged.potential||merged.pa)||merged.overall);
+    if(!local&&real){merged.age=effectivePlayerAge(real,state);merged.value=currentPlayerMarketValue(real,state);}
     const canonicalClubId=latestTransfer?.toId||(local?state.clubId:real?currentPlayerClubId(state,real):merged.clubId),canonicalClub=canonicalClubId?clubById(canonicalClubId):null;
     merged.clubId=canonicalClub?.id||merged.clubId;merged.clubName=canonicalClub?.name||merged.clubName||(resolveClub(merged.club)?.name)||merged.club||"未知俱乐部";
     merged.transferHistory=records;merged.latestTransfer=latestTransfer||null;merged.careerStats=mergePlayerCareerStats(merged,records);
@@ -351,6 +352,55 @@
   function playerRoleLabel(pos) { return ({GK:"门将",RB:"右后卫",LB:"左后卫",FB:"边后卫",DF:"后卫",CB:"中后卫",DM:"后腰",CM:"中场",AM:"前腰",RW:"右边锋",LW:"左边锋",WG:"边锋",ST:"前锋"})[pos] || pos; }
   function positionSortRank(pos) { return ({GK:0,RB:10,CB:11,DF:12,FB:13,LB:14,DM:20,CM:21,AM:22,RW:30,WG:31,LW:32,ST:33})[pos]??99; }
   function averageRating(player) { return player?.appearances ? Number(player.ratingTotal||0)/player.appearances : 0; }
+
+  const MARKET_VALUE_POSITION_FACTORS={GK:.82,CB:.9,DF:.9,RB:.92,LB:.92,FB:.92,DM:.95,CM:1,AM:1.06,RW:1.09,LW:1.09,WG:1.09,ST:1.11};
+  function marketQuarterKey(date=START_DATE) {const parsed=new Date(`${date}T12:00:00`),quarter=Math.floor(parsed.getMonth()/3)+1;return `${parsed.getFullYear()}-Q${quarter}`;}
+  function isMarketValueReviewDate(date) {return ["01-01","04-01","07-01","10-01"].includes(String(date||"").slice(5));}
+  function managedSquadPlayer(player,save=state) {return (save?.squad||[]).some(item=>item===player||item.id===player?.id||item.sourcePlayerId===player?.id||player?.sourcePlayerId===item.id);}
+  function effectivePlayerAge(player,save=state) {return Number(player?.age||24)+(REAL_PLAYERS.includes(player)&&!managedSquadPlayer(player,save)?Math.max(0,Number(save?.season||2026)-2026):0);}
+  function marketValueAgeFactor(age) {
+    if(age<=19)return 1.18;if(age<=21)return 1.22;if(age<=23)return 1.18;if(age<=25)return 1.12;if(age<=27)return 1.04;if(age<=29)return .92;
+    return ({30:.78,31:.64,32:.5,33:.38,34:.28,35:.2})[age]||.14;
+  }
+  function marketValueRatingFactor(rating) {
+    if(rating>=7.8)return 1.26;if(rating>=7.4)return 1.16+(rating-7.4)*.25;if(rating>=7)return 1.08+(rating-7)*.2;
+    if(rating>=6.6)return 1+(rating-6.6)*.2;if(rating>=6.3)return .9+(rating-6.3)/3;return .86;
+  }
+  function calculatePlayerMarketValue(player,save=state) {
+    const ca=clamp(Number(player?.overall||player?.ca)||60,40,99),pa=clamp(Math.max(ca,Number(player?.potential||player?.pa)||ca),ca,99),age=effectivePlayerAge(player,save),gap=Math.max(0,pa-ca);
+    const potentialRate=age<=21?.065:age<=23?.05:age<=25?.035:age<=27?.022:.008,potentialFactor=clamp(1+gap*potentialRate,1,1.6),positionFactor=MARKET_VALUE_POSITION_FACTORS[player?.position]||1;
+    const clubId=managedSquadPlayer(player,save)?save?.clubId:(save?.transferMarket?.clubOverrides?.[player?.id]||player?.clubId||player?.club),club=CLUBS.find(item=>item.id===clubId),prestigeFactor=club?clamp(.9+(Number(club.prestige||75)-65)*.004,.9,1.09):1;
+    const appearances=Math.max(0,Number(player?.appearances||0)),rating=averageRating(player),playedClubMatches=Math.max(appearances,(save?.schedule||[]).filter(fixture=>fixture.status==="played"&&!fixture.international).length,Number(save?.played||0)),performanceTracked=managedSquadPlayer(player,save)||appearances>0;
+    const performanceFactor=appearances>=3&&rating?marketValueRatingFactor(rating):1,attendanceFactor=performanceTracked&&playedClubMatches>=5?clamp(.86+(appearances/playedClubMatches)*.22,.88,1.08):1;
+    const expectedContribution=({GK:.015,CB:.06,DF:.06,RB:.1,LB:.1,FB:.1,DM:.1,CM:.22,AM:.36,RW:.4,LW:.4,WG:.4,ST:.5})[player?.position]||.22,contributionPerGame=appearances?(Number(player?.goals||0)+Number(player?.assists||0)*.85)/appearances:0,contributionFactor=appearances>=3?1+clamp((contributionPerGame/expectedContribution-1)*.055,0,.14):1;
+    const currentInjury=Number(player?.injured||0),injuryFactor=currentInjury>=30?.92:currentInjury>=14?.96:1,seasonInjuryDays=Number(player?.development?.injuryDays||0),availabilityFactor=seasonInjuryDays>=80?.95:seasonInjuryDays>=40?.98:1;
+    const raw=Math.pow(1.17,ca-60)*marketValueAgeFactor(age)*potentialFactor*positionFactor*prestigeFactor*performanceFactor*attendanceFactor*contributionFactor*injuryFactor*availabilityFactor;
+    const bounded=clamp(raw,.05,300);return Number(bounded.toFixed(bounded>=10?1:2));
+  }
+  function initializePlayerMarketValue(player,save=state,date=save?.date) {
+    const current=Number(player?.value),value=Number.isFinite(current)&&current>0?current:calculatePlayerMarketValue(player,save),existing=player.marketValueState||{};
+    player.value=value;player.marketValueState={season:Number(existing.season??save?.season??2026),seasonStartValue:Number(existing.seasonStartValue??value),previousValue:Number(existing.previousValue??value),targetValue:Number(existing.targetValue??calculatePlayerMarketValue(player,save)),lastChange:Number(existing.lastChange||0),lastUpdatedDate:existing.lastUpdatedDate||date||START_DATE,reason:existing.reason||"季度估值基准"};return player.marketValueState;
+  }
+  function quarterlyMarketValue(player,save=state,date=save?.date) {
+    const market=initializePlayerMarketValue(player,save,date),previous=Number(player.value||market.previousValue||.05),target=calculatePlayerMarketValue(player,save),next=Number(clamp(target,Math.max(.05,previous*.7),Math.max(.08,previous*1.42)).toFixed(target>=10||previous>=10?1:2));
+    player.value=next;player.marketValueState={...market,season:Number(save?.season||market.season),previousValue:previous,targetValue:target,lastChange:Number((next-previous).toFixed(2)),lastUpdatedDate:date,reason:"季度身价评估"};return {player,previous,value:next,target,change:Number((next-previous).toFixed(2))};
+  }
+  function ensureMarketValuation(save=state) {
+    if(!save)return null;save.worldMarketValues=save.worldMarketValues&&typeof save.worldMarketValues==="object"?save.worldMarketValues:{};REAL_PLAYERS.forEach(player=>{if(!Number.isFinite(Number(save.worldMarketValues[player.id])))save.worldMarketValues[player.id]=Number(player.value)||calculatePlayerMarketValue(player,save);});
+    save.marketValuation={lastQuarterKey:marketQuarterKey(save.date||START_DATE),lastUpdatedDate:save.date||START_DATE,...(save.marketValuation||{})};(save.squad||[]).forEach(player=>initializePlayerMarketValue(player,save,save.date));return save.marketValuation;
+  }
+  function currentPlayerMarketValue(player,save=state) {
+    const local=(save?.squad||[]).find(item=>item===player||item.id===player?.id||item.sourcePlayerId===player?.id);if(local)return Number(local.value)||calculatePlayerMarketValue(local,save);
+    const stored=save?.worldMarketValues?.[player?.id];return Number.isFinite(Number(stored))?Number(stored):(Number(player?.value)||calculatePlayerMarketValue(player,save));
+  }
+  function resetSeasonMarketValueBaseline(save=state) {(save?.squad||[]).forEach(player=>{const market=initializePlayerMarketValue(player,save,save.date);market.season=save.season;market.seasonStartValue=Number(player.value||0);});}
+  function runQuarterlyMarketValueReview(save=state,date=save?.date) {
+    const valuation=ensureMarketValuation(save),key=marketQuarterKey(date);if(!isMarketValueReviewDate(date)||valuation.lastQuarterKey===key)return null;
+    const changes=(save.squad||[]).map(player=>quarterlyMarketValue(player,save,date));REAL_PLAYERS.forEach(player=>{const previous=Number(save.worldMarketValues[player.id]??player.value)||.05,target=calculatePlayerMarketValue(player,save);save.worldMarketValues[player.id]=Number(clamp(target,Math.max(.05,previous*.7),Math.max(.08,previous*1.42)).toFixed(target>=10||previous>=10?1:2));});
+    valuation.lastQuarterKey=key;valuation.lastUpdatedDate=date;const movers=[...changes].sort((a,b)=>Math.abs(b.change)-Math.abs(a.change)).slice(0,3),label=`${key.slice(0,4)} 年第 ${key.at(-1)} 季度`;
+    addNotification({title:`${label}球员身价评估已发布`,type:"transfer",date,detail:"最新估值综合年龄、当前能力、潜力、赛季出勤、场均评分以及进球助攻表现，并将作为转会谈判的最新参考。",facts:movers.map(item=>`${item.player.name}：${money(item.previous)} → ${money(item.value)}（${item.change>0?"+":item.change<0?"-":""}${money(Math.abs(item.change))}）`)});
+    return {type:"market-value",title:"季度球员身价评估已发布",view:"squad",changes};
+  }
 
   function notificationId(prefix="notice") { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`; }
   function notificationTypeFromTitle(title="") {
@@ -1021,7 +1071,7 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:29, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:30, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
@@ -1037,6 +1087,7 @@
       playerCareer:setup.role==="player"?createPlayerCareer(controlled,club):null
     };
     const youth=createYouthSystem(created);created.youthAcademy=youth.academy;created.youthWorld=youth.world;
+    ensureMarketValuation(created);
     created.transferMarket=createTransferMarket(created.season);
     simulateTransferMarket(created,START_DATE);
     return created;
@@ -1149,7 +1200,8 @@
     saved.schedule?.sort((a,b)=>a.date.localeCompare(b.date));
     if(saved.role==="player")saved.playerCareer=ensurePlayerCareer(saved);
     ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
-    saved.version=29;
+    ensureMarketValuation(saved);
+    saved.version=30;
     return saved;
   }
   function saveState() {
@@ -1796,7 +1848,7 @@
   }
 
   function graduateYouthPlayer(save,academy,player,date) {
-    const graduate={...player,status:undefined,number:null,joinedDate:date,academyGraduate:true,mentorHistory:player.mentorName?[{name:player.mentorName,days:player.mentorshipDays||0}]:[],consecutiveStarts:0,lastMatchMinutes:0,lastMatchDate:null,lastSelectionStatus:null};delete graduate.mentorId;delete graduate.mentorName;ensurePlayerDevelopment(graduate,save.season);ensurePlayerContract(graduate,save.season);graduate.contract={...graduate.contract,weeklyWage:Math.max(2,Math.round(graduate.overall*.035)),role:"一线队候选",endSeason:save.season+3};save.squad.push(graduate);academy.prospects=academy.prospects.filter(item=>item.id!==player.id);academy.promotions.unshift({id:graduate.id,name:graduate.name,date,age:graduate.age,overall:graduate.overall,position:graduate.position});academy.promotions=academy.promotions.slice(0,30);return graduate;
+    const graduate={...player,status:undefined,number:null,joinedDate:date,academyGraduate:true,mentorHistory:player.mentorName?[{name:player.mentorName,days:player.mentorshipDays||0}]:[],consecutiveStarts:0,lastMatchMinutes:0,lastMatchDate:null,lastSelectionStatus:null};delete graduate.mentorId;delete graduate.mentorName;ensurePlayerDevelopment(graduate,save.season);ensurePlayerContract(graduate,save.season);graduate.contract={...graduate.contract,weeklyWage:Math.max(2,Math.round(graduate.overall*.035)),role:"一线队候选",endSeason:save.season+3};save.squad.push(graduate);initializePlayerMarketValue(graduate,save,date);academy.prospects=academy.prospects.filter(item=>item.id!==player.id);academy.promotions.unshift({id:graduate.id,name:graduate.name,date,age:graduate.age,overall:graduate.overall,position:graduate.position});academy.promotions=academy.promotions.slice(0,30);return graduate;
   }
 
   function promoteYouthProspect(id) {
@@ -1970,7 +2022,7 @@
 
   function aiClubPlayers(save,clubId) {
     if(clubId===save.clubId)return save.squad||[];
-    return REAL_PLAYERS.filter(player=>currentPlayerClubId(save,player)===clubId);
+    return REAL_PLAYERS.filter(player=>currentPlayerClubId(save,player)===clubId).map(player=>({...player,age:effectivePlayerAge(player,save),value:currentPlayerMarketValue(player,save)}));
   }
 
   function aiSquadNeeds(save,clubId) {
@@ -2037,8 +2089,8 @@
     return rank>=Math.max(1,Math.floor(group.length*.42))||(player.age>=29&&rank>=1)||Number(player.overall||0)<sellerClub.prestige-10;
   }
 
-  function transferFee(player,buyer,seller,sequence=0) {
-    const value=Math.max(.5,Number(player.value)||Math.max(1,Number(player.overall||65)-64)),potentialPremium=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0))*.045,prestigePressure=Math.max(0,seller.prestige-buyer.prestige)*.012;
+  function transferFee(player,buyer,seller,sequence=0,save=state) {
+    const value=Math.max(.5,currentPlayerMarketValue(player,save)||Math.max(1,Number(player.overall||65)-64)),potentialPremium=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0))*.045,prestigePressure=Math.max(0,seller.prestige-buyer.prestige)*.012;
     const variation=.9+stableScoutingUnit(`${player.id}|${buyer.id}|${seller.id}|${sequence}`)*.28;
     return Number(Math.max(.5,value*(1+potentialPremium+prestigePressure)*variation).toFixed(1));
   }
@@ -2062,7 +2114,7 @@
       if(market.records.some(record=>record.season===save.season&&record.playerId===player.id))return false;
       if(save.role==="coach"&&sellerId===save.clubId)return false;
       if(save.role==="player"&&sellerId===save.clubId&&comparableClubName(player.name)===comparableClubName((save.squad||[]).find(item=>item.id===save.controlledId)?.name||""))return false;
-      const seller=clubById(sellerId),role=positionUnit(player.position),fee=transferFee(player,buyer,seller,market.sequence);
+      const seller=clubById(sellerId),role=positionUnit(player.position),fee=transferFee(player,buyer,seller,market.sequence,save);
       const spendingLimit=budget*(.64+coach.risk*.16+coach.budgetDiscipline*.08);
       if(role!==need.role||fee>spendingLimit||!aiCanSell(save,sellerId,player,sellerRoleGroups.get(`${sellerId}|${role}`)||[]))return false;
       if(player.overall>=85&&buyer.prestige<85)return false;
@@ -2070,7 +2122,7 @@
       if(player.overall>buyer.prestige+6||player.overall<Math.max(54,buyer.prestige-18))return false;
       return true;
     }).map(player=>{
-      const sellerId=currentPlayerClubId(save,player),seller=clubById(sellerId),fee=transferFee(player,buyer,seller,market.sequence),improvement=Number(player.overall||0)-need.average,growth=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
+      const sellerId=currentPlayerClubId(save,player),seller=clubById(sellerId),fee=transferFee(player,buyer,seller,market.sequence,save),improvement=Number(player.overall||0)-need.average,growth=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
       const upward=buyer.prestige-seller.prestige,affordability=Math.max(-18,12-fee/Math.max(1,budget)*18),destinationFit=18-Math.abs((buyer.prestige-5)-Number(player.overall||0));
       const ageFit=player.age<=23?coach.youthTrust*7:player.age>=30?(1-coach.youthTrust)*4:3;
       const score=need.score*1.6+improvement*2.2+growth*(.55+coach.youthTrust)+ageFit+upward*.45+affordability*(.65+coach.budgetDiscipline*.55)+destinationFit+(stableScoutingUnit(`${market.season}|${buyerId}|${player.id}`)-.5)*16;
@@ -2088,13 +2140,13 @@
     const discount=candidate.projectedSize>AI_SQUAD_LIMITS.hard?.84:candidate.projectedSize>AI_SQUAD_LIMITS.soft+1?.9:.95;
     const buyers=CLUBS.filter(club=>{
       if(club.id===candidate.sellerId||(save.role==="coach"&&club.id===save.clubId))return false;
-      const buyerNeeds=aiSquadNeeds(save,club.id),budget=Number(market.budgets[club.id]||0),fee=Number((transferFee(candidate.canonical||player,club,seller,sequence)*discount).toFixed(1));
+      const buyerNeeds=aiSquadNeeds(save,club.id),budget=Number(market.budgets[club.id]||0),fee=Number((transferFee(candidate.canonical||player,club,seller,sequence,save)*discount).toFixed(1));
       if(buyerNeeds.players.length>=AI_SQUAD_LIMITS.soft||budget<fee)return false;
       if(Number(player.overall||0)>club.prestige+7||Number(player.overall||0)<Math.max(52,club.prestige-19))return false;
       if(Number(player.overall||0)>=85&&club.prestige<84)return false;
       return buyerNeeds.needs[role]&&buyerNeeds.needs[role].score>1;
     }).map(club=>{
-      const buyerNeeds=aiSquadNeeds(save,club.id),need=buyerNeeds.needs[role],fee=Number((transferFee(candidate.canonical||player,club,seller,sequence)*discount).toFixed(1)),abilityGain=Number(player.overall||0)-need.average;
+      const buyerNeeds=aiSquadNeeds(save,club.id),need=buyerNeeds.needs[role],fee=Number((transferFee(candidate.canonical||player,club,seller,sequence,save)*discount).toFixed(1)),abilityGain=Number(player.overall||0)-need.average;
       const score=need.score*1.8+abilityGain*1.4+(club.prestige-seller.prestige)*.25+(AI_SQUAD_LIMITS.soft-buyerNeeds.players.length)*2+(stableScoutingUnit(`${date}|surplus-buyer|${club.id}|${player.id}`)-.5)*8;
       return {club,fee,need,score};
     }).sort((a,b)=>b.score-a.score);
@@ -2181,7 +2233,7 @@
     if(save.squad.some(player=>comparableClubName(player.name)===comparableClubName(sourcePlayer.name)))return;
     const signing={...sourcePlayer,id:`ai-signing-${sourcePlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,sourcePlayerId:sourcePlayer.id,club:save.clubId,clubId:save.clubId,joinedDate:transferData.date||save.date,careerStats:transferData.careerStats||sourcePlayer.careerStats||[],contract:transferData.contract||sourcePlayer.contract,fitness:94,morale:86,form:0,lastRating:null,ratingTotal:0,appearances:0,goals:0,assists:0,injured:0,injury:null};
     ["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{signing[key]=0;});
-    ensurePlayerDevelopment(signing,save.season);ensurePlayerContract(signing,save.season);save.squad.push(signing);
+    ensurePlayerDevelopment(signing,save.season);ensurePlayerContract(signing,save.season);save.squad.push(signing);initializePlayerMarketValue(signing,save,transferData.date||save.date);
   }
 
   function completeTransfer(save,rumor,date,forced=false) {
@@ -2237,7 +2289,7 @@
       return player.overall>=minimumOverall||player.potential>=club.prestige-5;
     }).map(player=>{
       const currentClubId=currentPlayerClubId(state,player),sourceClub=clubById(currentClubId),role=transferRole(player.position),need=needs[role];
-      const value=Math.max(.5,Number(player.value)||Math.max(1,player.overall-64));
+      const value=Math.max(.5,currentPlayerMarketValue(player,state)||Math.max(1,player.overall-64)),age=effectivePlayerAge(player,state);
       const affinity=stableScoutingUnit(`${club.id}|${player.id}|${state.season}`),budgetRatio=funds/value;
       const improvement=clamp(player.overall-need.average,-10,12),qualityFit=16-Math.abs((club.prestige-5)-player.overall)*.75;
       const growth=Math.max(0,player.potential-player.overall)*1.15+(player.age<=21?4:player.age<=24?2:0);
@@ -2246,7 +2298,7 @@
       const prestigeDelta=club.prestige-sourceClub.prestige;
       const interest=clamp(Math.round(47+prestigeDelta*1.65+need.score*.55+(affinity-.5)*16+(budgetRatio>=1?5:-9)),5,93);
       const reason=need.score>=17?`${playerRoleLabel(player.position)}重点补强`:improvement>=4?"提升位置即战力":player.potential-player.overall>=5?"潜力投资":"阵容适配";
-      return {...player,clubId:currentClubId,club:sourceClub.name,value,interest,score,reason,role};
+      return {...player,clubId:currentClubId,club:sourceClub.name,age,value,interest,score,reason,role};
     }).sort((a,b)=>b.score-a.score||b.potential-a.potential||b.overall-a.overall);
     const selected=[],roleCounts={};
     for(const player of candidates){
@@ -2888,13 +2940,13 @@
   }
 
   function renderPlayerProfileModal(player) {
-    const p=playerProfileData(player),groups=playerAttributeGroups(p),traits=playerTraits(p),[outlook,outlookText]=developmentOutlook(p),currentAverage=p.appearances?(averageRating(p)||6).toFixed(2):"—",attributeDevelopment=p.lastAttributeDevelopment,attributeChangeCount=Object.keys(attributeDevelopment?.changes||{}).length,attributeChangeLabel=attributeChangeCount?`${attributeDevelopment.reason} · ${attributeDevelopment.season}/${String(attributeDevelopment.season+1).slice(2)}`:"1–99";
+    const p=playerProfileData(player),groups=playerAttributeGroups(p),traits=playerTraits(p),[outlook,outlookText]=developmentOutlook(p),currentAverage=p.appearances?(averageRating(p)||6).toFixed(2):"—",attributeDevelopment=p.lastAttributeDevelopment,attributeChangeCount=Object.keys(attributeDevelopment?.changes||{}).length,attributeChangeLabel=attributeChangeCount?`${attributeDevelopment.reason} · ${attributeDevelopment.season}/${String(attributeDevelopment.season+1).slice(2)}`:"1–99",seasonValueChange=Number((Number(p.value||0)-Number(p.marketValueState?.seasonStartValue??p.value??0)).toFixed(2));
     const career=[...(p.careerStats||[])],transfers=[...(p.transferHistory||[])].sort((a,b)=>b.date.localeCompare(a.date)),latest=p.latestTransfer,contractEnd=p.contractEnd||state.season+2+Math.floor(stableScoutingUnit(`${p.id||p.name}|contract`)*3);
     return `<div class="modal-backdrop"><div class="modal player-profile-modal" role="dialog" aria-modal="true" aria-labelledby="player-profile-title"><div class="modal-header player-profile-header"><div class="player-profile-avatar">${initials(p.name)}</div><div><span>${clubNameLink(p.clubName)}</span><h2 id="player-profile-title">${esc(p.name)}</h2><p>${playerRoleLabel(p.position)} · ${p.age} 岁 · ${esc(p.nationality||"国籍未知")}</p></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body player-profile-body">
-      <section class="player-profile-summary"><div><label>当前能力</label><strong>${p.overall}</strong></div><div><label>潜力</label><strong>${p.potential}</strong></div><div><label>身价</label><strong>${money(p.value||0)}</strong></div><div><label>合同</label><strong>${contractEnd} 年</strong></div><div><label>体能</label><strong>${Math.round(p.fitness??100)}%</strong></div><div><label>士气</label><strong>${Math.round(p.morale??75)}%</strong></div></section>
+      <section class="player-profile-summary"><div><label>当前能力</label><strong>${p.overall}</strong></div><div><label>潜力</label><strong>${p.potential}</strong></div><div><label>身价 · 季度更新</label><strong>${money(p.value||0)}</strong><small class="market-value-change ${seasonValueChange>0?"up":seasonValueChange<0?"down":""}">本季 ${seasonValueChange>0?"↑":seasonValueChange<0?"↓":"持平"}${seasonValueChange?` ${money(Math.abs(seasonValueChange))}`:""}</small></div><div><label>合同</label><strong>${contractEnd} 年</strong></div><div><label>体能</label><strong>${Math.round(p.fitness??100)}%</strong></div><div><label>士气</label><strong>${Math.round(p.morale??75)}%</strong></div></section>
       <section class="player-profile-grid"><div class="player-profile-section"><div class="player-profile-section-head"><h3>当前合同</h3><span>${esc(p.contract?.role||"轮换球员")}</span></div><div class="profile-stat-list"><div><span>所属俱乐部</span><strong>${clubNameLink(p.clubName)}</strong></div><div><span>合同到期</span><strong>${contractEnd} 年</strong></div><div><span>周薪</span><strong>€${Math.round(Number(p.contract?.weeklyWage||p.wage||0))}K</strong></div><div><span>出场津贴</span><strong>€${Math.round(Number(p.contract?.appearanceFee||0))}K</strong></div><div><span>解约金</span><strong>${money(p.contract?.releaseClause||0)}</strong></div><div><span>队内角色</span><strong>${esc(p.contract?.role||"轮换球员")}</strong></div></div></div><div class="player-profile-section"><div class="player-profile-section-head"><h3>加盟信息</h3><span>${latest?formatDate(latest.date,false):"青训或原有球员"}</span></div><div class="profile-stat-list"><div><span>当前球队</span><strong>${clubNameLink(p.clubName)}</strong></div><div><span>加盟日期</span><strong>${latest?formatDate(latest.date):"赛季开始前"}</strong></div><div><span>来自</span><strong>${latest?clubNameLink(clubById(latest.fromId).name):"原有阵容"}</strong></div><div><span>转会费</span><strong>${latest?money(latest.fee):"—"}</strong></div><div><span>交易方式</span><strong>${latest?.clauses?"协商转会":"永久转会"}</strong></div><div><span>生涯转会</span><strong>${transfers.length} 次</strong></div></div></div></section>
       <section class="player-profile-section"><div class="player-profile-section-head"><h3>细分属性</h3><span>${esc(attributeChangeLabel)}</span></div><div class="detailed-attributes">${groups.map(([title,attrs])=>`<div class="attribute-column"><h4>${title}</h4>${attrs.map(([label,key,modifier,sourceKey])=>{const value=profileAttribute(p,key,modifier,sourceKey),change=Number(attributeDevelopment?.changes?.[key]||0);return `<div><span>${label}</span><span class="attribute-reading"><strong class="${value>=85?"elite":value<60?"weak":""}">${value}</strong>${change?`<small class="attribute-change ${change>0?"up":"down"}" title="${esc(`${attributeDevelopment.reason}：${change>0?"提升":"下降"} ${Math.abs(change)} 点`)}">${change>0?"+":""}${change}</small>`:""}</span></div>`;}).join("")}</div>`).join("")}</div></section>
-      <section class="player-profile-grid"><div class="player-profile-section"><div class="player-profile-section-head"><h3>本赛季数据</h3><span>${state.season}/${String(state.season+1).slice(2)}</span></div><div class="profile-stat-list"><div><span>出场</span><strong>${p.appearances||0}</strong></div><div><span>进球</span><strong>${p.goals||0}</strong></div><div><span>助攻</span><strong>${p.assists||0}</strong></div><div><span>场均评分</span><strong>${currentAverage}</strong></div><div><span>国家队</span><strong>${p.internationalAppearances||0} 场</strong></div><div><span>国家队进球/助攻</span><strong>${p.internationalGoals||0} / ${p.internationalAssists||0}</strong></div></div></div><div class="player-profile-section"><div class="player-profile-section-head"><h3>发展趋势</h3><span>${outlook}</span></div><div class="development-outlook"><strong>${outlook}</strong><p>${outlookText}。能力变化统一在赛季结束时结算，单场比赛不会直接涨点。</p><div class="meter"><span style="width:${clamp(50+playerDevelopmentScore(p)*35,8,92)}%"></span></div></div></div></section>
+      <section class="player-profile-grid"><div class="player-profile-section"><div class="player-profile-section-head"><h3>本赛季数据</h3><span>${state.season}/${String(state.season+1).slice(2)}</span></div><div class="profile-stat-list"><div><span>出场</span><strong>${p.appearances||0}</strong></div><div><span>进球</span><strong>${p.goals||0}</strong></div><div><span>助攻</span><strong>${p.assists||0}</strong></div><div><span>场均评分</span><strong>${currentAverage}</strong></div><div><span>国家队</span><strong>${p.internationalAppearances||0} 场</strong></div><div><span>国家队进球/助攻</span><strong>${p.internationalGoals||0} / ${p.internationalAssists||0}</strong></div></div></div><div class="player-profile-section"><div class="player-profile-section-head"><h3>发展趋势</h3><span>${outlook}</span></div><div class="development-outlook"><strong>${outlook}</strong><p>${outlookText}。训练与比赛积累达到阈值后会在赛季中即时成长，季度身价评估会同步反映变化。</p><div class="meter"><span style="width:${clamp(50+playerDevelopmentScore(p)*35,8,92)}%"></span></div></div></div></section>
       <section class="player-profile-section"><div class="player-profile-section-head"><h3>踢球习惯</h3><span>${traits.length} 项</span></div><div class="player-traits">${traits.map(trait=>`<span>${icon("sparkles")}${esc(trait)}</span>`).join("")}</div></section>
       ${transfers.length?`<section class="player-profile-section"><div class="player-profile-section-head"><h3>转会履历</h3><span>${transfers.length} 笔正式转会</span></div><div class="table-wrap"><table class="player-career-table"><thead><tr><th>日期</th><th>转出球队</th><th>转入球队</th><th class="num">转会费</th><th>原因</th></tr></thead><tbody>${transfers.map(record=>`<tr><td>${formatDate(record.date)}</td><td>${clubNameLink(clubById(record.fromId).name)}</td><td>${clubNameLink(clubById(record.toId).name)}</td><td class="num">${money(record.fee)}</td><td>${esc(record.reason||"阵容规划")}</td></tr>`).join("")}</tbody></table></div></section>`:""}
       <section class="player-profile-section"><div class="player-profile-section-head"><h3>生涯数据</h3><span>${career.length+1} 个俱乐部阶段</span></div><div class="table-wrap"><table class="player-career-table"><thead><tr><th>赛季</th><th>俱乐部</th><th class="num">出场</th><th class="num">进球</th><th class="num">助攻</th><th class="num">评分</th><th class="num">阶段</th></tr></thead><tbody><tr class="current-season-row"><td>${state.season}/${String(state.season+1).slice(2)}</td><td>${clubNameLink(p.clubName)}</td><td class="num">${p.appearances||0}</td><td class="num">${p.goals||0}</td><td class="num">${p.assists||0}</td><td class="num">${currentAverage}</td><td class="num">${latest?`${formatDate(latest.date,false)} 起`:"进行中"}</td></tr>${career.map(row=>`<tr><td>${row.season}/${String(Number(row.season||state.season)+1).slice(2)}</td><td>${clubNameLink(row.club||p.clubName)}</td><td class="num">${row.dataUnavailable?"—":row.appearances||0}</td><td class="num">${row.dataUnavailable?"—":row.goals||0}</td><td class="num">${row.dataUnavailable?"—":row.assists||0}</td><td class="num">${row.dataUnavailable?"—":row.appearances?Number(row.average||0).toFixed(2):"—"}</td><td class="num">${row.dataUnavailable?"历史版本未记录":row.partialSeason&&row.endDate?`至 ${formatDate(row.endDate,false)}`:row.change===undefined?"已记录":`${row.change>0?"+":""}${row.change||0}`}</td></tr>`).join("")}</tbody></table></div></section>
@@ -2905,10 +2957,10 @@
     const data=clubProfileData(value),club=data.club,league=data.league,roster=[...(data.roster||[])].sort((a,b)=>positionSortRank(a.position)-positionSortRank(b.position)||Number(b.overall||0)-Number(a.overall||0));
     if(!club)return "";
     const standing=state.majorLeagueWorld?.leagues?.[club.league]?.clubs?.find(item=>item.id===club.id),table=state.majorLeagueWorld?.leagues?.[club.league]?majorStandings(state.majorLeagueWorld.leagues[club.league]):[],rank=table.findIndex(item=>item.id===club.id)+1,honors=[...clubHonors(club),...(club.id===state.clubId?(state.honors||[]).filter(item=>item.scope==="俱乐部").map(item=>({name:item.name,count:1,asset:trophyAsset(item.name)})):[])];
-    const average=roster.length?Math.round(roster.reduce((sum,p)=>sum+Number(p.overall||0),0)/roster.length):0,totalValue=roster.reduce((sum,p)=>sum+Number(p.value||0),0);
+    const average=roster.length?Math.round(roster.reduce((sum,p)=>sum+Number(p.overall||0),0)/roster.length):0,totalValue=roster.reduce((sum,p)=>sum+currentPlayerMarketValue(p,state),0);
     return `<div class="modal-backdrop"><div class="modal club-profile-modal" role="dialog" aria-modal="true" aria-labelledby="club-profile-title"><div class="modal-header club-profile-header"><div class="club-profile-badge">${clubBadge(club,"club-badge-profile-modal")}</div><div><span>${esc(league?.short||"俱乐部")}${league?.country?` · ${esc(league.country)}`:""}</span><h2 id="club-profile-title">${esc(club.name)}</h2><p>${esc(club.city||"城市资料待更新")} · ${esc(club.stadium||"主场资料待更新")} · 主教练 ${esc(club.coach||"资料待更新")}</p></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body club-profile-body">
       <section class="club-profile-summary"><div><label>俱乐部声望</label><strong>${club.prestige||"—"}</strong></div><div><label>阵容人数</label><strong>${roster.length}</strong></div><div><label>平均能力</label><strong>${average||"—"}</strong></div><div><label>阵容总身价</label><strong>${money(totalValue)}</strong></div><div><label>当前排名</label><strong>${rank||"—"}${rank?` / ${table.length}`:""}</strong></div><div><label>本赛季积分</label><strong>${standing?.pts??"—"}</strong></div></section>
-      <section class="club-profile-section"><div class="club-profile-section-head"><h3>一线队阵容</h3><span>按位置排序 · ${roster.length} 人</span></div><div class="table-wrap"><table class="club-roster-table"><thead><tr><th>球员</th><th>位置</th><th class="num">年龄</th><th class="num">能力 / 潜力</th><th class="num">身价</th></tr></thead><tbody>${roster.map(player=>`<tr><td class="player-name"><strong>${playerNameLink(player,{clubName:club.name})}</strong><span>${player.nationality?esc(player.nationality):"球员"}</span></td><td><span class="tag">${playerRoleLabel(player.position)}</span></td><td class="num">${player.age||"—"}</td><td class="num"><span class="rating">${player.overall||"—"}</span> / ${player.potential||player.overall||"—"}</td><td class="num">${money(player.value||0)}</td></tr>`).join("")||`<tr><td colspan="5"><div class="empty compact">暂无可用阵容数据</div></td></tr>`}</tbody></table></div></section>
+      <section class="club-profile-section"><div class="club-profile-section-head"><h3>一线队阵容</h3><span>按位置排序 · ${roster.length} 人</span></div><div class="table-wrap"><table class="club-roster-table"><thead><tr><th>球员</th><th>位置</th><th class="num">年龄</th><th class="num">能力 / 潜力</th><th class="num">身价</th></tr></thead><tbody>${roster.map(player=>`<tr><td class="player-name"><strong>${playerNameLink(player,{clubName:club.name})}</strong><span>${player.nationality?esc(player.nationality):"球员"}</span></td><td><span class="tag">${playerRoleLabel(player.position)}</span></td><td class="num">${player.age||"—"}</td><td class="num"><span class="rating">${player.overall||"—"}</span> / ${player.potential||player.overall||"—"}</td><td class="num">${money(currentPlayerMarketValue(player,state))}</td></tr>`).join("")||`<tr><td colspan="5"><div class="empty compact">暂无可用阵容数据</div></td></tr>`}</tbody></table></div></section>
       <section class="club-profile-grid"><div class="club-profile-section"><div class="club-profile-section-head"><h3>俱乐部荣誉</h3><span>主要荣誉概览</span></div><div class="club-honors">${honors.map(item=>`<div class="club-honor"><img src="assets/trophies/${item.asset||"league.png"}" alt=""><div><strong>${esc(item.name)}</strong><span>${item.count} 次</span></div></div>`).join("")||`<p class="report-copy">暂无已记录荣誉。</p>`}</div></div><div class="club-profile-section"><div class="club-profile-section-head"><h3>近期状态</h3><span>${standing?`${standing.w}胜 ${standing.d}平 ${standing.l}负`:"当前赛季"}</span></div><div class="club-form-row"><div><label>战绩</label><strong>${standing?`${standing.w}-${standing.d}-${standing.l}`:"—"}</strong></div><div><label>进失球</label><strong>${standing?`${standing.gf} / ${standing.ga}`:"—"}</strong></div><div><label>近况</label><strong>${standing?.form?.length?standing.form.map(item=>`<i class="form-dot ${item}"></i>`).join(""):"—"}</strong></div></div></div></section>
     </div></div></div>`;
   }
@@ -3175,14 +3227,15 @@
     });
     simulateBackgroundWorld(targetDate);
     simulateMajorLeagueWorld(state,targetDate);
-    simulateTransferMarket(state,targetDate);
     state.date=targetDate;
     advanceYouthDevelopment(state);
     const youthEvent=runYouthIntake(state,targetDate);
     const playerEvent=applyPlayerCareerDay(targetDate);
     advanceInSeasonDevelopment(state,targetDate);
+    const marketValueEvent=runQuarterlyMarketValueReview(state,targetDate);
+    simulateTransferMarket(state,targetDate);
     const transferEvent=importantTransferEvent(previousRecordIds,previousRumorIds),offseasonEvent=offseasonCalendarEvent(state,targetDate);
-    return youthEvent||playerEvent||transferEvent||offseasonEvent;
+    return youthEvent||playerEvent||marketValueEvent||transferEvent||offseasonEvent;
   }
 
   function continueGame() {
@@ -4387,7 +4440,7 @@
     if(state.role==="player"&&averageRating(controlledPlayer())>=7.6)state.honors.unshift({name:"赛季最佳球员",season:state.season,scope:"个人"});
     const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3),retiredPlayers=collectSeasonRetirements(state,state.season);if(retiredPlayers.length)state.squad=state.squad.filter(player=>!retiredPlayers.includes(player));
     state.season++;state.date=transitionDate;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season);simulateTransferMarket(state,state.date);
-    state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});
+    state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});resetSeasonMarketValueBaseline(state);
     rolloverYouthSeason(state).forEach(graduate=>addNotification({title:`AI 教练提拔青训球员：${graduate.name}`,type:"youth",date:state.date,detail:"教练组根据年龄、当前能力、潜力和一线队名额完成了青训晋升。",facts:[`${playerRoleLabel(graduate.position)} · ${graduate.age} 岁`,`当前能力：${graduate.overall}`,`合同角色：${graduate.contract.role}`]}));
     if(state.role==="player"){
       const career=ensurePlayerCareer(),player=controlledPlayer();career.trainingDays=0;career.weeklyPlanChanges=0;career.weeklyPlanSetDate=state.date;career.matchPlan="balanced";career.matchPlanFixtureId=null;career.pendingIssues=[];career.story=null;career.nextStoryDate=addDays(state.date,10);career.selectionStreak=0;career.benchStreak=0;career.seasonObjectives=createPlayerObjectives(player);career.objectiveProgress={appearances:0,ratings:0,goals:0,assists:0,trust:Math.round(career.trust)};career.requests=career.requests.filter(item=>item.status==="pending");

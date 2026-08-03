@@ -797,6 +797,9 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
 .player-profile-summary > div:last-child { border-right:0; }
 .player-profile-summary label { display:block; color:var(--muted); font-size:9px; }
 .player-profile-summary strong { display:block; margin-top:4px; font-family:"Barlow Condensed",sans-serif; font-size:18px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.market-value-change { display:block; margin-top:2px; color:var(--muted); font-size:9px; white-space:nowrap; }
+.market-value-change.up { color:var(--green); }
+.market-value-change.down { color:var(--danger); }
 .player-profile-section { min-width:0; }
 .player-profile-section-head { min-height:30px; display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); }
 .player-profile-section-head h3 { margin:0; font-size:13px; }
