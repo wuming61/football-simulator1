@@ -1247,9 +1247,13 @@
     career.temporaryBoostMatches=Math.max(Number(career.temporaryBoostMatches||0),matches);career.temporaryBoostSource=options.source||labels[choice]||"状态调整";career.responseMomentum=Math.max(Number(career.responseMomentum||0),momentum);career.responseMatches=Math.max(Number(career.responseMatches||0),matches);career.responseSource=career.temporaryBoostSource;
   }
 
-  function temporaryBoostSummary(career=ensurePlayerCareer()) {
+  function attributeBoostSummary(boosts={}) {
     const labels={pace:"速度",shooting:"射门",passing:"传球",dribbling:"盘带",defending:"防守",physical:"身体",goalkeeping:"门将技术"};
-    return Object.entries(career?.temporaryAttributeBoosts||{}).filter(([,value])=>Number(value)>0).map(([key,value])=>`${labels[key]||key} +${Number(value)}`).join(" · ");
+    return Object.entries(boosts).filter(([,value])=>Number(value)>0).map(([key,value])=>`${labels[key]||key} +${Number(value)}`).join(" · ");
+  }
+
+  function temporaryBoostSummary(career=ensurePlayerCareer()) {
+    return attributeBoostSummary(career?.temporaryAttributeBoosts||{});
   }
 
   function recentPlayerAverage(career=ensurePlayerCareer()) {
@@ -1296,8 +1300,80 @@
     return null;
   }
 
+  const PLAYER_STATE_EVENTS=[
+    {id:"training-flow",when:({player})=>player.position!=="GK"&&player.fitness>=76,title:"训练场进入最佳节奏",detail:({fixture})=>`连续几组高强度对抗中，你的触球和移动明显比平时更顺。教练允许你把这股感觉带进对 ${fixture?.opponent||"下一个对手"} 的准备。`,choices:[
+      {id:"one-touch",icon:"route",label:"巩固一脚出球",detail:"把比赛节奏转化为传接与摆脱优势",boosts:{passing:3,dribbling:2},matches:3,momentum:3.5,effects:{tactical:2,confidence:2},fitness:-2},
+      {id:"explosive",icon:"zap",label:"强化第一步爆发",detail:"用短距离冲刺制造下一场的速度优势",boosts:{pace:4,physical:2},matches:2,momentum:4,effects:{confidence:3},fitness:-4},
+      {id:"finishing-touch",icon:"target",label:"延续射门脚感",detail:"留下加练最后一击和禁区处理",boosts:{shooting:4,dribbling:1},matches:2,momentum:4.5,effects:{confidence:3,trust:1},fitness:-3}
+    ]},
+    {id:"keeper-clinic",when:({player})=>player.position==="GK",title:"门将教练安排专项课",detail:({fixture})=>`教练组根据 ${fixture?.opponent||"下一个对手"} 的射门习惯设计了专门训练，你可以选择最需要强化的比赛环节。`,choices:[
+      {id:"keeper-reactions",icon:"scan-eye",label:"近距离反应",detail:"强化扑救反应与门线爆发",boosts:{goalkeeping:4,physical:2},matches:3,momentum:4,effects:{confidence:3},fitness:-3},
+      {id:"keeper-build",icon:"send",label:"后场出球",detail:"练习受压时的传球选择与第一脚处理",boosts:{goalkeeping:2,passing:4},matches:3,momentum:3.5,effects:{tactical:3,trust:1},fitness:-2},
+      {id:"keeper-sweep",icon:"shield",label:"扩大防守范围",detail:"提高出击速度和禁区控制力",boosts:{goalkeeping:3,pace:3},matches:2,momentum:4,effects:{trust:2,confidence:2},fitness:-4}
+    ]},
+    {id:"analyst-report",when:()=>true,title:"分析师送来个人对手报告",detail:({fixture})=>`报告拆解了 ${fixture?.opponent||"近期对手"} 的压迫方向、防线空当和二点球习惯。你只能选择一个重点带进比赛。`,choices:[
+      {id:"analyst-space",icon:"route",label:"研究传球线路",detail:"提前识别压迫后的空当",boosts:{passing:4,dribbling:1},matches:2,momentum:3.5,effects:{tactical:4,trust:1}},
+      {id:"analyst-transition",icon:"fast-forward",label:"研究转换瞬间",detail:"强化启动、带球和反击选择",boosts:{pace:3,dribbling:3},matches:2,momentum:4,effects:{tactical:3,confidence:2}},
+      {id:"analyst-duels",icon:"shield-check",label:"研究对位弱点",detail:"针对对手惯用脚和身体方向准备攻防对抗",boosts:{defending:3,physical:3},matches:3,momentum:3,effects:{tactical:3,professionalism:2}}
+    ]},
+    {id:"coach-detail",when:({career,context})=>career.tactical>=62||context.decisive,title:"主教练留下你单独讲解",detail:({fixture})=>`全队训练结束后，主教练用战术板解释了对 ${fixture?.opponent||"下一个对手"} 时你这一侧的具体职责。`,choices:[
+      {id:"coach-halfspace",icon:"map",label:"攻击肋部空间",detail:"理解接球角度与第三人跑位",boosts:{passing:3,dribbling:2},matches:3,momentum:3.5,effects:{tactical:4,trust:3}},
+      {id:"coach-behind",icon:"move-up-right",label:"冲击防线身后",detail:"把启动时机和终结动作作为重点",boosts:{pace:3,shooting:3},matches:2,momentum:4,effects:{tactical:3,trust:2}},
+      {id:"coach-balance",icon:"shield",label:"保护攻守平衡",detail:"优先提升回追、对抗和站位执行",boosts:{defending:4,physical:2},matches:3,momentum:3,effects:{tactical:4,trust:4}}
+    ]},
+    {id:"teammate-sync",when:({career})=>career.chemistry>=60,title:"队友提出加练配合套路",detail:({fixture})=>`同侧队友希望在对 ${fixture?.opponent||"下一个对手"} 前把几个固定信号练熟，这会直接改变你们接下来几场的场上默契。`,choices:[
+      {id:"sync-wall",icon:"repeat-2",label:"练撞墙与回做",detail:"提高短传衔接和狭小空间处理",boosts:{passing:3,dribbling:3},matches:3,momentum:3.5,effects:{chemistry:4,"relationship:teammates":3}},
+      {id:"sync-overlap",icon:"git-merge",label:"练交叉与套边",detail:"强化无球启动和最后一传后的前插",boosts:{pace:3,passing:2},matches:3,momentum:3.5,effects:{chemistry:4,tactical:2}},
+      {id:"sync-press",icon:"users-round",label:"练协同压迫",detail:"统一上抢时机与二点球保护",boosts:{defending:3,physical:3},matches:3,momentum:3,effects:{chemistry:5,"relationship:teammates":3}}
+    ]},
+    {id:"captain-rally",when:({career,context})=>context.decisive||career.pressure>=42,title:"队长在关键时刻找你谈话",detail:({context})=>`${context.matchImportance}临近，队长认为你的情绪会影响发挥，希望你先确定自己在场上的心理锚点。`,choices:[
+      {id:"captain-calm",icon:"waves",label:"先把比赛踢简单",detail:"用稳定处理降低压力并进入节奏",boosts:{passing:3,defending:2},matches:2,momentum:3,effects:{pressure:-6,confidence:2,"relationship:captain":3}},
+      {id:"captain-lead",icon:"badge",label:"主动承担责任",detail:"在关键区域要求球并影响比赛",boosts:{shooting:3,physical:3},matches:2,momentum:4.5,effects:{confidence:5,pressure:2,trust:2}},
+      {id:"captain-fight",icon:"flame",label:"把压力变成对抗",detail:"提高拼抢强度和推进侵略性",boosts:{dribbling:2,defending:2,physical:3},matches:2,momentum:4,effects:{confidence:3,"relationship:captain":3},fitness:-2}
+    ]},
+    {id:"family-reset",when:({career,player})=>career.pressure>=34||player.morale<80,title:"亲友帮你暂时离开足球",detail:()=>"短暂的家庭时间让你从评分、竞争和舆论中抽离出来。回到训练基地时，你可以选择怎样重新进入比赛状态。",choices:[
+      {id:"reset-clear",icon:"brain",label:"清空杂念",detail:"恢复专注，让技术动作重新稳定",boosts:{passing:2,dribbling:2,shooting:2},matches:2,momentum:3.5,effects:{pressure:-8,confidence:4,"relationship:family":3},morale:4},
+      {id:"reset-rest",icon:"battery-charging",label:"彻底休息一天",detail:"用身体恢复换取更好的比赛活力",boosts:{pace:2,physical:4},matches:2,momentum:3,effects:{pressure:-5},fitness:7,morale:3},
+      {id:"reset-purpose",icon:"focus",label:"重新确认目标",detail:"把外界压力转化为清晰的比赛任务",boosts:{passing:2,defending:2,physical:2},matches:3,momentum:3,effects:{professionalism:3,confidence:3,pressure:-4}}
+    ]},
+    {id:"supporters-energy",when:({career,context})=>Boolean(context.fixture?.home)&&career.relationships.fans>=54,title:"主场球迷送来特别支持",detail:({fixture})=>`训练基地外的球迷为对 ${fixture?.opponent||"下一个对手"} 的比赛制作了横幅。你感受到期待，也必须决定如何使用这股能量。`,choices:[
+      {id:"fans-entertain",icon:"sparkles",label:"用突破回应看台",detail:"主动制造一对一和推进场面",boosts:{pace:3,dribbling:4},matches:2,momentum:4,effects:{confidence:4,"relationship:fans":3}},
+      {id:"fans-decisive",icon:"crosshair",label:"争取直接决定比赛",detail:"把注意力集中在最后一击",boosts:{shooting:4,physical:2},matches:2,momentum:4.5,effects:{confidence:5,pressure:2}},
+      {id:"fans-work",icon:"shield-check",label:"用投入回报支持",detail:"强化跑动、对抗和防守执行",boosts:{defending:3,physical:3},matches:3,momentum:3.5,effects:{trust:2,"relationship:fans":3}}
+    ]},
+    {id:"media-momentum",when:({player})=>Number(player.lastRating||0)>=7,title:"出色表现带来舆论顺风",detail:({player})=>`上一场 ${Number(player.lastRating).toFixed(2)} 的评分让外界开始集中讨论你的状态。处理得当，这股势头可以延续到接下来的比赛。`,choices:[
+      {id:"media-attack",icon:"target",label:"接受关键球员期待",detail:"保持侵略性，继续追求直接贡献",boosts:{shooting:4,dribbling:2},matches:2,momentum:5,effects:{confidence:5,pressure:2,"relationship:media":2}},
+      {id:"media-control",icon:"scale",label:"强调稳定和控制",detail:"把好状态延续到传球与比赛阅读",boosts:{passing:4,defending:1},matches:3,momentum:3.5,effects:{professionalism:2,trust:2}},
+      {id:"media-team",icon:"users",label:"把赞誉归于队友",detail:"利用更衣室支持强化场上协作",boosts:{passing:3,physical:2},matches:3,momentum:3.5,effects:{chemistry:4,"relationship:teammates":3,"relationship:media":1}}
+    ]},
+    {id:"recovery-breakthrough",when:({player})=>player.fitness<=82,title:"理疗团队找到恢复突破口",detail:()=>"医疗与体能团队调整了你的恢复方案，肌肉疲劳明显缓解。你可以把额外恢复资源用在一个比赛方向。",choices:[
+      {id:"recovery-speed",icon:"wind",label:"恢复启动速度",detail:"优先处理下肢疲劳和短距离爆发",boosts:{pace:4,physical:2},matches:2,momentum:3.5,effects:{confidence:2},fitness:8},
+      {id:"recovery-technique",icon:"circle-dot",label:"恢复触球精度",detail:"以低负荷技术训练重新建立球感",boosts:{passing:3,dribbling:3},matches:2,momentum:3,effects:{pressure:-3},fitness:6},
+      {id:"recovery-contact",icon:"dumbbell",label:"恢复对抗能力",detail:"强化核心稳定与对抗保护",boosts:{defending:2,physical:4},matches:3,momentum:3,effects:{professionalism:2},fitness:5}
+    ]},
+    {id:"bench-spark",when:({career})=>career.benchStreak===1,title:"替补席观察带来新发现",detail:({fixture})=>`没有首发让你看清了球队进攻中的一个空档。面对 ${fixture?.opponent||"下一个对手"}，你可以提前准备一种改变局面的方式。`,choices:[
+      {id:"bench-impact",icon:"zap",label:"准备替补冲击",detail:"上场后立即用速度和突破改变节奏",boosts:{pace:4,dribbling:3},matches:2,momentum:4.5,effects:{confidence:3,trust:1}},
+      {id:"bench-create",icon:"route",label:"准备梳理进攻",detail:"从场边观察转化为更清楚的传球选择",boosts:{passing:4,shooting:1},matches:2,momentum:3.5,effects:{tactical:3,trust:2}},
+      {id:"bench-secure",icon:"shield",label:"准备稳定局面",detail:"用防守、对抗和控球赢得教练信任",boosts:{defending:4,physical:2},matches:3,momentum:3,effects:{professionalism:2,trust:3}}
+    ]},
+    {id:"big-match-clarity",when:({context})=>context.decisive,title:"关键比赛前出现罕见专注感",detail:({context})=>`${context.competitionSituation}。赛前最后一次训练中，环境似乎安静下来，你对比赛的第一步行动异常清楚。`,choices:[
+      {id:"bigmatch-create",icon:"eye",label:"寻找决定性传球",detail:"把专注力用于观察与创造机会",boosts:{passing:4,dribbling:2},matches:2,momentum:5,effects:{confidence:4,pressure:-2}},
+      {id:"bigmatch-score",icon:"crosshair",label:"寻找决定性射门",detail:"在关键区域保持冷静和终结欲望",boosts:{shooting:5,physical:1},matches:2,momentum:5.5,effects:{confidence:5,pressure:1}},
+      {id:"bigmatch-defend",icon:"shield-check",label:"先赢下每次对抗",detail:"把注意力放在站位、回追和身体对抗",boosts:{defending:4,physical:3},matches:2,momentum:4.5,effects:{trust:3,pressure:-2}}
+    ]}
+  ];
+
+  function eligiblePlayerStateEvents(career=ensurePlayerCareer(),player=controlledPlayer(),context=playerConversationContext()) {
+    return PLAYER_STATE_EVENTS.filter(event=>event.when({career,player,context}));
+  }
+
+  function startPlayerStateEvent(date,eventId=null) {
+    const career=ensurePlayerCareer(),player=controlledPlayer(),context=playerConversationContext(),eligible=eligiblePlayerStateEvents(career,player,context),event=eventId?PLAYER_STATE_EVENTS.find(item=>item.id===eventId):eligible[Math.floor(stableScoutingUnit(`${date}|${player.id}|state-event|${career.storyHistory.length}`)*eligible.length)];if(!event)return null;
+    career.story={id:`state-${event.id}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,type:"state-boost",eventId:event.id,stage:1,status:"active",date,title:event.title,detail:event.detail({career,player,context,fixture:context.fixture}),nextDate:null,choices:event.choices.map(choice=>({...choice,boosts:{...choice.boosts},effects:{...(choice.effects||{})}}))};return career.story;
+  }
+
   function startPlayerStory(date) {
-    const career=ensurePlayerCareer(),player=controlledPlayer(),form=Number(player.lastRating||player.form||6.4),type=career.benchStreak>=2?"selection":form<6.2?"form":player.contract?.endSeason<=state.season+1?"contract":career.trust<55?"coach":"competition";
+    const career=ensurePlayerCareer(),player=controlledPlayer(),form=Number(player.lastRating||player.form||6.4),urgentType=career.benchStreak>=2?"selection":form<6.2?"form":player.contract?.endSeason<=state.season+1?"contract":career.trust<55?"coach":null;if(!urgentType&&stableScoutingUnit(`${date}|${player.id}|story-type`)<.76&&startPlayerStateEvent(date))return;const type=urgentType||"competition";
     const content={
       selection:["位置竞争加剧","教练组正在重新评估这个位置的出场顺序。接下来一周的态度和训练会影响轮换。"],
       form:["低迷期的回应","连续表现没有达到预期，媒体和教练组都在等待你的回应。"],
@@ -1310,6 +1386,7 @@
 
   function playerStoryChoices(story) {
     const stage=Number(story?.stage||1),type=story?.type;
+    if(type==="state-boost")return story.choices||[];
     if(stage===1){
       if(type==="contract")return [{id:"agent",icon:"briefcase",label:"让经纪人接触俱乐部",detail:"推动续约，但会把未来问题公开化"},{id:"wait",icon:"clock-3",label:"专注球场表现",detail:"暂不施压，用比赛赢得筹码"},{id:"exit",icon:"door-open",label:"评估离队可能",detail:"扩大市场选择，也会影响教练关系"}];
       if(type==="form")return [{id:"review",icon:"video",label:"加看比赛录像",detail:"提升战术理解并修正失误"},{id:"train",icon:"dumbbell",label:"进行额外训练",detail:"争取信任，但增加短期疲劳"},{id:"calm",icon:"heart-pulse",label:"接受心理辅导",detail:"先恢复信心和稳定性"}];
@@ -1320,6 +1397,9 @@
 
   function resolvePlayerStoryChoice(choice) {
     const career=ensurePlayerCareer(),story=career?.story;if(!story||story.status!=="active")return;
+    if(story.type==="state-boost"){
+      const selected=(story.choices||[]).find(item=>item.id===choice),player=controlledPlayer();if(!selected||!player)return;changePlayerCareer(selected.effects||{});player.fitness=clamp(Number(player.fitness||75)+Number(selected.fitness||0),25,100);player.morale=clamp(Number(player.morale||75)+Number(selected.morale||0),25,100);grantPerformanceResponse("conversation",{boosts:selected.boosts,matches:selected.matches||2,momentum:selected.momentum||3,source:story.title});career.storyHistory.unshift({id:story.id,type:story.type,eventId:story.eventId,stage:1,date:state.date,choice,title:story.title,boosts:{...selected.boosts},matches:selected.matches||2});career.lastOutcome=`${story.title}：${selected.label}`;career.story=null;career.nextStoryDate=addDays(state.date,14+Math.floor(stableScoutingUnit(`${state.date}|${story.eventId}|next`)*11));modal=null;saveState();render();toast("临时状态提升已生效");return;
+    }
     const effects={
       review:{trust:2,tactical:4,confidence:1,professionalism:2},train:{trust:4,confidence:2,professionalism:2},calm:{confidence:6,"relationship:coach":1},
       compete:{trust:3,confidence:3,professionalism:1},team:{trust:2,"relationship:teammates":5,"relationship:captain":3},talk:{trust:2,"relationship:coach":5,tactical:2},
@@ -2865,7 +2945,7 @@
     }
     if(modal.type==="playerStory"){
       const story=career.story;if(!story)return "";
-      return `<div class="modal-backdrop"><div class="modal player-career-modal" role="dialog" aria-modal="true"><div class="modal-header"><div><span class="eyebrow">连续职业事件 · 第 ${story.stage} 阶段</span><h2>${esc(story.title)}</h2></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body"><p class="career-modal-lead">${esc(story.detail)}</p><div class="career-choice-grid compact">${playerStoryChoices(story).map(choice=>`<button class="career-choice" data-story-choice="${choice.id}">${icon(choice.icon)}<span><strong>${choice.label}</strong><small>${choice.detail}</small></span>${icon("chevron-right")}</button>`).join("")}</div><div class="data-note">这不是一次性弹窗。选择会在几天后产生后续，并改变教练、队友、经纪人或媒体关系。</div></div></div></div>`;
+      return `<div class="modal-backdrop"><div class="modal player-career-modal" role="dialog" aria-modal="true"><div class="modal-header"><div><span class="eyebrow">${story.type==="state-boost"?"临时状态事件":`连续职业事件 · 第 ${story.stage} 阶段`}</span><h2>${esc(story.title)}</h2></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body"><p class="career-modal-lead">${esc(story.detail)}</p><div class="career-choice-grid compact">${playerStoryChoices(story).map(choice=>`<button class="career-choice" data-story-choice="${choice.id}">${icon(choice.icon)}<span><strong>${choice.label}</strong><small>${esc(choice.detail)}${story.type==="state-boost"?` · ${esc(attributeBoostSummary(choice.boosts))} · 持续 ${choice.matches||2} 场`:""}</small></span>${icon("chevron-right")}</button>`).join("")}</div><div class="data-note">${story.type==="state-boost"?"选择会立即提升对应细项属性，并在指定的有效出场次数后结束；不同事件不会永久改变球员基础能力。":"这不是一次性弹窗。选择会在几天后产生后续，并改变教练、队友、经纪人或媒体关系。"}</div></div></div></div>`;
     }
     return "";
   }
