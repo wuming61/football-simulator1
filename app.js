@@ -1210,7 +1210,7 @@
     career.lastInteractions={...(career.lastInteractions||{})};
     ["trust","confidence","tactical","professionalism","chemistry","pressure"].forEach(key=>career[key]=clamp(Number(career[key]??base[key]),0,100));
     career.responseMomentum=clamp(Number(career.responseMomentum||0),0,6);career.responseMatches=clamp(Math.round(Number(career.responseMatches||0)),0,4);career.recentRatings=Array.isArray(career.recentRatings)?career.recentRatings.slice(0,5):[];
-    career.temporaryAttributeBoosts=career.temporaryAttributeBoosts&&typeof career.temporaryAttributeBoosts==="object"?career.temporaryAttributeBoosts:{};career.temporaryBoostMatches=clamp(Math.round(Number(career.temporaryBoostMatches||0)),0,4);
+    const legacyBoosts=career.temporaryAttributeBoosts&&typeof career.temporaryAttributeBoosts==="object"?career.temporaryAttributeBoosts:{},legacyMatches=clamp(Math.round(Number(career.temporaryBoostMatches||0)),0,4);if(!Array.isArray(career.temporaryBuffs))career.temporaryBuffs=legacyMatches&&Object.values(legacyBoosts).some(value=>Number(value)>0)?[{id:"legacy-positive-buff",source:career.temporaryBoostSource||career.responseSource||"旧存档状态",boosts:{...legacyBoosts},remainingMatches:legacyMatches}]:[];syncTemporaryBuffState(career);
     Object.keys(career.relationships).forEach(key=>career.relationships[key]=clamp(Number(career.relationships[key]),0,100));
     return career;
   }
@@ -1240,11 +1240,17 @@
     return profiles[choice]||{[primary]:2};
   }
 
+  function syncTemporaryBuffState(career) {
+    career.temporaryBuffs=(Array.isArray(career.temporaryBuffs)?career.temporaryBuffs:[]).filter(buff=>Number(buff?.remainingMatches||0)>0&&Object.values(buff?.boosts||{}).some(value=>Number(value)>0)).slice(-8);
+    const totals={};career.temporaryBuffs.forEach(buff=>Object.entries(buff.boosts||{}).forEach(([key,value])=>{totals[key]=clamp(Number(totals[key]||0)+Math.max(0,Number(value||0)),0,10);}));career.temporaryAttributeBoosts=totals;career.temporaryBoostMatches=career.temporaryBuffs.reduce((maximum,buff)=>Math.max(maximum,Number(buff.remainingMatches||0)),0);
+    career.temporaryBoostSources=[...new Set(career.temporaryBuffs.map(buff=>buff.source).filter(Boolean))];career.temporaryBoostSource=career.temporaryBoostSources.length>1?`${career.temporaryBoostSources.length} 项正面状态叠加`:career.temporaryBoostSources[0]||null;return career;
+  }
+
   function grantPerformanceResponse(choice,options={}) {
     const career=ensurePlayerCareer(),player=controlledPlayer();if(!career||!player)return;
-    const labels={review:"录像复盘",extra:"专项加练",coach:"教练指导",support:"心理支持",media:"公开回应",conversation:"关键会谈"},boosts=options.boosts||positionalResponseBoosts(player,choice),matches=clamp(Number(options.matches||3),1,4),momentum=clamp(Number(options.momentum||({review:4,extra:5,coach:4.5,support:3.5,media:2.5}[choice]||2)),0,6);
-    career.temporaryAttributeBoosts=career.temporaryAttributeBoosts||{};Object.entries(boosts).forEach(([key,value])=>career.temporaryAttributeBoosts[key]=Math.max(Number(career.temporaryAttributeBoosts[key]||0),Number(value||0)));
-    career.temporaryBoostMatches=Math.max(Number(career.temporaryBoostMatches||0),matches);career.temporaryBoostSource=options.source||labels[choice]||"状态调整";career.responseMomentum=Math.max(Number(career.responseMomentum||0),momentum);career.responseMatches=Math.max(Number(career.responseMatches||0),matches);career.responseSource=career.temporaryBoostSource;
+    const labels={review:"录像复盘",extra:"专项加练",coach:"教练指导",support:"心理支持",media:"公开回应",conversation:"关键会谈"},boosts=options.boosts||positionalResponseBoosts(player,choice),matches=clamp(Number(options.matches||3),1,4),momentum=clamp(Number(options.momentum||({review:4,extra:5,coach:4.5,support:3.5,media:2.5}[choice]||2)),0,6),source=options.source||labels[choice]||"状态调整";
+    career.temporaryBuffs=Array.isArray(career.temporaryBuffs)?career.temporaryBuffs:[];career.temporaryBuffs.push({id:`buff-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,source,boosts:Object.fromEntries(Object.entries(boosts).filter(([,value])=>Number(value)>0).map(([key,value])=>[key,Number(value)])),remainingMatches:matches,createdDate:state.date});syncTemporaryBuffState(career);
+    career.responseMomentum=Math.max(Number(career.responseMomentum||0),momentum);career.responseMatches=Math.max(Number(career.responseMatches||0),matches);career.responseSource=career.temporaryBoostSource;
   }
 
   function attributeBoostSummary(boosts={}) {
@@ -1271,10 +1277,7 @@
       else career.responseMomentum=Number(career.responseMomentum||0)*.88;
       if(!career.responseMatches){career.responseMomentum=0;career.responseSource=null;}
     }
-    if(Number(career.temporaryBoostMatches||0)>0){
-      career.temporaryBoostMatches=Math.max(0,Number(career.temporaryBoostMatches||0)-1);
-      if(!career.temporaryBoostMatches){career.temporaryAttributeBoosts={};career.temporaryBoostSource=null;}
-    }
+    if(career.temporaryBuffs?.length){career.temporaryBuffs.forEach(buff=>buff.remainingMatches=Math.max(0,Number(buff.remainingMatches||0)-1));syncTemporaryBuffState(career);if(career.temporaryBuffs.length)career.responseSource=career.temporaryBoostSource;}
   }
 
   function careerDaysSince(date) { return date?daysBetween(date,state.date):999; }

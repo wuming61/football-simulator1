@@ -32,6 +32,7 @@ api.grantPerformanceResponse("review");
 assert.equal(career.temporaryAttributeBoosts.passing,3,"video review must grant +3 passing");
 assert.equal(career.temporaryAttributeBoosts.defending,2,"video review must grant +2 defending");
 assert.equal(career.temporaryBoostMatches,3,"recovery boosts must last three meaningful appearances");
+assert.equal(career.temporaryBuffs.length,1,"a temporary response must be stored as an independent buff instance");
 assert.match(api.temporaryBoostSummary(career),/传球 \+3/,"the detailed boost must be visible to the player");
 assert.match(api.renderPlayerHome(),/录像复盘正在转化为比赛状态/,"the player home must explain which choice is active");
 assert.match(api.renderPlayerHome(),/剩余 3 场有效出场/,"the player home must show the remaining duration");
@@ -39,17 +40,17 @@ assert.match(api.renderPlayerHome(),/剩余 3 场有效出场/,"the player home 
 const match={minute:20,substitutions:[],controlledMatchPlan:"balanced",lineupIds:[controlled.id]};
 career.responseMomentum=0;
 const passingWithBoost=api.effectiveMatchAttribute(controlled,"passing",match,"ours");
-career.temporaryBoostMatches=0;
+career.temporaryBuffs=[];career.temporaryBoostMatches=0;
 const passingWithoutBoost=api.effectiveMatchAttribute(controlled,"passing",match,"ours");
 assert.equal(passingWithBoost-passingWithoutBoost,3,"temporary detailed attributes must feed the match engine exactly");
 
-career.temporaryAttributeBoosts={};career.temporaryBoostMatches=0;career.responseMatches=0;career.responseMomentum=0;career.confidence=60;career.chemistry=60;career.tactical=60;career.pressure=35;
+career.temporaryBuffs=[];career.temporaryAttributeBoosts={};career.temporaryBoostMatches=0;career.responseMatches=0;career.responseMomentum=0;career.confidence=60;career.chemistry=60;career.tactical=60;career.pressure=35;
 const normalInvolvement=api.controlledPlayerInvolvementBoost(match,true);
 api.grantPerformanceResponse("extra");
 const recoveryInvolvement=api.controlledPlayerInvolvementBoost(match,true);
 assert.ok(recoveryInvolvement>=normalInvolvement+.2,"an active recovery choice must materially increase match involvement");
 
-career.responseMatches=0;career.temporaryBoostMatches=0;career.responseMomentum=0;
+career.responseMatches=0;career.temporaryBuffs=[];career.temporaryBoostMatches=0;career.responseMomentum=0;
 const neutralEvent={},neutralRating=api.positionAwareRating(controlled,neutralEvent,60,{result:0,conceded:0});
 assert.equal(neutralRating,6.18,"a neutral full-match performance must use the calibrated baseline");
 career.responseMatches=3;career.responseMomentum=6;
