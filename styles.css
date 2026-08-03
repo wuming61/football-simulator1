@@ -579,6 +579,11 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
 .live-plan-options .icon { width:13px; height:13px; }
 .live-plan-options span { font-size:8px; overflow-wrap:anywhere; }
 .live-player-plan > p { margin:4px 11px 10px; color:var(--muted); font-size:8px; line-height:1.45; }
+.live-response { display:flex; align-items:center; gap:8px; margin:0 10px 8px; padding:8px; border-left:2px solid var(--green); background:rgba(72,200,120,.07); }
+.live-response > .icon { flex:0 0 auto; color:var(--green); }
+.live-response span, .live-response strong, .live-response small { display:block; min-width:0; }
+.live-response strong { color:#dce8e1; font-size:9px; }
+.live-response small { margin-top:2px; color:var(--green); font-size:8px; line-height:1.4; }
 .decision-panel.event-active { border-color:rgba(242,184,75,.5); box-shadow:0 0 0 1px rgba(242,184,75,.08); }
 .heatmap-panel canvas { display:block; width:100%; height:auto; aspect-ratio:1.9; margin-top:10px; border:1px solid rgba(255,255,255,.25); }
 .finish-report { width:100%; }
@@ -876,12 +881,15 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
 .player-status-strip i b.pressure { background:var(--amber); }
 .career-alert { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; padding:13px 14px; border:1px solid rgba(242,184,75,.35); border-left:3px solid var(--amber); background:rgba(242,184,75,.065); }
 .career-alert.story { border-color:rgba(114,170,246,.35); border-left-color:var(--blue); background:rgba(114,170,246,.065); }
+.career-alert.recovery { border-color:rgba(72,200,120,.38); border-left-color:var(--green); background:rgba(72,200,120,.07); }
 .career-alert > div { display:flex; align-items:center; gap:11px; min-width:0; }
 .career-alert > div > .icon { color:var(--amber); }
 .career-alert.story > div > .icon { color:var(--blue); }
+.career-alert.recovery > div > .icon { color:var(--green); }
 .career-alert span { min-width:0; }
 .career-alert strong, .career-alert small { display:block; }
 .career-alert small { margin-top:3px; color:var(--muted); font-size:10px; line-height:1.45; }
+.response-momentum { flex:0 0 auto; color:var(--green); font-size:10px; }
 .player-command-grid { display:grid; grid-template-columns:minmax(0,1fr) 330px; gap:14px; align-items:start; }
 .player-command-main, .player-command-side { display:grid; gap:14px; min-width:0; }
 .player-next-match .panel-header { align-items:flex-start; }
