@@ -1514,7 +1514,7 @@
   function ensurePlayerDevelopment(player,season=state?.season||2026) {
     player.careerStats=Array.isArray(player.careerStats)?player.careerStats:[];
     if(!player.development||player.development.season!==season)player.development={season,startOverall:Number(player.overall||65),startAttributes:playerAttributeSnapshot(player),minutes:0,injuryDays:0};
-    player.development.startOverall??=Number(player.overall||65);player.development.startAttributes||=playerAttributeSnapshot(player);player.development.minutes??=0;player.development.injuryDays??=0;player.development.trainingScore??=0;player.development.attributeFocus||={};
+    player.development.startOverall??=Number(player.overall||65);player.development.startAttributes||=playerAttributeSnapshot(player);player.development.minutes??=0;player.development.injuryDays??=0;player.development.trainingScore??=0;player.development.attributeFocus||={};player.development.inSeasonProgress??=0;player.development.inSeasonGrowth??=0;player.development.lastProgressDate??=null;
     return player.development;
   }
 
@@ -2824,6 +2824,30 @@
     player.lastAttributeDevelopment={season,reason,overallChange:Number(details.overallChange||0)+(accumulate?Number(previous.overallChange||0):0),changes};return player.lastAttributeDevelopment;
   }
 
+  const DEVELOPMENT_ATTRIBUTE_PRIORITIES={
+    GK:["physical","passing","pace"],CB:["defending","physical","passing"],DF:["defending","physical","passing"],RB:["pace","defending","physical"],LB:["pace","defending","physical"],FB:["pace","defending","physical"],
+    DM:["defending","passing","physical"],CM:["passing","physical","dribbling"],AM:["passing","dribbling","shooting"],RW:["pace","dribbling","shooting"],LW:["pace","dribbling","shooting"],WG:["pace","dribbling","shooting"],ST:["shooting","physical","pace"]
+  };
+  function inSeasonGrowthCap(player) {return player.age<=19?4:player.age<=21?3:player.age<=24?2:player.age<=30?1:0;}
+  function adjustPlayerCoreAttributes(player,change,development=ensurePlayerDevelopment(player)) {
+    if(!change)return;
+    const focused=Object.entries(development.attributeFocus||{}).sort((a,b)=>b[1]-a[1]).map(([key])=>key),priorities=DEVELOPMENT_ATTRIBUTE_PRIORITIES[player.position]||DEVELOPMENT_ATTRIBUTE_PRIORITIES.CM,keys=[...new Set([...focused,...priorities])].filter(key=>Number.isFinite(Number(player[key]))&&Number(player[key])>0);if(!keys.length)return;
+    for(let point=0;point<Math.abs(change);point++)for(let index=0;index<Math.min(2,keys.length);index++){const key=keys[(point*2+index)%keys.length];player[key]=clamp(Number(player[key])+(change>0?1:-1),1,99);}
+  }
+  function applyInSeasonPlayerGrowth(player,save=state,date=save?.date) {
+    const development=ensurePlayerDevelopment(player,save?.season||state.season),gap=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0)),remainingCap=Math.max(0,inSeasonGrowthCap(player)-Number(development.inSeasonGrowth||0)),growth=Math.min(Math.floor(Number(development.inSeasonProgress||0)),gap,remainingCap);if(growth<=0)return null;
+    const before=playerAttributeSnapshot(player),previousOverall=Number(player.overall||65);player.overall=clamp(previousOverall+growth,40,99);adjustPlayerCoreAttributes(player,growth,development);development.inSeasonProgress=Number(Math.max(0,Number(development.inSeasonProgress||0)-growth).toFixed(4));development.inSeasonGrowth=Number(development.inSeasonGrowth||0)+growth;development.lastGrowthDate=date;
+    const record=recordAttributeDevelopment(player,before,{season:save.season,reason:"赛季中成长",overallChange:growth,accumulate:true});
+    if(save===state&&save.role==="player"&&player.id===save.controlledId){state.reputation=clamp(Math.max(Number(state.reputation||0),player.overall),1,99);addNotification({title:`球员发展：${player.name} 当前能力提升至 ${player.overall}`,type:"general",date:date||save.date,detail:"训练质量、比赛时间和场上表现共同推动了本次赛季中成长，提升已经即时反映到当前能力与细项属性。",facts:[`当前能力：${previousOverall} → ${player.overall}`,`本赛季中已提升：${development.inSeasonGrowth} 点`,`细项属性变化：${Object.keys(record.changes||{}).length} 项`]});}
+    return {player,growth,previousOverall,record};
+  }
+  function addMatchDevelopmentProgress(player,rating,minutes,save=state) {
+    const development=ensurePlayerDevelopment(player,save.season),performance=rating>=8?.09:rating>=7.4?.055:rating>=6.9?.03:rating>=6.4?.012:0,minutesFactor=clamp(Number(minutes||0)/90,.2,1);development.inSeasonProgress=Number((Number(development.inSeasonProgress||0)+performance*minutesFactor).toFixed(4));return applyInSeasonPlayerGrowth(player,save,save.date);
+  }
+  function advanceInSeasonDevelopment(save=state,date=save.date) {
+    const results=[];(save.squad||[]).forEach(player=>{const development=ensurePlayerDevelopment(player,save.season);if(development.lastProgressDate===date)return;development.lastProgressDate=date;const gap=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));if(!gap||!inSeasonGrowthCap(player))return;const ageRate=player.age<=19?.0052:player.age<=21?.0043:player.age<=24?.0033:player.age<=27?.0022:player.age<=30?.0012:0,average=averageRating(player),performance=average?clamp(.82+(average-6.4)*.22,.72,1.24):.88,morale=clamp(.82+Number(player.morale||75)/420,.88,1.08),availability=player.injured?.25:1,trainingMode=save.role==="player"&&player.id===save.controlledId?(PLAYER_WEEKLY_PLANS[save.playerCareer?.weeklyPlan]?.training||"balanced"):save.training,trainingFactor=trainingMode==="intense"?1.16:trainingMode==="recovery"?.82:1,potentialFactor=1+Math.min(10,gap)*.035;development.inSeasonProgress=Number((Number(development.inSeasonProgress||0)+ageRate*performance*morale*availability*trainingFactor*potentialFactor).toFixed(4));const result=applyInSeasonPlayerGrowth(player,save,date);if(result)results.push(result);});return results;
+  }
+
   function playerTraits(player) {
     const pools={
       GK:["喜欢手抛球发动反击","倾向短传出球","出击控制传中","指挥防线站位","一对一保持站立"],
@@ -2846,12 +2870,19 @@
     return ageBase+performance+playingTime+potential+training-injury;
   }
 
+  function annualPlayerGrowthTarget(player,score=playerDevelopmentScore(player)) {
+    let target=score>=1.85?4:score>=1.45?3:score>=.75?2:score>=.4?1:score<=-1.1?-2:score<=-.35?-1:0;if(target<=0||player.age>23)return target;
+    const development=ensurePlayerDevelopment(player,state?.season||2026),initialGap=Math.max(0,Number(player.potential||player.overall)-Number(development.startOverall||player.overall)),minutes=Number(development.minutes||0),average=averageRating(player)||0,highPotential=initialGap>=9||(Number(player.potential||0)>=90&&initialGap>=6),mainstayMinutes=minutes>=2400,elitePerformance=average>=7.65,bonuses=[highPotential,mainstayMinutes,elitePerformance].filter(Boolean).length,ageCap=player.age<=19?7:player.age<=21?6:5;
+    if(target>=3&&bonuses)target=Math.min(ageCap,target+bonuses);
+    return Math.min(target,initialGap);
+  }
+
   function developmentOutlook(player) {
     const score=playerDevelopmentScore(player),gap=Math.max(0,player.potential-player.overall);
     if(!gap&&player.age<30)return ["接近能力上限","本赛季重点是保持稳定表现"];
-    if(score>=1.45)return ["突破赛季","极佳表现可能在赛季结算时提升 3–4 点"];
-    if(score>=.75)return ["明显上升","赛季结算时有机会提升 1–2 点"];
-    if(score>=.25)return ["稳步发展","赛季结算时有机会提升 1 点"];
+    if(score>=1.45)return ["突破赛季","训练与高评分比赛会在赛季中推动成长，全年可能提升 3–4 点"];
+    if(score>=.75)return ["明显上升","稳定出场和良好评分可在赛季中提升 1–2 点"];
+    if(score>=.25)return ["稳步发展","训练积累达到阈值后会即时提升能力"];
     if(score<=-.65)return ["下降风险","年龄、伤病或出场不足可能导致能力下降"];
     return ["保持稳定","当前发展趋势不会带来快速变化"];
   }
@@ -3149,6 +3180,7 @@
     advanceYouthDevelopment(state);
     const youthEvent=runYouthIntake(state,targetDate);
     const playerEvent=applyPlayerCareerDay(targetDate);
+    advanceInSeasonDevelopment(state,targetDate);
     const transferEvent=importantTransferEvent(previousRecordIds,previousRumorIds),offseasonEvent=offseasonCalendarEvent(state,targetDate);
     return youthEvent||playerEvent||transferEvent||offseasonEvent;
   }
@@ -4189,6 +4221,7 @@
       ["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=Number(p[key]||0)+Number(events[key]||0);});
       p.lastRating=Number(clamp(m.liveRatings?.[p.id]??(p.id==="controlled"?m.playerRating:6),1,10).toFixed(2));
       p.form=p.lastRating;if(f.international)p.internationalRatingTotal=Number((Number(p.internationalRatingTotal||0)+p.lastRating).toFixed(2));else p.ratingTotal=Number((Number(p.ratingTotal||0)+p.lastRating).toFixed(2));
+      addMatchDevelopmentProgress(p,p.lastRating,minutes,state);
       const resultMorale=won?2:draw?0:-2,performanceMorale=p.lastRating>=7.5?2:p.lastRating<5.8?-2:p.lastRating>=6.8?1:0,minutesMorale=minutes<25&&["核心主力","常规主力"].includes(p.contract?.role)?-1:0;p.morale=clamp(Number(p.morale||75)+resultMorale+performanceMorale+minutesMorale,25,100);
       const postMatchInjuryFactor=state.role==="player"&&p.id===state.controlledId?weightedPlayerPlanFactor(m,"injuryRisk"):1;
       if(!p.injured&&Math.random()<Math.max(.0025,(70-p.fitness)/1300)*postMatchInjuryFactor){
@@ -4325,16 +4358,17 @@
 
   function settlePlayerSeason(player) {
     const development=ensurePlayerDevelopment(player,state.season),start=Number(development.startOverall||player.overall||65),score=playerDevelopmentScore(player),gap=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
-    let change=score>=1.85?4:score>=1.45?3:score>=.75?2:score>=.4?1:score<=-1.1?-2:score<=-.35?-1:0;
+    const annualTarget=annualPlayerGrowthTarget(player,score);let change=annualTarget;
+    if(change>0)change=Math.max(0,change-Number(development.inSeasonGrowth||0));
     if(change>0&&!gap)change=0;
     if(change>gap)change=gap;
-    player.overall=clamp(Number(player.overall||65)+change,40,99);
-    recordAttributeDevelopment(player,development.startAttributes,{season:state.season,reason:"赛季发展",overallChange:change});
+    player.overall=clamp(Number(player.overall||65)+change,40,99);adjustPlayerCoreAttributes(player,change,development);
+    const seasonalChange=Number(player.overall||65)-start;recordAttributeDevelopment(player,development.startAttributes,{season:state.season,reason:"赛季发展",overallChange:seasonalChange});
     if(development.injuryDays>=120&&player.potential>player.overall&&Math.random()<.24)player.potential=Math.max(player.overall,player.potential-1);
-    const seasonRecord={season:state.season,club:clubById(state.clubId).name,clubId:state.clubId,appearances:Number(player.appearances||0),goals:Number(player.goals||0),assists:Number(player.assists||0),average:Number((averageRating(player)||0).toFixed(2)),overallStart:start,overallEnd:player.overall,change};
+    const seasonRecord={season:state.season,club:clubById(state.clubId).name,clubId:state.clubId,appearances:Number(player.appearances||0),goals:Number(player.goals||0),assists:Number(player.assists||0),average:Number((averageRating(player)||0).toFixed(2)),overallStart:start,overallEnd:player.overall,change:seasonalChange};
     ["keyPasses","chancesCreated","successfulDribbles","progressivePasses","tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","recoveries","pressuresWon","saves","cleanSheets"].forEach(key=>{seasonRecord[key]=Number(player[key]||0);});
     player.careerStats=[...(player.careerStats||[]),seasonRecord].slice(-12);
-    return {player,change,score};
+    return {player,change:seasonalChange,settlementChange:change,annualTarget,score};
   }
 
   function confirmTransfer() {
