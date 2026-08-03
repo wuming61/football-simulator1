@@ -1164,6 +1164,13 @@
   }
   function controlledPlayer() { return state?.squad.find(p => p.id === state.controlledId); }
   function nextFixture() { return state?.schedule.filter(f=>f.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date))[0]; }
+  function seasonScheduleComplete(save=state) { return Boolean(save?.schedule?.length)&&!save.schedule.some(fixture=>fixture.status==="upcoming"); }
+  function continueActionMode(save=state) {
+    if(!save||save.retired)return "disabled";
+    const fixture=(save.schedule||[]).filter(item=>item.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date))[0];
+    if(!fixture)return seasonScheduleComplete(save)?"season":"disabled";
+    return fixture.date<=save.date?"match":"advance";
+  }
 
   function createPlayerCareer(player,club) {
     const status=player?.overall>=club.prestige-2?"常规主力":player?.overall>=club.prestige-7?"轮换竞争":"一线队候选";
@@ -1479,9 +1486,10 @@
   }
 
   function continueGameWithLoading() {
-    const fixture=nextFixture(),ready=fixture&&fixture.date<=state.date;
-    return runBusyTask({title:ready?"正在准备比赛":"正在推进足球世界",detail:ready?"生成双方名单、战术与比赛环境":"同步赛程、体能、转会市场与各项赛事",completeLabel:ready?"比赛准备完成":"时间推进完成"},async ({progress,yieldFrame})=>{
-      progress(28,ready?"选择首发与替补阵容":"更新赛程与球员状态");await yieldFrame();continueGame();progress(92,ready?"载入比赛界面":"整理最新动态");
+    const mode=continueActionMode(),ready=mode==="match",seasonReady=mode==="season";
+    if(mode==="disabled")return;
+    return runBusyTask({title:seasonReady?"正在结算赛季":ready?"正在准备比赛":"正在推进足球世界",detail:seasonReady?"归档成绩、球员成长与荣誉并生成新赛季":ready?"生成双方名单、战术与比赛环境":"同步赛程、体能、转会市场与各项赛事",completeLabel:seasonReady?"新赛季已生成":ready?"比赛准备完成":"时间推进完成"},async ({progress,yieldFrame})=>{
+      progress(28,seasonReady?"结算球员发展":ready?"选择首发与替补阵容":"更新赛程与球员状态");await yieldFrame();continueGame();progress(92,seasonReady?"生成新赛季赛程":ready?"载入比赛界面":"整理最新动态");
     });
   }
 
@@ -1570,10 +1578,10 @@
   function viewTitle() { return ({home:"生涯中心",squad:"一线队",fixtures:"赛程与结果",world:"联赛中心",academy:"青训中心",transfers:"转会中心",media:"媒体中心",career:"生涯档案",profile:"角色发展"})[state.view]; }
 
   function renderShell() {
-    const club=clubById(state.clubId),next=nextFixture(),matchReady=Boolean(next&&next.date<=state.date),continueNote=matchReady?`${next.competition} · ${next.opponent}`:(state.continueStatus?.title||"推进至下一重要事件");
+    const club=clubById(state.clubId),next=nextFixture(),continueMode=continueActionMode(),matchReady=continueMode==="match",seasonReady=continueMode==="season",continueNote=seasonReady?"结算本赛季并生成新赛季":matchReady?`${next.competition} · ${next.opponent}`:(state.continueStatus?.title||"推进至下一重要事件");
     return `<div class="shell">
       <aside class="sidebar"><div class="brand">${icon("circle-dot")}<span class="brand-name">FS 26</span><span class="version-tag">${APP_VERSION}</span></div><nav class="nav" aria-label="主导航">${NAV.map(navButton).join("")}</nav><div class="nav-spacer"></div><button class="nav-btn main-menu-button" id="return-main-menu">${icon("house")}<span>主页面</span></button><div class="profile-mini">${clubBadge(club,"club-badge-profile")}<div><strong>${esc(state.person)}</strong><span>${state.role==="coach"?"主教练":"职业球员"} · ${esc(club.name)}</span></div></div></aside>
-      <main class="main"><header class="topbar"><div class="topbar-club">${clubBadge(club,"club-badge-topbar")}<div class="topbar-title"><h1>${viewTitle()}</h1><p>${esc(club.name)} · ${LEAGUES[club.league].short}</p></div></div><div class="topbar-actions"><button class="btn btn-icon topbar-home" id="return-main-menu-mobile" title="返回主页面" aria-label="返回主页面">${icon("house")}</button><div class="continue-date"><strong>${formatDate(state.date,false)}</strong><span>${weekdayLabel(state.date)}</span></div><button class="continue-button" id="continue-game" aria-label="${matchReady?"进入比赛":"继续时间"}" ${!next||state.retired?"disabled":""}><span class="continue-copy"><b>${matchReady?"进入比赛":"继续"}</b><small><span class="continue-note">${esc(continueNote)}</span><span class="continue-mobile-date">${formatDate(state.date,false)} · ${weekdayLabel(state.date)}</span></small></span>${icon(matchReady?"play":"chevrons-right")}</button></div></header><div class="content">${renderView()}</div></main>
+      <main class="main"><header class="topbar"><div class="topbar-club">${clubBadge(club,"club-badge-topbar")}<div class="topbar-title"><h1>${viewTitle()}</h1><p>${esc(club.name)} · ${LEAGUES[club.league].short}</p></div></div><div class="topbar-actions"><button class="btn btn-icon topbar-home" id="return-main-menu-mobile" title="返回主页面" aria-label="返回主页面">${icon("house")}</button><div class="continue-date"><strong>${formatDate(state.date,false)}</strong><span>${weekdayLabel(state.date)}</span></div><button class="continue-button" id="continue-game" aria-label="${seasonReady?"进入新赛季":matchReady?"进入比赛":"继续时间"}" ${continueMode==="disabled"?"disabled":""}><span class="continue-copy"><b>${seasonReady?"新赛季":matchReady?"进入比赛":"继续"}</b><small><span class="continue-note">${esc(continueNote)}</span><span class="continue-mobile-date">${formatDate(state.date,false)} · ${weekdayLabel(state.date)}</span></small></span>${icon(seasonReady?"calendar-plus":matchReady?"play":"chevrons-right")}</button></div></header><div class="content">${renderView()}</div></main>
       <nav class="mobile-nav" aria-label="移动端主导航">${NAV.slice(0,3).map(navButton).join("")}${navButton(NAV[3])}<button class="nav-btn ${["academy","transfers","media","career","profile"].includes(state.view)?"active":""}" id="open-mobile-menu">${icon("menu")}<span>更多</span></button></nav>
       ${renderModal()}
     </div>`;
@@ -1627,7 +1635,7 @@
   }
 
   function renderPlayerHome() {
-    const player=controlledPlayer(),career=ensurePlayerCareer(),club=clubById(state.clubId),fixture=nextFixture(),forecast=playerSelectionForecast(player,career,fixture),weekly=PLAYER_WEEKLY_PLANS[career.weeklyPlan]||PLAYER_WEEKLY_PLANS.balanced;
+    const player=controlledPlayer(),career=ensurePlayerCareer(),club=clubById(state.clubId),fixture=nextFixture(),continueMode=continueActionMode(),seasonReady=continueMode==="season",forecast=seasonReady?{label:"赛季结束",tone:"good",detail:"可以结算本赛季并进入下一赛季"}:playerSelectionForecast(player,career,fixture),weekly=PLAYER_WEEKLY_PLANS[career.weeklyPlan]||PLAYER_WEEKLY_PLANS.balanced;
     const currentMatchPlan=career.matchPlanFixtureId===fixture?.id?career.matchPlan:"balanced",openIssue=career.pendingIssues.find(item=>item.status==="open"),activeStory=career.story?.status==="active"?career.story:null,pendingRequests=career.requests.filter(item=>item.status==="pending");
     const recentAverage=recentPlayerAverage(career),seasonAverage=player.appearances?(averageRating(player)||6):null,responseActive=career.responseMatches>0&&career.temporaryBoostMatches>0,responseSummary=temporaryBoostSummary(career);
     const contact=(id,detail)=>{const item=CONVERSATION_CONTACTS[id],last=career.lastInteractions[`conversation:${id}`],available=!last||daysBetween(last,state.date)>=3;return `<button class="career-command" data-conversation="${id}" ${available?"":"disabled"}>${icon(item.icon)}<span><strong>${item.label}</strong><small>${available?detail:"刚刚交流过，过几天再谈"}</small></span>${icon("message-circle")}</button>`;};
@@ -1637,7 +1645,7 @@
       ${(openIssue||activeStory)?`<section class="career-alert ${openIssue?"urgent":"story"}"><div>${icon(openIssue?"triangle-alert":"radio")}<span><strong>${esc((openIssue||activeStory).title)}</strong><small>${esc((openIssue||activeStory).detail)}</small></span></div><button class="btn btn-primary" data-open-career-event="${openIssue?`issue:${openIssue.id}`:"story"}">处理</button></section>`:""}
       <div class="player-command-grid">
         <div class="player-command-main">
-          <section class="panel player-next-match"><div class="panel-header"><div><span class="eyebrow">下一场比赛</span><h3>${fixture?`${esc(fixture.competition)} · ${esc(fixture.opponent)}`:"赛季等待中"}</h3></div><span class="selection-forecast ${forecast.tone}">${forecast.label}</span></div><div class="player-match-brief"><div>${clubBadge(club,"club-badge-command")}<span><small>${fixture?formatDate(fixture.date):"—"}</small><strong>${fixture?`${fixture.home?"主场":"客场"} 对阵 ${esc(fixture.opponent)}`:"暂无待赛比赛"}</strong><em>${esc(forecast.detail)}</em></span></div></div>${fixture?`<div class="match-plan-picker"><div><strong>个人比赛计划</strong><span>计划会影响场上属性、风险和体能消耗</span></div><div class="match-plan-options">${Object.entries(PLAYER_MATCH_PLANS).map(([id,plan])=>`<button class="${currentMatchPlan===id?"active":""}" data-match-plan="${id}" title="${esc(plan.summary)}">${icon(plan.icon)}<span>${plan.label}</span></button>`).join("")}</div></div>`:""}<div class="player-match-actions"><button class="btn btn-primary" id="start-match">${icon(fixture?.date<=state.date?"play":"chevrons-right")}${fixture?.date<=state.date?"进入比赛":"推进至比赛或重要事件"}</button></div></section>
+          <section class="panel player-next-match"><div class="panel-header"><div><span class="eyebrow">${seasonReady?"赛季结算":"下一场比赛"}</span><h3>${fixture?`${esc(fixture.competition)} · ${esc(fixture.opponent)}`:seasonReady?`${state.season}/${String(state.season+1).slice(2)} 赛季已结束`:"赛季等待中"}</h3></div><span class="selection-forecast ${forecast.tone}">${forecast.label}</span></div><div class="player-match-brief"><div>${clubBadge(club,"club-badge-command")}<span><small>${fixture?formatDate(fixture.date):seasonReady?"全部比赛已完成":"—"}</small><strong>${fixture?`${fixture.home?"主场":"客场"} 对阵 ${esc(fixture.opponent)}`:seasonReady?"准备进入下一赛季":"暂无待赛比赛"}</strong><em>${esc(forecast.detail)}</em></span></div></div>${fixture?`<div class="match-plan-picker"><div><strong>个人比赛计划</strong><span>计划会影响场上属性、风险和体能消耗</span></div><div class="match-plan-options">${Object.entries(PLAYER_MATCH_PLANS).map(([id,plan])=>`<button class="${currentMatchPlan===id?"active":""}" data-match-plan="${id}" title="${esc(plan.summary)}">${icon(plan.icon)}<span>${plan.label}</span></button>`).join("")}</div></div>`:""}<div class="player-match-actions"><button class="btn btn-primary" id="start-match" ${continueMode==="disabled"?"disabled":""}>${icon(seasonReady?"calendar-plus":fixture?.date<=state.date?"play":"chevrons-right")}${seasonReady?"开始新赛季":fixture?.date<=state.date?"进入比赛":"推进至比赛或重要事件"}</button></div></section>
           <section class="panel career-actions-panel"><div class="panel-header"><div><h3>人物交流</h3><span class="meta">每次会谈都会结合当前赛季处境</span></div></div><div class="career-command-list conversation-contacts">${contact("coach","理解战术、讨论机会与比赛负荷")}${contact("teammate","约定跑位信号并提升场上默契")}${contact("captain","了解更衣室并处理关键比赛压力")}${contact("family","谈生活、压力与职业未来")}${contact("media","回应表现、球队目标与外界质疑")}${contact("agent","讨论合同、转会市场与职业策略")}</div></section>
           <section class="panel career-objectives-panel"><div class="panel-header"><h3>赛季个人目标</h3><span class="meta">表现、出场与发展共同结算</span></div><div class="career-objectives">${career.seasonObjectives.map(objective=>{const current=objectiveCurrent(career,player,objective),progress=clamp(current/objective.target*100,0,100);return `<div><span><strong>${esc(objective.label)}</strong><small>${objective.id==="rating"?current.toFixed(2):Math.round(current)} / ${objective.target}${objective.unit}</small></span><i><b style="width:${progress}%"></b></i></div>`;}).join("")}</div></section>
         </div>
@@ -2908,7 +2916,7 @@
     document.getElementById("open-mobile-menu")?.addEventListener("click",()=>{modal={type:"mobileMenu"};render();});
     document.getElementById("continue-game")?.addEventListener("click",continueGameWithLoading);
     document.getElementById("start-match")?.addEventListener("click",continueGameWithLoading);
-    document.getElementById("new-season")?.addEventListener("click",()=>runBusyTask({title:"正在结算赛季",detail:"归档成绩、球员成长与荣誉并生成新赛季",completeLabel:"新赛季已生成"},async ({progress,yieldFrame})=>{progress(32,"结算球员发展");await yieldFrame();newSeason();progress(94,"生成新赛季赛程");}));
+    document.getElementById("new-season")?.addEventListener("click",continueGameWithLoading);
     document.getElementById("tactic")?.addEventListener("change",e=>{state.tactic=e.target.value;saveState();});
     document.getElementById("training")?.addEventListener("change",e=>{state.training=e.target.value;saveState();toast("训练强度已更新");});
     document.getElementById("squad-search")?.addEventListener("input",e=>{state.squadSearch=e.target.value;let visible=0;document.querySelectorAll("#squad-body tr").forEach(r=>{r.hidden=!r.dataset.playerName.includes(e.target.value.toLowerCase());if(!r.hidden)visible++;});const count=document.getElementById("squad-count");if(count)count.textContent=visible===state.squad.length?`${state.squad.length} 名球员`:`显示 ${visible} / ${state.squad.length}`;saveState();});
@@ -3027,7 +3035,7 @@
   }
 
   function continueGame() {
-    const fixture=nextFixture();if(!fixture||state.retired)return;
+    const mode=continueActionMode();if(mode==="disabled")return;if(mode==="season"){newSeason();return;}const fixture=nextFixture();
     if(fixture.date<=state.date){state.continueStatus={type:"match",title:`${fixture.competition}比赛日：对阵 ${fixture.opponent}`,date:state.date};saveState();startMatch();return;}
     state.continueStatus=null;
     let event=null,cursor=state.date,guard=0;
