@@ -222,8 +222,10 @@
   let playerProfileSequence = 0;
   let clubProfileRegistry = new Map();
   let clubProfileSequence = 0;
+  let transferRecommendationRegistry = [];
   let matchTimer = null;
   let matchCanvasFrame = null;
+  let busyTaskActive = false;
 
   const app = document.getElementById("app");
 
@@ -1217,6 +1219,61 @@
     setTimeout(() => el.remove(), 3200);
   }
 
+  function busyFrame(double=false) {
+    const schedule=window.requestAnimationFrame||((callback)=>setTimeout(callback,16));
+    return new Promise(resolve=>schedule(()=>double?schedule(resolve):resolve()));
+  }
+
+  function updateBusyProgress(percent,detail) {
+    const region=document.getElementById("busy-region");if(!region)return;
+    const value=clamp(Math.round(Number(percent)||0),0,100),bar=region.querySelector(".busy-progress-value"),number=region.querySelector(".busy-percent"),stage=region.querySelector(".busy-stage");
+    if(bar)bar.style.setProperty("--busy-progress",String(value/100));
+    if(number)number.textContent=`${value}%`;
+    if(stage&&detail)stage.textContent=detail;
+  }
+
+  function showBusyTask(title,detail,initialProgress=10) {
+    const region=document.getElementById("busy-region");if(!region)return;
+    region.innerHTML=`<div class="busy-panel"><div class="busy-heading"><span class="busy-spinner" aria-hidden="true"></span><div><span class="eyebrow">正在处理</span><h2>${esc(title)}</h2></div></div><p>${esc(detail)}</p><div class="busy-progress" aria-hidden="true"><span class="busy-progress-value"></span></div><div class="busy-progress-meta"><span class="busy-stage">准备数据</span><strong class="busy-percent">${initialProgress}%</strong></div></div>`;
+    region.classList.add("active");region.setAttribute("aria-hidden","false");document.body.classList.add("is-busy");app.setAttribute("aria-busy","true");
+    updateBusyProgress(initialProgress,"准备数据");
+  }
+
+  function hideBusyTask() {
+    const region=document.getElementById("busy-region");if(region){region.classList.remove("active");region.setAttribute("aria-hidden","true");region.innerHTML="";}
+    document.body.classList.remove("is-busy");app.removeAttribute("aria-busy");
+  }
+
+  async function runBusyTask(config,work) {
+    if(busyTaskActive)return;
+    busyTaskActive=true;const started=Date.now();showBusyTask(config.title,config.detail,config.initialProgress||10);
+    try{
+      await busyFrame(true);
+      await work({progress:updateBusyProgress,yieldFrame:()=>busyFrame(false)});
+      updateBusyProgress(100,config.completeLabel||"处理完成");
+    }catch(error){console.error("耗时操作执行失败",error);toast(config.errorLabel||"处理失败，请重试");}
+    finally{
+      const remaining=Math.max(0,280-(Date.now()-started));if(remaining)await new Promise(resolve=>setTimeout(resolve,remaining));
+      await busyFrame(false);hideBusyTask();busyTaskActive=false;
+    }
+  }
+
+  function continueGameWithLoading() {
+    const fixture=nextFixture(),ready=fixture&&fixture.date<=state.date;
+    return runBusyTask({title:ready?"正在准备比赛":"正在推进足球世界",detail:ready?"生成双方名单、战术与比赛环境":"同步赛程、体能、转会市场与各项赛事",completeLabel:ready?"比赛准备完成":"时间推进完成"},async ({progress,yieldFrame})=>{
+      progress(28,ready?"选择首发与替补阵容":"更新赛程与球员状态");await yieldFrame();continueGame();progress(92,ready?"载入比赛界面":"整理最新动态");
+    });
+  }
+
+  function transferActionWithLoading(action="start") {
+    const contractStage=action==="submit"&&negotiationById(modal?.id)?.stage==="contract";
+    const title=action==="start"?"正在建立转会谈判":contractStage?"正在评估个人合同":"正在评估转会报价";
+    const detail=action==="start"?"核对预算、球员估值和俱乐部立场":contractStage?"经纪人正在核对待遇、角色与合同条款":"出售俱乐部正在评估费用结构与附加条款";
+    return runBusyTask({title,detail,completeLabel:contractStage?"合同评估完成":"谈判状态已更新"},async ({progress,yieldFrame})=>{
+      progress(35,action==="start"?"建立谈判档案":"核对本轮条款");await yieldFrame();if(action==="start")confirmTransfer();else submitNegotiation();progress(92,"更新预算与谈判记录");
+    });
+  }
+
   function renderIcons() { if (window.lucide) window.lucide.createIcons(); }
   function render() {
     stopMatchClock();
@@ -1871,7 +1928,7 @@
   function toggleTransferList(playerId) { const player=state.squad.find(item=>item.id===playerId);if(!player)return;player.listed=!player.listed;state.transferRequestsLog.unshift({id:`list-${Date.now()}`,date:state.date,type:player.listed?"listed":"unlisted",playerId,playerName:player.name,status:"submitted"});addNotification({title:`董事会：${player.name} ${player.listed?"已被挂牌":"已撤出转会名单"}`,type:"transfer",date:state.date,detail:player.listed?"足球总监会向符合预算和阵容需求的俱乐部推荐这名球员，后续报价仍需主教练确认。":"足球总监已停止主动推介该球员。"});saveState();render(); }
 
   function renderTransfers() {
-    const market=ensureTransferMarket(state),windowInfo=transferWindow(state.date,state.season),windowOpen=windowInfo.open,recommendations=transferRecommendations();
+    const market=ensureTransferMarket(state),windowInfo=transferWindow(state.date,state.season),windowOpen=windowInfo.open,recommendations=transferRecommendations();transferRecommendationRegistry=recommendations;
     const club=clubById(state.clubId),seasonRecords=market.records.filter(record=>record.season===state.season&&(record.fromId===state.clubId||record.toId===state.clubId)).sort((a,b)=>b.date.localeCompare(a.date));
     const windowRecords=market.records.filter(record=>record.windowKey===windowInfo.key).sort((a,b)=>b.fee-a.fee||b.date.localeCompare(a.date)).slice(0,12);
     const rumors=market.rumors.filter(rumor=>rumor.windowKey===windowInfo.key&&rumor.status==="active").sort((a,b)=>(b.fromId===state.clubId||b.toId===state.clubId)-(a.fromId===state.clubId||a.toId===state.clubId)||b.confidence-a.confidence||b.fee-a.fee).slice(0,8);
@@ -2506,7 +2563,7 @@
     document.getElementById("identity")?.addEventListener("change",e=>{setup.identity=e.target.value;const item=setupIdentities().find(person=>setupIdentityId(person)===setup.identity);if(item){setup.clubId=item.club;setup.leagueId=clubById(item.club).league;}render();});
     const form=document.getElementById("setup-form"); if(form) form.addEventListener("submit",e=>{ e.preventDefault(); const fd=new FormData(form); for(const [k,v] of fd) setup[k]=v; if(setup.origin==="real") { const item=setup.role==="coach"?COACHES.find(c=>c.name===setup.identity):REAL_PLAYERS.find(p=>p.id===setup.identity); if(!item){toast("请选择有效的球员或教练");return;} setup.clubId=item.club; } state=createState(); saveState(); render(); toast("生涯创建成功"); });
     document.getElementById("continue-save")?.addEventListener("click",()=>{ state=loadState(); render(); });
-    document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>{ state.view=b.dataset.view; saveState(); render(); }));
+    document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>{const target=b.dataset.view;if(target==="transfers"){runBusyTask({title:"正在加载转会中心",detail:"更新球探推荐、市场传闻与谈判状态",completeLabel:"转会中心已更新"},async ({progress,yieldFrame})=>{progress(38,"分析阵容缺口与候选球员");await yieldFrame();state.view=target;saveState();render();progress(94,"整理市场信息");});return;}state.view=target;saveState();render();}));
     document.querySelectorAll("[data-open-player-modal]").forEach(button=>button.addEventListener("click",()=>{modal={type:button.dataset.openPlayerModal};render();}));
     document.querySelectorAll("[data-career-action]").forEach(button=>button.addEventListener("click",()=>{if(!canCareerAction(button.dataset.careerAction)){toast("这项沟通刚刚进行过，请先推进几天");return;}modal={type:"careerAction",action:button.dataset.careerAction};render();}));
     document.querySelectorAll("[data-match-plan]").forEach(button=>button.addEventListener("click",()=>setPlayerMatchPlan(button.dataset.matchPlan)));
@@ -2516,9 +2573,9 @@
     document.querySelectorAll("[data-issue-choice]").forEach(button=>button.addEventListener("click",()=>resolvePerformanceIssue(button.dataset.issueChoice)));
     document.querySelectorAll("[data-story-choice]").forEach(button=>button.addEventListener("click",()=>resolvePlayerStoryChoice(button.dataset.storyChoice)));
     document.getElementById("open-mobile-menu")?.addEventListener("click",()=>{modal={type:"mobileMenu"};render();});
-    document.getElementById("continue-game")?.addEventListener("click",continueGame);
-    document.getElementById("start-match")?.addEventListener("click",continueGame);
-    document.getElementById("new-season")?.addEventListener("click",newSeason);
+    document.getElementById("continue-game")?.addEventListener("click",continueGameWithLoading);
+    document.getElementById("start-match")?.addEventListener("click",continueGameWithLoading);
+    document.getElementById("new-season")?.addEventListener("click",()=>runBusyTask({title:"正在结算赛季",detail:"归档成绩、球员成长与荣誉并生成新赛季",completeLabel:"新赛季已生成"},async ({progress,yieldFrame})=>{progress(32,"结算球员发展");await yieldFrame();newSeason();progress(94,"生成新赛季赛程");}));
     document.getElementById("tactic")?.addEventListener("change",e=>{state.tactic=e.target.value;saveState();});
     document.getElementById("training")?.addEventListener("change",e=>{state.training=e.target.value;saveState();toast("训练强度已更新");});
     document.getElementById("squad-search")?.addEventListener("input",e=>{state.squadSearch=e.target.value;let visible=0;document.querySelectorAll("#squad-body tr").forEach(r=>{r.hidden=!r.dataset.playerName.includes(e.target.value.toLowerCase());if(!r.hidden)visible++;});const count=document.getElementById("squad-count");if(count)count.textContent=visible===state.squad.length?`${state.squad.length} 名球员`:`显示 ${visible} / ${state.squad.length}`;saveState();});
@@ -2531,12 +2588,12 @@
     document.querySelectorAll(".league-club-cell,.league-result-team,.transfer-club,.match-club,.match-team-title,.report-team-head strong").forEach(element=>element.addEventListener("click",event=>{if(event.target.closest("button"))return;let label=(element.querySelector(".player-name strong,.league-result-team b,.transfer-club b,.match-team-title h3,.report-team-head strong")||element).textContent.replace(/^★\s*/,"").trim();if(element.classList.contains("match-club")){label=label.replace(/^[A-Z]{2,5}/,"").replace(/[A-Z]{2,5}$/ ,"").trim();}openClubProfile(label);}));
     document.querySelectorAll("[data-club-profile]").forEach(button=>button.addEventListener("click",()=>{const club=clubProfileRegistry.get(button.dataset.clubProfile);if(club)openClubProfile(club);}));
     document.querySelectorAll("[data-major-league]").forEach(button=>button.addEventListener("click",()=>{state.majorLeagueId=button.dataset.majorLeague;saveState();render();}));
-    document.querySelectorAll("[data-transfer]").forEach(b=>b.addEventListener("click",()=>{const player=transferRecommendations()[Number(b.dataset.transfer)];if(!player)return;modal={type:"transfer",player};render();}));
+    document.querySelectorAll("[data-transfer]").forEach(b=>b.addEventListener("click",()=>{const player=transferRecommendationRegistry[Number(b.dataset.transfer)];if(!player)return;modal={type:"transfer",player};render();}));
     document.querySelectorAll("[data-open-negotiation]").forEach(button=>button.addEventListener("click",()=>{modal={type:"negotiation",id:button.dataset.openNegotiation};render();}));
     document.querySelectorAll("[data-list-player]").forEach(button=>button.addEventListener("click",()=>toggleTransferList(button.dataset.listPlayer)));
     document.querySelectorAll("[data-close-modal]").forEach(b=>b.addEventListener("click",()=>{modal=null;render();}));
-    document.getElementById("confirm-transfer")?.addEventListener("click",confirmTransfer);
-    document.getElementById("submit-negotiation")?.addEventListener("click",submitNegotiation);
+    document.getElementById("confirm-transfer")?.addEventListener("click",()=>transferActionWithLoading("start"));
+    document.getElementById("submit-negotiation")?.addEventListener("click",()=>transferActionWithLoading("submit"));
     document.getElementById("withdraw-negotiation")?.addEventListener("click",()=>withdrawNegotiation(modal?.id));
     document.getElementById("request-transfer")?.addEventListener("click",requestTransfer);
     document.getElementById("suggest-signing")?.addEventListener("click",()=>toast("你已向教练组提交引援建议"));
@@ -2545,12 +2602,12 @@
     document.getElementById("reset-save")?.addEventListener("click",()=>{ if(confirm("确定删除当前存档？此操作无法撤销。")) resetSave(); });
     document.querySelectorAll("#toggle-match-play").forEach(button=>button.addEventListener("click",toggleMatchPlay));
     document.querySelectorAll("[data-match-speed]").forEach(button=>button.addEventListener("click",()=>setMatchSpeed(button.dataset.matchSpeed)));
-    document.getElementById("skip-match")?.addEventListener("click",skipMatch);
+    document.getElementById("skip-match")?.addEventListener("click",()=>{const m=state.activeMatch;if(!m||m.finished)return;m.paused=true;stopMatchClock();runBusyTask({title:"正在模拟剩余比赛",detail:"计算比赛事件、临场换人、技术统计与球员评分",initialProgress:Math.max(8,Math.round(m.minute/100*82)),completeLabel:"赛后分析已生成"},skipMatch);});
     document.querySelectorAll("[data-team-talk]").forEach(button=>button.addEventListener("click",()=>applyTeamTalk(button.dataset.teamTalk)));
     document.getElementById("heatmap-player")?.addEventListener("change",event=>{state.activeMatch.selectedHeatmapPlayer=event.target.value;saveState();drawHeatmapCanvas();});
     document.getElementById("make-substitution")?.addEventListener("click",makeManualSubstitution);
     document.getElementById("sub-out")?.addEventListener("change",syncSubstitutionOptions);
-    document.getElementById("finish-match")?.addEventListener("click",finishMatch);
+    document.getElementById("finish-match")?.addEventListener("click",()=>runBusyTask({title:"正在生成赛后分析",detail:"汇总比赛数据、球员评分、换人与医疗记录",completeLabel:"赛后分析已生成"},async ({progress,yieldFrame})=>{progress(44,"计算最终评分");await yieldFrame();finishMatch({openReport:true});progress(94,"整理赛后报告");}));
     document.getElementById("world-league")?.addEventListener("change",e=>{state.worldLeague=e.target.value;saveState();render();});
     document.getElementById("import-mod")?.addEventListener("click",()=>document.getElementById("mod-file")?.click());
     document.getElementById("mod-file")?.addEventListener("change",importModFile);
@@ -3338,11 +3395,12 @@
     if(m.minute===45&&!m.halfTimeTalkDone&&!options.skipPauses){m.paused=true;m.pauseReason="halfTime";m.pendingTalk="halfTime";m.commentary.push({minute:45,text:"上半场结束，双方球员返回更衣室。"});}
     if(m.minute===90&&m.stoppageTime==null){m.stoppageTime=calculateStoppageTime(m);m.commentary.push({minute:90,text:`第四官员示意下半场补时 ${m.stoppageTime} 分钟。`});}
     if(m.minute>=90+Number(m.stoppageTime||0)){applyCleanSheetBonuses(m);m.finished=true;m.paused=true;m.pauseReason="fullTime";m.pendingTalk="postMatch";m.commentary.push({minute:m.minute,text:"全场比赛结束。球员们向看台致意。"});}
-    if(m.minute%3===0||m.paused||m.finished){saveState();render();}else{updateMatchHud(m);drawMatchCanvasFrame();}
+    if(!options.silent&&(m.minute%3===0||m.paused||m.finished)){saveState();render();}else if(!options.silent){updateMatchHud(m);drawMatchCanvasFrame();}
   }
-  function skipMatch() {
+  async function skipMatch({progress,yieldFrame}={}) {
     const m=state.activeMatch;if(!m||m.finished)return;m.paused=true;m.pendingTalk=null;m.skipMode=true;
-    let guard=0;while(!m.finished&&guard++<110)advanceMatchMinute({skipPauses:true});
+    let guard=0;while(!m.finished&&guard<110){const chunkEnd=Math.min(guard+8,110);while(!m.finished&&guard++<chunkEnd)advanceMatchMinute({skipPauses:true,silent:true});if(progress)progress(Math.min(90,12+Math.round(m.minute/Math.max(90,90+Number(m.stoppageTime||0))*76)),`已模拟至 ${Math.min(m.minute,90+Number(m.stoppageTime||0))}'`);if(yieldFrame)await yieldFrame();}
+    if(progress)progress(94,"计算最终评分与赛后数据");
     m.pendingTalk=null;m.postMatchTalkDone=true;m.pauseReason="fullTime";finishMatch({openReport:true});
   }
   function aiTeamTalkChoice(m,profile=m.aiCoachProfiles?.ours||coachDecisionProfile("AI")) {

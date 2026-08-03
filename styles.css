@@ -932,6 +932,23 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
 .toast { max-width:360px; padding:12px 14px; border:1px solid var(--line); border-left:3px solid var(--green); border-radius:var(--radius); background:#17241d; box-shadow:0 10px 40px rgba(0,0,0,.35); font-size:12px; animation:toast-in .2s ease; }
 @keyframes toast-in { from { opacity:0; transform:translateY(8px); } }
 
+.busy-region { position:fixed; inset:0; z-index:140; display:grid; place-items:center; padding:18px; background:rgba(3,9,6,.78); opacity:0; visibility:hidden; transition:opacity .16s ease,visibility .16s ease; }
+.busy-region.active { opacity:1; visibility:visible; }
+.busy-panel { width:min(430px,100%); padding:22px; border:1px solid #355243; border-top:3px solid var(--green); border-radius:var(--radius); background:#0e1a14; box-shadow:0 24px 80px rgba(0,0,0,.52); }
+.busy-heading { display:flex; align-items:center; gap:14px; }
+.busy-heading h2 { margin:3px 0 0; font-size:24px; letter-spacing:0; }
+.busy-spinner { width:32px; height:32px; flex:0 0 auto; border:3px solid #294236; border-top-color:var(--green); border-radius:50%; animation:busy-spin .8s linear infinite; will-change:transform; }
+.busy-panel > p { margin:16px 0 18px; color:#b5c5ba; font-size:11px; line-height:1.6; }
+.busy-progress { overflow:hidden; height:5px; background:#26372d; }
+.busy-progress-value { position:relative; display:block; width:100%; height:100%; transform:scaleX(var(--busy-progress,.1)); transform-origin:left; background:var(--green); transition:transform .18s ease; will-change:transform; }
+.busy-progress-value::after { content:""; position:absolute; inset:0; width:42%; background:rgba(255,255,255,.36); transform:translateX(-120%); animation:busy-scan 1.1s ease-in-out infinite; will-change:transform; }
+.busy-progress-meta { display:flex; justify-content:space-between; gap:14px; margin-top:9px; color:var(--muted); font-size:9px; }
+.busy-progress-meta strong { color:var(--green); font-variant-numeric:tabular-nums; }
+body.is-busy { overflow:hidden; }
+body.is-busy button, body.is-busy input, body.is-busy select { pointer-events:none; }
+@keyframes busy-spin { to { transform:rotate(360deg); } }
+@keyframes busy-scan { 60%,100% { transform:translateX(260%); } }
+
 .mobile-nav { display:none; }
 .desktop-only { display:inline-flex; }
 .world-date { font-size: 22px; }
