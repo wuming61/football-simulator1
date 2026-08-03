@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_VERSION = "v1.2";
+  const APP_VERSION = "v1.3";
   const SAVE_KEY = "football-simulator-v0-save";
   const SAVE_INDEX_KEY = "football-simulator-save-index-v1";
   const SAVE_PREFIX = "football-simulator-save-slot-";
@@ -1071,7 +1071,7 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:30, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:31, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
@@ -1089,6 +1089,7 @@
     const youth=createYouthSystem(created);created.youthAcademy=youth.academy;created.youthWorld=youth.world;
     ensureMarketValuation(created);
     created.transferMarket=createTransferMarket(created.season);
+    ensureClubFinances(created);
     simulateTransferMarket(created,START_DATE);
     return created;
   }
@@ -1201,7 +1202,8 @@
     if(saved.role==="player")saved.playerCareer=ensurePlayerCareer(saved);
     ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
     ensureMarketValuation(saved);
-    saved.version=30;
+    ensureClubFinances(saved);
+    saved.version=31;
     return saved;
   }
   function saveState() {
@@ -1730,7 +1732,7 @@
 
   function renderHome() {
     if(state.role==="player")return renderPlayerHome();
-    const club=clubById(state.clubId), next=nextFixture(), p=controlledPlayer();
+    const club=clubById(state.clubId), next=nextFixture(), p=controlledPlayer(),finance=ensureClubFinances(state);
     const nextOurTeam=next?.teamName||club;
     const played=state.schedule.filter(fixture=>fixture.status==="played"&&fixture.competition===leagueOf(club).short).length;
     const unread=state.notifications.filter(item=>!item.read).length;
@@ -1738,7 +1740,7 @@
       <section class="stats" aria-label="赛季关键数据">
         <div class="stat"><div class="stat-label">联赛排名</div><div class="stat-value">${played?state.leaguePosition:"—"}<small> / ${OPPONENTS[club.league].length}</small></div><div class="stat-context">${state.points} 分 · ${played} 场</div></div>
         <div class="stat"><div class="stat-label">${state.role==="coach"?"执教评分":"当前能力"}</div><div class="stat-value">${state.role==="coach"?state.coachProfile.overall:p.overall}</div><div class="stat-context">声望 ${state.reputation}</div></div>
-        <div class="stat"><div class="stat-label">${state.role==="coach"?"转会预算":"赛季评分"}</div><div class="stat-value">${state.role==="coach"?money(state.funds):(averageRating(p)||6).toFixed(2)}</div><div class="stat-context">${state.role==="coach"?"工资预算健康":`${p.goals} 球 · ${p.assists} 助`}</div></div>
+        <div class="stat"><div class="stat-label">${state.role==="coach"?"转会预算":"赛季评分"}</div><div class="stat-value">${state.role==="coach"?money(state.funds):(averageRating(p)||6).toFixed(2)}</div><div class="stat-context">${state.role==="coach"?`本季经营划拨 +${money(finance.operatingAllocated||0)}`:`${p.goals} 球 · ${p.assists} 助`}</div></div>
         <div class="stat"><div class="stat-label">球队状态</div><div class="stat-value">${Math.round(state.squad.reduce((s,x)=>s+x.fitness,0)/state.squad.length)}%</div><div class="stat-context">${state.squad.filter(x=>x.injured>0).length} 名伤员</div></div>
       </section>
       <div class="grid grid-main">
@@ -1926,6 +1928,7 @@
   const AI_TRANSFER_TARGETS={goalkeeper:2,defence:7,midfield:7,attack:5};
   const AI_TRANSFER_MINIMUMS={goalkeeper:2,defence:5,midfield:5,attack:3};
   const AI_SQUAD_LIMITS={ideal:27,soft:29,hard:32};
+  let aiTransferRuntimeCache=null;
 
   function transferRole(position) {
     if(position==="GK")return "GK";
@@ -1942,6 +1945,42 @@
     let hash=2166136261;
     for(let i=0;i<value.length;i++){hash^=value.charCodeAt(i);hash=Math.imul(hash,16777619);}
     return (hash>>>0)/4294967295;
+  }
+
+  const LEAGUE_BROADCAST_BASE={ENG1:118,ENG2:45,ESP1:78,ESP2:18,GER1:72,GER2:16,ITA1:65,ITA2:15,FRA1:48,FRA2:12};
+  function clubLeagueSize(club) {return Math.max(2,CLUBS.filter(item=>item.league===club.league).length||Number(LEAGUES[club.league]?.matches||38)/2+1);}
+  function seasonBroadcastRevenue(club,position=clubLeagueSize(club),participants=clubLeagueSize(club)) {
+    const league=LEAGUES[club.league]||{tier:1},base=LEAGUE_BROADCAST_BASE[club.league]??(league.tier===1?42:10),rank=clamp(Math.round(Number(position)||participants),1,participants),placeRate=club.league==="ENG1"?3.25:league.tier===1?1.75:.42;
+    return Number((base+Math.max(0,participants-rank)*placeRate).toFixed(1));
+  }
+  function seasonCommercialRevenue(club,season) {const unit=stableScoutingUnit(`${club.id}|commercial|${season}`);return Number(clamp(14+(Number(club.prestige||65)-55)*1.05+unit*14,10,82).toFixed(1));}
+  function seasonMatchdayRevenue(club,season) {const unit=stableScoutingUnit(`${club.id}|matchday|${season}`),tier=LEAGUES[club.league]?.tier||1;return Number(clamp((tier===1?18:6)+(Number(club.prestige||65)-55)*(tier===1?.82:.28)+unit*8,5,62).toFixed(1));}
+  function ownerInvestmentFor(club,season,key="season",currentBudget=club.budget) {
+    const annual=key==="season",lowBudget=Number(currentBudget||0)<Number(club.budget||10)*.32,chance=(annual?.16:.026)+(lowBudget?.055:0),unit=stableScoutingUnit(`${club.id}|owner|${season}|${key}`);if(unit>=chance)return 0;
+    const amountUnit=stableScoutingUnit(`${club.id}|owner-amount|${season}|${key}`);return Number(clamp(Number(club.budget||10)*(.12+amountUnit*.26),4,72).toFixed(1));
+  }
+  function previousClubLeaguePositions(save=state) {
+    const positions={};Object.values(save?.majorLeagueWorld?.leagues||{}).forEach(league=>majorStandings(league).forEach((club,index)=>{positions[club.id]=index+1;}));if(save?.clubId)positions[save.clubId]=Number(save.leaguePosition||positions[save.clubId]||1);return positions;
+  }
+  function seasonFinancePlans(save,nextSeason,positions=previousClubLeaguePositions(save)) {
+    const previousBudgets=save?.transferMarket?.budgets||{},budgets={},reports={};
+    CLUBS.forEach(club=>{const participants=clubLeagueSize(club),position=positions[club.id]||1+Math.floor(stableScoutingUnit(`${club.id}|position|${nextSeason-1}`)*participants),broadcast=seasonBroadcastRevenue(club,position,participants),commercial=seasonCommercialRevenue(club,nextSeason),matchday=seasonMatchdayRevenue(club,nextSeason),previous=Math.max(0,Number(previousBudgets[club.id]||0)),carryover=Number((previous*.56).toFixed(1)),baseAllocation=Number((Number(club.budget||10)*.44).toFixed(1)),broadcastAllocation=Number((broadcast*.42).toFixed(1)),commercialAllocation=Number((commercial*.25).toFixed(1)),matchdayAllocation=Number((matchday*.12).toFixed(1)),ownerInvestment=ownerInvestmentFor(club,nextSeason,"season",previous),transferBudget=Number(clamp(carryover+baseAllocation+broadcastAllocation+commercialAllocation+matchdayAllocation+ownerInvestment,6,380).toFixed(1));budgets[club.id]=transferBudget;reports[club.id]={season:nextSeason,clubId:club.id,league:club.league,position,participants,broadcast,commercial,matchday,carryover,baseAllocation,broadcastAllocation,commercialAllocation,matchdayAllocation,ownerInvestment,transferBudget};});
+    return {season:nextSeason,budgets,reports};
+  }
+  function ensureClubFinances(save=state) {
+    if(!save)return null;const finance=save.finances||(save.finances={});finance.season=Number(finance.season||save.season||2026);finance.lastOperatingMonth||=String(save.date||START_DATE).slice(0,7);finance.ledger=Array.isArray(finance.ledger)?finance.ledger:[];finance.seasonReports=Array.isArray(finance.seasonReports)?finance.seasonReports:[];finance.ownerInvestments=finance.ownerInvestments&&typeof finance.ownerInvestments==="object"?finance.ownerInvestments:{};finance.operatingAllocated=Number(finance.operatingAllocated||0);finance.totalBroadcast=Number(finance.totalBroadcast||0);
+    if(!finance.seasonReports.length)finance.seasonReports.unshift({season:save.season,clubId:save.clubId,openingBudget:Number(save.funds||clubById(save.clubId).budget||0),transferBudget:Number(save.funds||0),legacyBaseline:true,date:save.date||START_DATE});return finance;
+  }
+  function addClubTransferBudget(save,clubId,amount) {const value=Number(amount||0);if(!value)return;const market=ensureTransferMarket(save);market.budgets[clubId]=Number((Number(market.budgets[clubId]||0)+value).toFixed(1));if(clubId===save.clubId)save.funds=Number((Number(save.funds||0)+value).toFixed(1));}
+  function monthlyOperatingRevenue(club,date) {const prestige=Number(club.prestige||65),tier=LEAGUES[club.league]?.tier||1,retailMonth=["03","06","09","12"].includes(String(date).slice(5,7)),unit=stableScoutingUnit(`${club.id}|operations|${String(date).slice(0,7)}`),matchday=Number(clamp((tier===1?1.35:.42)+(prestige-55)*(tier===1?.055:.018)+unit*.65,.25,4.5).toFixed(1)),commercial=Number(clamp((tier===1?.75:.22)+(prestige-55)*(tier===1?.07:.022)+(retailMonth?1.15:.25)+unit*.8,.2,5.8).toFixed(1)),allocation=Number(((matchday+commercial)*(.2+clamp((prestige-65)/500,0,.06))).toFixed(1));return {matchday,commercial,gross:Number((matchday+commercial).toFixed(1)),allocation};}
+  function financeEntryLabel(entry) {return ({season:"新赛季预算",operations:"比赛日与商业经营",owner:"老板注资"})[entry?.type]||"俱乐部收入";}
+  function activateSeasonFinances(save,plans,date=save.date) {
+    const report=plans.reports[save.clubId],finance=ensureClubFinances(save);finance.season=save.season;finance.lastOperatingMonth=String(date).slice(0,7);finance.operatingAllocated=0;finance.totalBroadcast=report.broadcast;finance.ownerInvestments={};Object.values(plans.reports).forEach(item=>{if(item.ownerInvestment)finance.ownerInvestments[item.clubId]=save.season;});finance.seasonReports.unshift({...report,date});finance.seasonReports=finance.seasonReports.slice(0,12);finance.ledger.unshift({id:`finance-season-${save.season}`,season:save.season,date,type:"season",gross:Number((report.broadcast+report.commercial+report.matchday+report.ownerInvestment).toFixed(1)),allocation:report.transferBudget,detail:`联赛第 ${report.position} 名 · 新赛季预算`});finance.ledger=finance.ledger.slice(0,60);return report;
+  }
+  function runMonthlyClubFinances(save=state,date=save?.date) {
+    if(!save||String(date).slice(8)!=="01")return null;const finance=ensureClubFinances(save),monthKey=String(date).slice(0,7);if(finance.lastOperatingMonth===monthKey||save.transferMarket?.season!==save.season)return null;finance.lastOperatingMonth=monthKey;let userOperations=null,userOwner=0;
+    CLUBS.forEach(club=>{const operations=monthlyOperatingRevenue(club,date);addClubTransferBudget(save,club.id,operations.allocation);const ownerKey=`${save.season}:${club.id}`,owner=finance.ownerInvestments[club.id]===save.season?0:ownerInvestmentFor(club,save.season,monthKey,save.transferMarket?.budgets?.[club.id]);if(owner){addClubTransferBudget(save,club.id,owner);finance.ownerInvestments[club.id]=save.season;}if(club.id===save.clubId){userOperations=operations;userOwner=owner;finance.operatingAllocated=Number((finance.operatingAllocated+operations.allocation+owner).toFixed(1));finance.ledger.unshift({id:`finance-operations-${monthKey}`,season:save.season,date,type:"operations",gross:operations.gross,allocation:operations.allocation,matchday:operations.matchday,commercial:operations.commercial});if(owner)finance.ledger.unshift({id:`finance-owner-${monthKey}`,season:save.season,date,type:"owner",gross:owner,allocation:owner});}});finance.ledger=finance.ledger.slice(0,60);
+    const reportMonth=["03","06","09","12"].includes(monthKey.slice(5)),visible=reportMonth||userOwner>0;if(!visible)return null;const facts=[`比赛日收入：${money(userOperations.matchday)}`,`球衣、周边与商业收入：${money(userOperations.commercial)}`,`划入转会预算：${money(userOperations.allocation)}`];if(userOwner)facts.push(`老板额外注资：${money(userOwner)}`);addNotification({title:userOwner?"董事会：老板完成额外注资":"董事会：季度俱乐部运营报告",type:"board",date,detail:"俱乐部已结算门票、比赛日消费、球衣周边和商业合作收入，其中一部分由董事会划入一线队转会预算。",facts});save.media.unshift({source:"Club Finance",title:userOwner?`${clubById(save.clubId).name} 获得老板额外注资`:`${clubById(save.clubId).name} 发布季度运营报告`,body:`本期经营收入 ${money(userOperations.gross)}，其中 ${money(userOperations.allocation+userOwner)} 已进入转会预算。`,date,type:"finance"});return {type:"finance",title:userOwner?"老板注资已到账":"季度俱乐部运营收入已结算",view:"transfers"};
   }
 
   function coachDecisionProfile(identity,attributes={}) {
@@ -1972,13 +2011,13 @@
   }
 
   function transferTickDelay(date,season) {
-    const windowInfo=transferWindow(date,season);if(!windowInfo.open)return Math.round(rand(7,13));
-    const daysLeft=daysBetween(date,windowInfo.end);if(daysLeft<=7)return Math.round(rand(1,2.5));if(daysLeft<=21)return Math.round(rand(2,4));return Math.round(rand(3,6));
+    const windowInfo=transferWindow(date,season);if(!windowInfo.open)return Math.round(rand(6,10));
+    const daysLeft=daysBetween(date,windowInfo.end);if(daysLeft<=7)return 1;if(daysLeft<=21)return Math.round(rand(1,3));return Math.round(rand(2,4));
   }
 
-  function createTransferMarket(season=2026) {
+  function createTransferMarket(season=2026,openingBudgets=null) {
     const openingDate=transferSeasonOpening(season);
-    return {season,currentDate:openingDate,nextTickDate:addDays(openingDate,transferTickDelay(openingDate,season)),records:[],rumors:[],clubOverrides:{},budgets:Object.fromEntries(CLUBS.map(club=>[club.id,Number(club.budget)||10])),sequence:0};
+    return {season,currentDate:openingDate,nextTickDate:addDays(openingDate,transferTickDelay(openingDate,season)),records:[],rumors:[],clubOverrides:{},budgets:openingBudgets?{...openingBudgets}:Object.fromEntries(CLUBS.map(club=>[club.id,Number(club.budget)||10])),sequence:0};
   }
 
   function transferSeasonOpening(season=2026) {
@@ -2017,15 +2056,22 @@
   }
 
   function currentPlayerClubId(save,player) {
+    if(aiTransferRuntimeCache?.save===save&&aiTransferRuntimeCache.playerClubIds.has(player.id))return aiTransferRuntimeCache.playerClubIds.get(player.id);
     return ensureTransferMarket(save).clubOverrides[player.id]||player.club;
+  }
+
+  function createAiTransferRuntimeCache(save,date) {
+    const byClub=new Map(),sellerRoleGroups=new Map(),playerClubIds=new Map();REAL_PLAYERS.forEach(player=>{const clubId=ensureTransferMarket(save).clubOverrides[player.id]||player.club,snapshot={...player,age:effectivePlayerAge(player,save),value:currentPlayerMarketValue(player,save)};playerClubIds.set(player.id,clubId);if(!byClub.has(clubId))byClub.set(clubId,[]);byClub.get(clubId).push(snapshot);const key=`${clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});byClub.set(save.clubId,save.squad||[]);[...sellerRoleGroups.keys()].filter(key=>key.startsWith(`${save.clubId}|`)).forEach(key=>sellerRoleGroups.delete(key));(save.squad||[]).forEach(player=>{playerClubIds.set(player.id,save.clubId);const key=`${save.clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});sellerRoleGroups.forEach(group=>group.sort((a,b)=>(b.overall||0)-(a.overall||0)));return {save,date,byClub,sellerRoleGroups,playerClubIds,clubNeeds:new Map(),clubCounts:Object.fromEntries([...byClub].map(([clubId,players])=>[clubId,players.length]))};
   }
 
   function aiClubPlayers(save,clubId) {
     if(clubId===save.clubId)return save.squad||[];
+    if(aiTransferRuntimeCache?.save===save)return aiTransferRuntimeCache.byClub.get(clubId)||[];
     return REAL_PLAYERS.filter(player=>currentPlayerClubId(save,player)===clubId).map(player=>({...player,age:effectivePlayerAge(player,save),value:currentPlayerMarketValue(player,save)}));
   }
 
   function aiSquadNeeds(save,clubId) {
+    if(aiTransferRuntimeCache?.save===save&&aiTransferRuntimeCache.clubNeeds.has(clubId))return aiTransferRuntimeCache.clubNeeds.get(clubId);
     const club=clubById(clubId),players=aiClubPlayers(save,clubId),groups=Object.fromEntries(Object.keys(AI_TRANSFER_TARGETS).map(role=>[role,[]]));
     players.forEach(player=>groups[positionUnit(player.position)].push(player));
     const squadStrength=[...players].sort((a,b)=>(b.overall||0)-(a.overall||0)).slice(0,11).reduce((sum,player)=>sum+Number(player.overall||60),0)/Math.max(1,Math.min(11,players.length));
@@ -2034,7 +2080,7 @@
       const shortage=Math.max(0,target-rolePlayers.length),qualityTarget=clamp(club.prestige-7,58,89),qualityGap=Math.max(0,qualityTarget-average);
       return [role,{role,count:rolePlayers.length,target,average,shortage,score:shortage*11+qualityGap*1.5+(squadStrength-average)*.45}];
     }));
-    return {club,players,groups,needs,squadStrength};
+    const result={club,players,groups,needs,squadStrength};if(aiTransferRuntimeCache?.save===save)aiTransferRuntimeCache.clubNeeds.set(clubId,result);return result;
   }
 
   function sameTransferPlayer(left,right) {
@@ -2104,18 +2150,15 @@
       const positionalPreference=.82+stableScoutingUnit(`${coach.name}|transfer-role|${item.role}`)*.36;
       return goalkeeperCrowded?0:(Math.max(0,item.score)+3)*positionalPreference/(1+count*1.35);
     });if(!need||budget<1)return null;
-    const sellerRoleGroups=new Map();
-    REAL_PLAYERS.forEach(player=>{const clubId=currentPlayerClubId(save,player),key=`${clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});
-    [...sellerRoleGroups.keys()].filter(key=>key.startsWith(`${save.clubId}|`)).forEach(key=>sellerRoleGroups.delete(key));
-    (save.squad||[]).forEach(player=>{const key=`${save.clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});
-    sellerRoleGroups.forEach(group=>group.sort((a,b)=>(b.overall||0)-(a.overall||0)));
+    const sellerRoleGroups=aiTransferRuntimeCache?.save===save?aiTransferRuntimeCache.sellerRoleGroups:new Map();
+    if(!sellerRoleGroups.size){REAL_PLAYERS.forEach(player=>{const clubId=currentPlayerClubId(save,player),key=`${clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});[...sellerRoleGroups.keys()].filter(key=>key.startsWith(`${save.clubId}|`)).forEach(key=>sellerRoleGroups.delete(key));(save.squad||[]).forEach(player=>{const key=`${save.clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});sellerRoleGroups.forEach(group=>group.sort((a,b)=>(b.overall||0)-(a.overall||0)));}
     const candidates=REAL_PLAYERS.filter(player=>{
       const sellerId=currentPlayerClubId(save,player);if(sellerId===buyerId)return false;
       if(market.records.some(record=>record.season===save.season&&record.playerId===player.id))return false;
       if(save.role==="coach"&&sellerId===save.clubId)return false;
       if(save.role==="player"&&sellerId===save.clubId&&comparableClubName(player.name)===comparableClubName((save.squad||[]).find(item=>item.id===save.controlledId)?.name||""))return false;
       const seller=clubById(sellerId),role=positionUnit(player.position),fee=transferFee(player,buyer,seller,market.sequence,save);
-      const spendingLimit=budget*(.64+coach.risk*.16+coach.budgetDiscipline*.08);
+      const spendingLimit=budget*(.72+coach.risk*.14+coach.budgetDiscipline*.08);
       if(role!==need.role||fee>spendingLimit||!aiCanSell(save,sellerId,player,sellerRoleGroups.get(`${sellerId}|${role}`)||[]))return false;
       if(player.overall>=85&&buyer.prestige<85)return false;
       if(player.potential>=88&&buyer.prestige<80)return false;
@@ -2182,7 +2225,7 @@
   }
 
   function createAiTransferRumor(save,date) {
-    const market=ensureTransferMarket(save),clubCounts={};REAL_PLAYERS.forEach(player=>{const clubId=currentPlayerClubId(save,player);clubCounts[clubId]=(clubCounts[clubId]||0)+1;});clubCounts[save.clubId]=(save.squad||[]).length;
+    const market=ensureTransferMarket(save),clubCounts=aiTransferRuntimeCache?.save===save?aiTransferRuntimeCache.clubCounts:{};if(!aiTransferRuntimeCache||aiTransferRuntimeCache.save!==save){REAL_PLAYERS.forEach(player=>{const clubId=currentPlayerClubId(save,player);clubCounts[clubId]=(clubCounts[clubId]||0)+1;});clubCounts[save.clubId]=(save.squad||[]).length;}
     const clubs=CLUBS.filter(club=>{
       if(save.role==="coach"&&club.id===save.clubId)return false;
       const size=clubCounts[club.id]||0,needs=aiSquadNeeds(save,club.id),criticalShortage=Object.values(needs.needs).some(need=>need.shortage>0);
@@ -2191,7 +2234,7 @@
     if(!clubs.length)return null;
     const buyer=weightedPick(clubs,club=>Math.max(1,club.prestige-55)*Math.max(1,Number(market.budgets[club.id]||0)/20)),candidate=buyer&&aiTransferCandidate(save,buyer.id,date);
     if(!candidate||transferRumorExists(market,candidate.player.id,buyer.id))return null;
-    const resolveDays=Math.round(rand(4,11)),confidence=clamp(Math.round(48+candidate.score*.45+(buyer.prestige-candidate.seller.prestige)*.8),25,88),roleReason=candidate.need.shortage?`${transferRoleLabel(candidate.need.role)}人数不足`:`希望提升${transferRoleLabel(candidate.need.role)}的即战力`;
+    const resolveDays=Math.round(rand(3,8)),confidence=clamp(Math.round(54+candidate.score*.48+(buyer.prestige-candidate.seller.prestige)*.8),32,92),roleReason=candidate.need.shortage?`${transferRoleLabel(candidate.need.role)}人数不足`:`希望提升${transferRoleLabel(candidate.need.role)}的即战力`;
     const rumor={id:`rumor-${market.season}-${++market.sequence}`,season:save.season,windowKey:transferWindow(date,save.season).key,createdDate:date,resolveDate:addDays(date,resolveDays),status:"active",playerId:candidate.player.id,playerName:candidate.player.name,position:candidate.player.position,overall:candidate.player.overall,potential:candidate.player.potential,fromId:candidate.sellerId,toId:buyer.id,fee:candidate.fee,confidence,reason:roleReason};
     market.rumors.unshift(rumor);
     const userInvolved=rumor.fromId===save.clubId||rumor.toId===save.clubId,important=userInvolved||rumor.fee>=55||rumor.overall>=85;
@@ -2239,7 +2282,7 @@
   function completeTransfer(save,rumor,date,forced=false) {
     const market=ensureTransferMarket(save),userSquadPlayer=rumor.fromId===save.clubId?(save.squad||[]).find(player=>sameTransferPlayer(player,rumor)):null,canonical=REAL_PLAYERS.find(player=>player.id===rumor.playerId)||canonicalTransferPlayer(save,rumor.fromId,userSquadPlayer||rumor),sourcePlayer=userSquadPlayer||canonical;
     const validSource=sourcePlayer&&(rumor.fromId===save.clubId?Boolean(userSquadPlayer):Boolean(canonical&&currentPlayerClubId(save,canonical)===rumor.fromId));if(!validSource||userSquadPlayer?.id===save.controlledId){rumor.status="collapsed";return false;}
-    const buyer=clubById(rumor.toId),seller=clubById(rumor.fromId),budget=Number(market.budgets[buyer.id]||0),successChance=clamp(.5+(buyer.prestige-seller.prestige)/120+(rumor.confidence-50)/140,.28,.88);
+    const buyer=clubById(rumor.toId),seller=clubById(rumor.fromId),budget=Number(market.budgets[buyer.id]||0),successChance=clamp(.58+(buyer.prestige-seller.prestige)/120+(rumor.confidence-50)/130,.38,.94);
     if(!forced&&(budget<rumor.fee||Math.random()>successChance)){rumor.status="collapsed";if(rumor.fromId===save.clubId||rumor.toId===save.clubId)reportTransferStory(save,`${rumor.playerName} 的转会谈判暂时停止`,`相关俱乐部未能在费用、阵容计划或球员意愿上达成一致，这笔交易目前不会继续推进。`,date,true);return false;}
     const careerSegment=transferCareerSegment(save,sourcePlayer,seller,date,Boolean(userSquadPlayer)),careerHistory=[...(sourcePlayer.careerStats||[])],newContract=transferContract(sourcePlayer,rumor,save.season);
     market.budgets[buyer.id]=Number(Math.max(0,budget-rumor.fee).toFixed(1));market.budgets[seller.id]=Number((Number(market.budgets[seller.id]||0)+rumor.fee*.82).toFixed(1));market.clubOverrides[(canonical||sourcePlayer).id]=buyer.id;
@@ -2261,7 +2304,7 @@
     while(market.nextTickDate<=targetDate){
       const tickDate=market.nextTickDate,windowInfo=transferWindow(tickDate,save.season);
       market.rumors.filter(rumor=>rumor.status==="active"&&rumor.resolveDate<=tickDate).forEach(rumor=>{if(rumor.advisoryOnly)rumor.status="expired";else completeTransfer(save,rumor,tickDate);});
-      if(windowInfo.open){const daysLeft=daysBetween(tickDate,windowInfo.end),attempts=daysLeft<=7?3:daysLeft<=21?2:1;for(let attempt=0;attempt<attempts;attempt++){if(save.role==="player")createAiSurplusSaleRumor(save,tickDate,save.clubId);createAiSurplusSaleRumor(save,tickDate);if(attempt===0||Math.random()<(daysLeft<=7?.68:.38))createAiTransferRumor(save,tickDate);}createCoachTransferReport(save,tickDate);}
+      if(windowInfo.open){const daysLeft=daysBetween(tickDate,windowInfo.end),attempts=daysLeft<=7?3:daysLeft<=21?2:1;aiTransferRuntimeCache=createAiTransferRuntimeCache(save,tickDate);try{for(let attempt=0;attempt<attempts;attempt++){if(save.role==="player")createAiSurplusSaleRumor(save,tickDate,save.clubId);createAiSurplusSaleRumor(save,tickDate);if(attempt===0||Math.random()<(daysLeft<=7?.78:.52))createAiTransferRumor(save,tickDate);}createCoachTransferReport(save,tickDate);}finally{aiTransferRuntimeCache=null;}}
       market.nextTickDate=addDays(tickDate,transferTickDelay(tickDate,save.season));
     }
     market.rumors.filter(rumor=>rumor.status==="active"&&rumor.resolveDate<=targetDate).forEach(rumor=>{if(rumor.advisoryOnly)rumor.status="expired";else completeTransfer(save,rumor,targetDate);});
@@ -2352,9 +2395,10 @@
     const windowRecords=market.records.filter(record=>record.windowKey===windowInfo.key).sort((a,b)=>b.fee-a.fee||b.date.localeCompare(a.date)).slice(0,12);
     const rumors=market.rumors.filter(rumor=>rumor.windowKey===windowInfo.key&&rumor.status==="active").sort((a,b)=>(b.fromId===state.clubId||b.toId===state.clubId)-(a.fromId===state.clubId||a.toId===state.clubId)||b.confidence-a.confidence||b.fee-a.fee).slice(0,8);
     const spent=seasonRecords.filter(record=>record.toId===state.clubId).reduce((sum,record)=>sum+record.fee,0),income=seasonRecords.filter(record=>record.fromId===state.clubId).reduce((sum,record)=>sum+record.fee,0);
-    const negotiations=(state.transferNegotiations||[]).filter(item=>item.status==="active");
+    const negotiations=(state.transferNegotiations||[]).filter(item=>item.status==="active"),finance=ensureClubFinances(state),financeEntries=finance.ledger.filter(entry=>Number(entry.season)===Number(state.season)).slice(0,8),operatingAllocated=financeEntries.filter(entry=>entry.type!=="season").reduce((sum,entry)=>sum+Number(entry.allocation||0),0);
     return `<div class="page-heading"><span class="eyebrow">${windowOpen?"转会窗口开放":"转会窗口关闭"}</span><h2>转会中心</h2><p>转会费与个人合同分阶段谈判，报价结构、承诺和回复方式都会消耗对方耐心。</p></div>
-      <section class="stats"><div class="stat"><div class="stat-label">可用预算</div><div class="stat-value">${money(state.funds)}</div><div class="stat-context">仅教练视角可直接报价</div></div><div class="stat"><div class="stat-label">赛季支出</div><div class="stat-value">${money(spent)}</div><div class="stat-context">${seasonRecords.filter(record=>record.toId===state.clubId).length} 名球员转入</div></div><div class="stat"><div class="stat-label">赛季收入</div><div class="stat-value">${money(income)}</div><div class="stat-context">${seasonRecords.filter(record=>record.fromId===state.clubId).length} 名球员转出</div></div><div class="stat"><div class="stat-label">当前窗口</div><div class="stat-value transfer-window-value">${esc(windowInfo.label.replace("转会窗","窗"))}</div><div class="stat-context">${windowOpen?`开放至 ${formatDate(windowInfo.end,false)}`:"已关闭"}</div></div></section>
+      <section class="stats"><div class="stat"><div class="stat-label">可用预算</div><div class="stat-value">${money(state.funds)}</div><div class="stat-context">经营与注资 +${money(operatingAllocated)}</div></div><div class="stat"><div class="stat-label">赛季支出</div><div class="stat-value">${money(spent)}</div><div class="stat-context">${seasonRecords.filter(record=>record.toId===state.clubId).length} 名球员转入</div></div><div class="stat"><div class="stat-label">出售收入</div><div class="stat-value">${money(income)}</div><div class="stat-context">${seasonRecords.filter(record=>record.fromId===state.clubId).length} 名球员转出</div></div><div class="stat"><div class="stat-label">当前窗口</div><div class="stat-value transfer-window-value">${esc(windowInfo.label.replace("转会窗","窗"))}</div><div class="stat-context">${windowOpen?`开放至 ${formatDate(windowInfo.end,false)}`:"已关闭"}</div></div></section>
+      <section class="panel club-finance-panel"><div class="panel-header"><h3>俱乐部财政与预算来源</h3><span class="meta">转播 · 比赛日 · 商业 · 注资</span></div><div class="table-wrap"><table><thead><tr><th>日期</th><th>来源</th><th>说明</th><th class="num">收入</th><th class="num">进入转会预算</th></tr></thead><tbody>${financeEntries.map(entry=>`<tr><td>${formatDate(entry.date,false)}</td><td><span class="tag ${entry.type==="owner"?"green":""}">${financeEntryLabel(entry)}</span></td><td>${esc(entry.detail||(entry.type==="operations"?`门票 ${money(entry.matchday||0)} · 球衣周边 ${money(entry.commercial||0)}`:"董事会赛季预算方案"))}</td><td class="num">${money(entry.gross||0)}</td><td class="num"><strong>+${money(entry.allocation||0)}</strong></td></tr>`).join("")||`<tr><td colspan="5"><div class="empty compact">本赛季财政账目将在收入结算后显示</div></td></tr>`}</tbody></table></div></section>
       ${state.role==="player"?`<div class="panel transfer-actions-panel"><div class="panel-header"><h3>个人转会立场</h3><span class="meta">${controlledPlayer()?.transferRequestStatus==="submitted"?"董事会审议中":"尚未申请离队"}</span></div><div class="panel-body"><div class="grid grid-2"><button class="btn" id="request-transfer" ${!windowOpen||controlledPlayer()?.transferRequestStatus==="submitted"?"disabled":""}>${icon("send")}正式提交转会申请</button><button class="btn" id="suggest-signing">${icon("message-square")}向教练建议引援</button></div></div></div>`:`<section class="panel transfer-actions-panel"><div class="panel-header"><h3>挂牌与离队管理</h3><span class="meta">向董事会提交正式名单</span></div><div class="transfer-list-squad">${[...state.squad].sort((a,b)=>a.overall-b.overall).slice(0,8).map(player=>`<div><span><strong>${esc(player.name)}</strong><small>${playerRoleLabel(player.position)} · ${player.overall} · ${money(player.value)}</small></span><button class="btn btn-sm ${player.listed?"btn-danger":""}" data-list-player="${esc(player.id)}">${player.listed?"撤销挂牌":"挂牌出售"}</button></div>`).join("")}</div></section>`}
       ${negotiations.length?`<section class="panel negotiation-desk"><div class="panel-header"><h3>谈判桌</h3><span class="meta">${negotiations.length} 项进行中</span></div><div class="negotiation-list">${negotiations.map(session=>`<button data-open-negotiation="${session.id}"><div><span class="tag ${session.stage==="contract"?"green":"amber"}">${session.stage==="contract"?"个人合同":"俱乐部报价"}</span><strong>${esc(session.playerName)}</strong><small>第 ${session.round} 轮 · ${esc(clubById(session.fromId).name)}</small></div><div class="patience-mini"><label>俱乐部 ${session.clubPatience}%</label><i><span style="width:${session.clubPatience}%"></span></i><label>经纪人 ${session.agentPatience}%</label><i><span style="width:${session.agentPatience}%"></span></i></div>${icon("chevron-right")}</button>`).join("")}</div></section>`:""}
       <div class="transfer-overview"><section class="panel"><div class="panel-header"><h3>${esc(club.name)} · 本赛季转会记录</h3><span class="meta">${seasonRecords.length} 笔 · 净支出 ${money(spent-income)}</span></div><div class="table-wrap"><table class="transfer-record-table"><thead><tr><th>日期</th><th>类型</th><th>球员</th><th>交易球队</th><th class="num">转会费</th></tr></thead><tbody>${seasonRecords.map(record=>{const incoming=record.toId===state.clubId,other=clubById(incoming?record.fromId:record.toId),playerClub=clubById(incoming?record.toId:record.fromId);return `<tr><td>${formatDate(record.date,false)}</td><td><span class="tag ${incoming?"green":"red"}">${incoming?"转入":"转出"}</span></td><td class="player-name"><strong>${playerNameLink(record,{name:record.playerName,clubName:playerClub.name})}</strong><span>${playerRoleLabel(record.position)} · ${record.overall}/${record.potential}</span></td><td><span class="transfer-club">${clubBadge(other,"club-badge-result")}<b>${esc(other.name)}</b></span></td><td class="num"><strong>${money(record.fee)}</strong></td></tr>`;}).join("")||`<tr><td colspan="5"><div class="empty compact">${state.season}/${String(state.season+1).slice(2)} 赛季尚无本队正式交易</div></td></tr>`}</tbody></table></div></section>
@@ -3233,9 +3277,10 @@
     const playerEvent=applyPlayerCareerDay(targetDate);
     advanceInSeasonDevelopment(state,targetDate);
     const marketValueEvent=runQuarterlyMarketValueReview(state,targetDate);
+    const financeEvent=runMonthlyClubFinances(state,targetDate);
     simulateTransferMarket(state,targetDate);
     const transferEvent=importantTransferEvent(previousRecordIds,previousRumorIds),offseasonEvent=offseasonCalendarEvent(state,targetDate);
-    return youthEvent||playerEvent||marketValueEvent||transferEvent||offseasonEvent;
+    return youthEvent||playerEvent||marketValueEvent||financeEvent||transferEvent||offseasonEvent;
   }
 
   function continueGame() {
@@ -4296,7 +4341,7 @@
     const report=createMatchReport(m,mvp,result);state.matchReports.unshift(report);state.matchReports=state.matchReports.slice(0,30);
     addNotification({title:"医疗组：恢复计划已生成",type:"medical",date:f.date,detail:"医疗组已经根据本场出场时间、体能消耗和伤病情况生成恢复计划。下一场选人会自动考虑球员体能与赛程密度。",facts:report.injuries.length?report.injuries.map(item=>`${item.name}：${item.injury}，预计缺阵 ${item.days} 天`):["本场没有新增伤病","低体能球员将优先安排恢复训练"]});
     const reportNotification={title:`赛后分析：${ours}-${theirs} ${result}`,type:"match",date:f.date,detail:`${f.teamName||club.name} 已完成本场比赛，完整技术统计、球员评分、换人与医疗记录如下。`,reportId:report.id};addNotification(reportNotification);
-    const reportNotice=state.notifications[0];state.date=addDays(f.date,1);state.continueStatus=null;simulateMajorLeagueWorld(state,state.date);simulateBackgroundWorld(state.date);simulateTransferMarket(state,state.date);state.activeMatch=null;if(state.calendarRepairPending){repairCompetitionCalendar(state);delete state.calendarRepairPending;}
+    const reportNotice=state.notifications[0];state.date=addDays(f.date,1);state.continueStatus=null;simulateMajorLeagueWorld(state,state.date);simulateBackgroundWorld(state.date);runMonthlyClubFinances(state,state.date);simulateTransferMarket(state,state.date);state.activeMatch=null;if(state.calendarRepairPending){repairCompetitionCalendar(state);delete state.calendarRepairPending;}
     if(options.openReport&&reportNotice){reportNotice.read=true;state.inboxUnread=state.notifications.filter(item=>!item.read).length;modal={type:"notification",id:reportNotice.id};}
     saveState();render();toast(options.openReport?"已直接生成赛后分析":"比赛已记录，赛后报告已生成");
   }
@@ -4435,11 +4480,12 @@
 
   function newSeason() {
     const transitionDate=state.date;
+    const nextSeasonFinances=seasonFinancePlans(state,state.season+1,previousClubLeaguePositions(state));
     state.history.unshift({season:state.season,club:clubById(state.clubId).name,played:state.played,wins:state.wins,position:state.leaguePosition});
     if(state.leaguePosition===1)state.honors.unshift({name:LEAGUES[clubById(state.clubId).league].name+"冠军",season:state.season,scope:"俱乐部"});
     if(state.role==="player"&&averageRating(controlledPlayer())>=7.6)state.honors.unshift({name:"赛季最佳球员",season:state.season,scope:"个人"});
     const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3),retiredPlayers=collectSeasonRetirements(state,state.season);if(retiredPlayers.length)state.squad=state.squad.filter(player=>!retiredPlayers.includes(player));
-    state.season++;state.date=transitionDate;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season);simulateTransferMarket(state,state.date);
+    state.season++;state.date=transitionDate;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season,nextSeasonFinances.budgets);state.funds=Number(nextSeasonFinances.budgets[state.clubId]||clubById(state.clubId).budget||10);const financeReport=activateSeasonFinances(state,nextSeasonFinances,state.date);simulateTransferMarket(state,state.date);
     state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});resetSeasonMarketValueBaseline(state);
     rolloverYouthSeason(state).forEach(graduate=>addNotification({title:`AI 教练提拔青训球员：${graduate.name}`,type:"youth",date:state.date,detail:"教练组根据年龄、当前能力、潜力和一线队名额完成了青训晋升。",facts:[`${playerRoleLabel(graduate.position)} · ${graduate.age} 岁`,`当前能力：${graduate.overall}`,`合同角色：${graduate.contract.role}`]}));
     if(state.role==="player"){
@@ -4447,6 +4493,7 @@
     }
     if(growthLeaders.length)state.media.unshift({source:"Player Development",title:"赛季球员发展报告已发布",body:growthLeaders.map(item=>`${item.player.name} ${item.change>0?`提升 ${item.change} 点`:`下降 ${Math.abs(item.change)} 点`}`).join("；"),date:state.date,type:"career"});
     if(retiredPlayers.length){state.media.unshift({source:"Football Daily",title:`${retiredPlayers.map(player=>player.name).join("、")} 宣布退役`,body:"退役球员的完整生涯记录已经归档。达到精英能力级别的球员会进入隐藏的后续人才模板池。",date:state.date,type:"career"});addNotification({title:`一线队退役：${retiredPlayers.length} 名球员结束生涯`,type:"youth",date:state.date,detail:"退役球员已从一线队名单移除。高水平球员的国籍、位置和潜力轮廓可能在未来青训选拔中以匿名新秀形式重新出现。",facts:retiredPlayers.map(player=>`${player.name} · ${playerRoleLabel(player.position)} · ${player.age} 岁`)});}
+    const broadcastFact=financeReport.league==="ENG1"?`英超转播分成：约 £${Math.round(financeReport.broadcast/1.18)}m（${money(financeReport.broadcast)} 等值）`:`联赛转播分成：${money(financeReport.broadcast)}`;addNotification({title:`董事会：${state.season}/${String(state.season+1).slice(2)} 赛季转会预算已批准`,type:"board",date:state.date,detail:"董事会综合上赛季排名、联赛转播分成、商业经营、比赛日收入预测、预算结转和老板投入，确定了新赛季可用转会资金。",facts:[broadcastFact,`商业与比赛日收入预测：${money(financeReport.commercial+financeReport.matchday)}`,`上季预算结转：${money(financeReport.carryover)}`,financeReport.ownerInvestment?`老板注资：${money(financeReport.ownerInvestment)}`:"本季暂无额外老板注资",`新赛季转会预算：${money(financeReport.transferBudget)}`]});state.media.unshift({source:"Club Finance",title:`${clubById(state.clubId).name} 公布新赛季转会预算`,body:`转播、商业经营、比赛日收入和预算结转共同形成 ${money(financeReport.transferBudget)} 的可用转会资金。`,date:state.date,type:"finance"});
     state.media.unshift({source:"Football Daily",title:`${state.season}/${String(state.season+1).slice(2)} 赛季准备期开始`,body:"赛季结算已经完成。日期不会跳过休赛期，夏季转会、国家队比赛、经纪事务和季前动态会随时间逐日推进。",date:state.date,type:"career"});saveState();render();toast("赛季结算完成，进入休赛期");
   }
 
