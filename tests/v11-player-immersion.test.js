@@ -25,6 +25,8 @@ state.person="Independent Career";api.setActiveSave("slot-b");api.saveState();
 assert.equal(api.loadSaveIndex().length,2,"multiple save slots must remain indexed");
 assert.notEqual(storage.get("football-simulator-save-slot-slot-a"),storage.get("football-simulator-save-slot-slot-b"),"save slots must remain independent");
 assert.match(api.renderMainMenu(),/2 个生涯/,"main menu must expose all indexed saves");
+controlled.fitness=64;
+assert.match(api.renderPlayerHome(),/player-fitness-summary warn[\s\S]*体力[\s\S]*64%[\s\S]*建议恢复/,"player home must show current fitness and its readiness state");
 assert.match(api.renderPlayerHome(),/亲朋好友/,"player home must expose immersive relationship contacts");
 assert.match(api.renderPlayerHome(),/倾尽全力/,"player home must expose expanded pre-match approaches");
 

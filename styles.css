@@ -892,9 +892,20 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
 .player-command-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:18px; }
 .player-command-heading h2 { margin:5px 0 2px; font-size:36px; }
 .player-command-heading p { margin:0; color:var(--muted); font-size:12px; }
+.player-heading-metrics { display:flex; align-items:stretch; }
 .player-overall { min-width:96px; padding-left:18px; border-left:1px solid var(--line); text-align:right; }
 .player-overall span { display:block; color:var(--muted); font-size:9px; text-transform:uppercase; }
 .player-overall strong { display:block; color:var(--green); font-family:"Barlow Condensed",sans-serif; font-size:42px; line-height:1; }
+.player-fitness-summary { min-width:112px; margin-left:18px; padding-left:18px; border-left:1px solid var(--line); text-align:right; }
+.player-fitness-summary span,.player-fitness-summary small { display:block; color:var(--muted); font-size:9px; }
+.player-fitness-summary span { text-transform:uppercase; }
+.player-fitness-summary strong { display:block; margin-top:2px; color:var(--green); font-family:"Barlow Condensed",sans-serif; font-size:27px; line-height:1; }
+.player-fitness-summary i { display:block; overflow:hidden; width:100%; height:3px; margin:6px 0 4px; background:#26372d; }
+.player-fitness-summary i b { display:block; height:100%; background:var(--green); }
+.player-fitness-summary.warn strong { color:var(--amber); }
+.player-fitness-summary.warn i b { background:var(--amber); }
+.player-fitness-summary.danger strong { color:var(--red); }
+.player-fitness-summary.danger i b { background:var(--red); }
 .player-status-strip { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:14px; border:1px solid var(--line); background:#0d1813; }
 .player-status-strip.player-status-six { grid-template-columns:repeat(6,minmax(0,1fr)); }
 .player-status-strip > div { min-width:0; min-height:76px; padding:13px 15px; border-right:1px solid var(--line); }
@@ -1242,6 +1253,7 @@ body.is-busy button, body.is-busy input, body.is-busy select { pointer-events:no
   .player-command-heading h2 { font-size:29px; }
   .player-overall { min-width:74px; }
   .player-overall strong { font-size:34px; }
+  .player-fitness-summary { min-width:96px; margin-left:12px; padding-left:12px; }
   .player-status-strip { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .player-status-strip > div:nth-child(2) { border-right:0; }
   .player-status-strip > div:nth-child(-n+2) { border-bottom:1px solid var(--line); }
@@ -1272,6 +1284,10 @@ body.is-busy button, body.is-busy input, body.is-busy select { pointer-events:no
   .setup-panel { padding:26px 18px 38px; }
   .segmented { grid-template-columns:1fr; }
   .choice { min-height:74px; }
+  .player-command-heading { align-items:stretch; flex-direction:column; gap:12px; }
+  .player-heading-metrics { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding-top:10px; border-top:1px solid var(--line); }
+  .player-overall { padding-left:0; border-left:0; text-align:left; }
+  .player-fitness-summary { margin-left:0; padding-left:14px; text-align:left; }
   .stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .career-summary-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .career-metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
