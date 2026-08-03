@@ -807,6 +807,10 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
 .attribute-column strong { font-variant-numeric:tabular-nums; }
 .attribute-column strong.elite, .growth-positive { color:var(--green); }
 .attribute-column strong.weak, .growth-negative { color:var(--red); }
+.attribute-reading { min-width:50px; display:inline-flex; align-items:baseline; justify-content:flex-end; gap:5px; font-variant-numeric:tabular-nums; }
+.attribute-change { min-width:20px; font-size:9px; font-weight:800; text-align:left; }
+.attribute-change.up { color:var(--green); }
+.attribute-change.down { color:var(--red); }
 .player-profile-grid { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
 .profile-stat-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); padding-top:10px; }
 .profile-stat-list > div { padding:8px 10px; border:1px solid var(--line); border-width:0 1px 1px 0; }
