@@ -1488,8 +1488,8 @@
   function continueGameWithLoading() {
     const mode=continueActionMode(),ready=mode==="match",seasonReady=mode==="season";
     if(mode==="disabled")return;
-    return runBusyTask({title:seasonReady?"正在结算赛季":ready?"正在准备比赛":"正在推进足球世界",detail:seasonReady?"归档成绩、球员成长与荣誉并生成新赛季":ready?"生成双方名单、战术与比赛环境":"同步赛程、体能、转会市场与各项赛事",completeLabel:seasonReady?"新赛季已生成":ready?"比赛准备完成":"时间推进完成"},async ({progress,yieldFrame})=>{
-      progress(28,seasonReady?"结算球员发展":ready?"选择首发与替补阵容":"更新赛程与球员状态");await yieldFrame();continueGame();progress(92,seasonReady?"生成新赛季赛程":ready?"载入比赛界面":"整理最新动态");
+    return runBusyTask({title:seasonReady?"正在结算赛季":ready?"正在准备比赛":"正在推进足球世界",detail:seasonReady?"归档成绩与球员成长，日期将保持不变":ready?"生成双方名单、战术与比赛环境":"同步赛程、体能、转会市场与各项赛事",completeLabel:seasonReady?"休赛期已开始":ready?"比赛准备完成":"时间推进完成"},async ({progress,yieldFrame})=>{
+      progress(28,seasonReady?"结算球员发展":ready?"选择首发与替补阵容":"更新赛程与球员状态");await yieldFrame();continueGame();progress(92,seasonReady?"准备夏窗与新赛季赛程":ready?"载入比赛界面":"整理最新动态");
     });
   }
 
@@ -1846,7 +1846,7 @@
   }
 
   function transferSeasonOpening(season=2026) {
-    return `${season}-08-01`;
+    return season===2026?START_DATE:`${season}-06-15`;
   }
 
   function rebuildTransferMarketFromPostOpeningActivity(save) {
@@ -3017,6 +3017,17 @@
     return null;
   }
 
+  function offseasonCalendarEvent(save,date) {
+    if(Number(date.slice(0,4))!==Number(save?.season))return null;
+    const milestones={
+      "06-15":{type:"transfer-window",title:"夏季转会窗口正式开启",view:"transfers"},
+      "07-01":{type:"offseason",title:"新赛季阵容与合同注册评估",view:"squad"},
+      "07-15":{type:"preseason",title:"一线队季前集训正式开始",view:"squad"},
+      "08-01":{type:"season-launch",title:"新赛季准备工作完成",view:"home"}
+    };
+    return milestones[date.slice(5)]||null;
+  }
+
   function advanceCareerDay(targetDate) {
     const market=ensureTransferMarket(state),previousRecordIds=new Set(market.records.map(record=>record.id)),previousRumorIds=new Set(market.rumors.map(rumor=>rumor.id));
     state.squad.forEach(player=>{
@@ -3031,7 +3042,8 @@
     advanceYouthDevelopment(state);
     const youthEvent=runYouthIntake(state,targetDate);
     const playerEvent=applyPlayerCareerDay(targetDate);
-    return youthEvent||playerEvent||importantTransferEvent(previousRecordIds,previousRumorIds);
+    const transferEvent=importantTransferEvent(previousRecordIds,previousRumorIds),offseasonEvent=offseasonCalendarEvent(state,targetDate);
+    return youthEvent||playerEvent||transferEvent||offseasonEvent;
   }
 
   function continueGame() {
@@ -4219,11 +4231,12 @@
   function retire() {state.retired=true;state.history.unshift({season:state.season,club:clubById(state.clubId).name,played:state.played,wins:state.wins,position:state.leaguePosition});state.media.unshift({source:"Football Daily",title:`${state.person} 宣布结束职业生涯`,body:"一段足球生涯在今天落幕，完整比赛、数据和荣誉记录将永久保留。",date:state.date,type:"career"});modal=null;saveState();render();toast("职业生涯已归档");}
 
   function newSeason() {
+    const transitionDate=state.date;
     state.history.unshift({season:state.season,club:clubById(state.clubId).name,played:state.played,wins:state.wins,position:state.leaguePosition});
     if(state.leaguePosition===1)state.honors.unshift({name:LEAGUES[clubById(state.clubId).league].name+"冠军",season:state.season,scope:"俱乐部"});
     if(state.role==="player"&&averageRating(controlledPlayer())>=7.6)state.honors.unshift({name:"赛季最佳球员",season:state.season,scope:"个人"});
     const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3),retiredPlayers=collectSeasonRetirements(state,state.season);if(retiredPlayers.length)state.squad=state.squad.filter(player=>!retiredPlayers.includes(player));
-    state.season++;state.date=`${state.season}-08-01`;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season);simulateTransferMarket(state,state.date);
+    state.season++;state.date=transitionDate;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season);simulateTransferMarket(state,state.date);
     state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});
     rolloverYouthSeason(state).forEach(graduate=>addNotification({title:`AI 教练提拔青训球员：${graduate.name}`,type:"youth",date:state.date,detail:"教练组根据年龄、当前能力、潜力和一线队名额完成了青训晋升。",facts:[`${playerRoleLabel(graduate.position)} · ${graduate.age} 岁`,`当前能力：${graduate.overall}`,`合同角色：${graduate.contract.role}`]}));
     if(state.role==="player"){
@@ -4231,7 +4244,7 @@
     }
     if(growthLeaders.length)state.media.unshift({source:"Player Development",title:"赛季球员发展报告已发布",body:growthLeaders.map(item=>`${item.player.name} ${item.change>0?`提升 ${item.change} 点`:`下降 ${Math.abs(item.change)} 点`}`).join("；"),date:state.date,type:"career"});
     if(retiredPlayers.length){state.media.unshift({source:"Football Daily",title:`${retiredPlayers.map(player=>player.name).join("、")} 宣布退役`,body:"退役球员的完整生涯记录已经归档。达到精英能力级别的球员会进入隐藏的后续人才模板池。",date:state.date,type:"career"});addNotification({title:`一线队退役：${retiredPlayers.length} 名球员结束生涯`,type:"youth",date:state.date,detail:"退役球员已从一线队名单移除。高水平球员的国籍、位置和潜力轮廓可能在未来青训选拔中以匿名新秀形式重新出现。",facts:retiredPlayers.map(player=>`${player.name} · ${playerRoleLabel(player.position)} · ${player.age} 岁`)});}
-    state.media.unshift({source:"Football Daily",title:`${state.season}/${String(state.season+1).slice(2)} 赛季正式开启`,body:"全新的联赛和杯赛日程已经生成，阵容状态与赛季目标也已重置。",date:state.date,type:"career"});saveState();render();toast("新赛季赛程已生成");
+    state.media.unshift({source:"Football Daily",title:`${state.season}/${String(state.season+1).slice(2)} 赛季准备期开始`,body:"赛季结算已经完成。日期不会跳过休赛期，夏季转会、国家队比赛、经纪事务和季前动态会随时间逐日推进。",date:state.date,type:"career"});saveState();render();toast("赛季结算完成，进入休赛期");
   }
 
   render();
