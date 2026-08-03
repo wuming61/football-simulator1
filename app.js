@@ -3229,12 +3229,12 @@
 
   function recoverFitness(player,days,training) {
     let fitness=Number(player.fitness||70),remaining=Math.max(0,Math.floor(days));
-    const trainingFactor=training==="recovery"?1.24:training==="intense"?.72:1;
+    const trainingFactor=training==="recovery"?1.3:training==="intense"?.72:1;
     const ageFactor=player.age>=34?.86:player.age>=30?.94:player.age<=23?1.05:1;
     const injuryDays=Math.max(0,Number(player.injured||0));
     let elapsed=0;
     while(remaining-->0&&fitness<100){
-      const base=fitness<70?4.4:fitness<85?3.4:fitness<93?2.35:1.2;
+      const base=fitness<70?4.8:fitness<85?3.75:fitness<93?2.6:1.35;
       const injuryFactor=elapsed<injuryDays?.48:1;
       fitness=clamp(fitness+base*trainingFactor*ageFactor*injuryFactor,35,100);
       elapsed++;
