@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_VERSION = "v1.1";
+  const APP_VERSION = "v1.2";
   const SAVE_KEY = "football-simulator-v0-save";
   const SAVE_INDEX_KEY = "football-simulator-save-index-v1";
   const SAVE_PREFIX = "football-simulator-save-slot-";
@@ -217,6 +217,11 @@
   const FIRST = ["Alex","Mateo","Luca","Noah","Daniel","João","Theo","Elias","Samuel","Nico","Leo","Tom","Milan","Iker","Hugo","Ben","Adam","Oscar","Julian","Rafael","Marco","Felix","David","Yanis"];
   const LAST = ["Martin","Silva","Costa","Meyer","Rossi","Bernard","Wilson","Santos","Garcia","Novak","Diallo","Murphy","Keller","Lopez","Marin","Andersson","Ricci","Bauer","Fernandes","Moreau","Taylor","Pereira","Schmidt","Romero"];
   const POSITIONS = ["GK","RB","CB","CB","LB","DM","CM","CM","AM","RW","LW","ST","CB","CM","ST","GK","FB","WG","ST","DM","CB","AM"];
+  const YOUTH_NATION_FOUNDATION={英格兰:91,西班牙:94,德国:91,意大利:89,法国:95,葡萄牙:91,荷兰:92,比利时:88,阿根廷:94,巴西:96,乌拉圭:88,克罗地亚:87,塞尔维亚:84,丹麦:84,挪威:82,瑞典:82,波兰:81,摩洛哥:85,塞内加尔:82,尼日利亚:84,科特迪瓦:83,日本:84,韩国:79,美国:81,墨西哥:82,哥伦比亚:87,厄瓜多尔:83,奥地利:82,瑞士:83,土耳其:82,苏格兰:80,爱尔兰:76,中国:68};
+  const YOUTH_NAMES={
+    英格兰:[["Oliver","George","Harry","Noah","Jack","Charlie"],["Smith","Taylor","Wilson","Walker","Bennett","Palmer"]],西班牙:[["Hugo","Mateo","Alejandro","Pablo","Iker","Nico"],["Garcia","Martinez","Lopez","Sanchez","Navarro","Ortega"]],德国:[["Noah","Leon","Finn","Jonas","Felix","Lukas"],["Meyer","Schmidt","Bauer","Keller","Wagner","Hoffmann"]],意大利:[["Luca","Matteo","Alessandro","Marco","Tommaso","Elia"],["Rossi","Ricci","Romano","Conti","Moretti","Gallo"]],法国:[["Hugo","Theo","Lucas","Enzo","Mathis","Yanis"],["Martin","Bernard","Dubois","Moreau","Diallo","Laurent"]],葡萄牙:[["Joao","Tiago","Diogo","Rafael","Goncalo","Duarte"],["Silva","Costa","Pereira","Fernandes","Santos","Carvalho"]],荷兰:[["Daan","Sem","Luuk","Mees","Jesse","Finn"],["de Jong","van Dijk","Bakker","Smit","Visser","Bos"]],比利时:[["Arthur","Louis","Jules","Victor","Milan","Mathis"],["Peeters","Janssens","Maes","Willems","Jacobs","Dubois"]],阿根廷:[["Mateo","Thiago","Santino","Lautaro","Julian","Tomas"],["Romero","Fernandez","Alvarez","Acosta","Medina","Rojas"]],巴西:[["Gabriel","Matheus","Rafael","Lucas","Joao","Vinicius"],["Silva","Santos","Oliveira","Costa","Souza","Pereira"]],克罗地亚:[["Luka","Ivan","Marko","Mateo","Ante","Dino"],["Kovacic","Peric","Maric","Juric","Novak","Basic"]],摩洛哥:[["Youssef","Adam","Ilyas","Amine","Rayan","Mehdi"],["El Amrani","Benali","Alaoui","Bennani","Idrissi","Tahiri"]],日本:[["Haruto","Yuto","Sota","Ren","Riku","Kaito"],["Sato","Suzuki","Takahashi","Tanaka","Ito","Watanabe"]],韩国:[["Min-jun","Ji-ho","Seo-jun","Hyun-woo","Jun-ho","Tae-yang"],["Kim","Lee","Park","Choi","Jung","Kang"]]
+  };
+  const YOUTH_UPGRADE_COSTS={facilities:[0,0,6,12,22,36],recruitment:[0,0,4,9,17,28]};
 
   let setup = { role:"coach", origin:"real", identity:COACHES[0].name, clubId:COACHES[0].club, leagueId:clubById(COACHES[0].club).league, customName:"", customAge:35, customPosition:"CM" };
   let activeSaveId = null;
@@ -447,6 +452,143 @@
     player.contract.weeklyWage??=wage;player.contract.signingBonus??=Number(Math.max(.1,wage*.035).toFixed(1));player.contract.appearanceFee??=Math.round(wage*.08);player.contract.releaseClause??=Number(Math.max(1,(player.value||2)*1.8).toFixed(1));player.contract.role||="轮换球员";player.contract.endSeason??=season+2;
     player.listed??=false;player.transferRequestStatus??="none";
     return player.contract;
+  }
+
+  function leagueHomeNation(club) {
+    return ({ENG1:"英格兰",ENG2:"英格兰",ESP1:"西班牙",ESP2:"西班牙",GER1:"德国",GER2:"德国",ITA1:"意大利",ITA2:"意大利",FRA1:"法国",FRA2:"法国"})[club?.league]||leagueOf(club)?.country||"英格兰";
+  }
+
+  function estimatedYouthDepartment(club) {
+    const facilities=clamp(Math.round((Number(club?.prestige||70)-54)/10),1,5),recruitment=clamp(Math.round((Number(club?.prestige||70)-58)/9),1,5),unit=stableScoutingUnit(`youth-director|${club?.id||club?.name}`);
+    return {facilities,recruitment,director:{name:`${FIRST[Math.floor(unit*FIRST.length)]} ${LAST[Math.floor(stableScoutingUnit(`${club?.id}|director-last`)*LAST.length)]}`,judgingAbility:clamp(Math.round(52+Number(club?.prestige||70)*.28+unit*16),50,94),judgingPotential:clamp(Math.round(55+Number(club?.prestige||70)*.3+stableScoutingUnit(`${club?.id}|director-pa`)*15),52,96),workingWithYoungsters:clamp(Math.round(54+Number(club?.prestige||70)*.24+stableScoutingUnit(`${club?.id}|director-youth`)*18),50,95)}};
+  }
+
+  function initialRegenTemplates() {
+    return [
+      {key:"retired-template-a",nationality:"阿根廷",position:"ST",potential:94,availableIntakeYear:2027},
+      {key:"retired-template-b",nationality:"比利时",position:"CM",potential:91,availableIntakeYear:2027},
+      {key:"retired-template-c",nationality:"克罗地亚",position:"CM",potential:89,availableIntakeYear:2027},
+      {key:"retired-template-d",nationality:"波兰",position:"ST",potential:91,availableIntakeYear:2027},
+      {key:"retired-template-e",nationality:"西班牙",position:"DM",potential:89,availableIntakeYear:2027},
+      {key:"retired-template-f",nationality:"德国",position:"GK",potential:89,availableIntakeYear:2027}
+    ];
+  }
+
+  function createYouthSystem(save) {
+    const club=clubById(save.clubId),department=estimatedYouthDepartment(club);
+    return {
+      academy:{...department,lastIntakeYear:null,currentIntake:null,prospects:[],intakeHistory:[],promotions:[],upgrades:[]},
+      world:{retiredTemplates:initialRegenTemplates(),usedTemplateKeys:[],retiredSourceTokens:[],prospects:[],lastGlobalIntakeYear:null}
+    };
+  }
+
+  function ensureYouthSystem(save=state) {
+    if(!save)return null;
+    const base=createYouthSystem(save);save.youthAcademy=save.youthAcademy&&typeof save.youthAcademy==="object"?save.youthAcademy:base.academy;save.youthWorld=save.youthWorld&&typeof save.youthWorld==="object"?save.youthWorld:base.world;
+    const academy=save.youthAcademy,world=save.youthWorld,department=estimatedYouthDepartment(clubById(save.clubId));
+    academy.facilities=clamp(Math.round(Number(academy.facilities||department.facilities)),1,5);academy.recruitment=clamp(Math.round(Number(academy.recruitment||department.recruitment)),1,5);academy.director={...department.director,...(academy.director||{})};academy.prospects=Array.isArray(academy.prospects)?academy.prospects:[];academy.intakeHistory=Array.isArray(academy.intakeHistory)?academy.intakeHistory:[];academy.promotions=Array.isArray(academy.promotions)?academy.promotions:[];academy.upgrades=Array.isArray(academy.upgrades)?academy.upgrades:[];
+    world.retiredTemplates=Array.isArray(world.retiredTemplates)?world.retiredTemplates:initialRegenTemplates();world.usedTemplateKeys=Array.isArray(world.usedTemplateKeys)?world.usedTemplateKeys:[];world.retiredSourceTokens=Array.isArray(world.retiredSourceTokens)?world.retiredSourceTokens:[];world.prospects=Array.isArray(world.prospects)?world.prospects:[];
+    return {academy,world};
+  }
+
+  function youthDepartmentScore(department) {
+    const director=department?.director||{};return clamp(Math.round(Number(department?.facilities||1)*11+Number(department?.recruitment||1)*9+Number(director.judgingPotential||60)*.22+Number(director.workingWithYoungsters||60)*.12),20,100);
+  }
+
+  function youthNationForClub(club,department,key) {
+    const home=leagueHomeNation(club),network=Number(department?.recruitment||1),foreignChance=.08+(network-1)*.105,foreign=stableScoutingUnit(`${key}|foreign`)<foreignChance;
+    if(!foreign)return home;
+    const nations=Object.keys(YOUTH_NATION_FOUNDATION),target=stableScoutingUnit(`${key}|nation`),weighted=nations.map(nation=>({nation,weight:(YOUTH_NATION_FOUNDATION[nation]||72)*(nation===home?1.3:1)})),total=weighted.reduce((sum,item)=>sum+item.weight,0);let cursor=target*total;
+    return weighted.find(item=>(cursor-=item.weight)<=0)?.nation||home;
+  }
+
+  function youthName(nationality,key) {
+    const pools=YOUTH_NAMES[nationality]||[FIRST,LAST],first=pools[0][Math.floor(stableScoutingUnit(`${key}|first`)*pools[0].length)],last=pools[1][Math.floor(stableScoutingUnit(`${key}|last`)*pools[1].length)];return `${first} ${last}`;
+  }
+
+  function youthPosition(key) {
+    const positions=["GK","RB","CB","LB","DM","CM","AM","RW","LW","ST"],weights=[.09,.08,.16,.08,.1,.16,.08,.08,.07,.1],unit=stableScoutingUnit(`${key}|position`);let cursor=unit;for(let i=0;i<positions.length;i++){cursor-=weights[i];if(cursor<=0)return positions[i];}return "ST";
+  }
+
+  function youthDetailedAttributes(position,overall,key) {
+    const unit=positionUnit(position),variation=name=>Math.round((stableScoutingUnit(`${key}|${name}`)-.5)*8),value=(name,offset)=>clamp(Math.round(overall+offset+variation(name)),30,94);
+    return {pace:value("pace",position==="GK"?-13:["RW","LW","WG","RB","LB"].includes(position)?7:1),shooting:value("shooting",unit==="attack"?7:unit==="midfield"?-1:-13),passing:value("passing",unit==="midfield"?7:position==="GK"?-7:0),dribbling:value("dribbling",unit==="attack"?5:unit==="midfield"?3:-8),defending:value("defending",unit==="defence"?8:position==="DM"?7:position==="GK"?-5:-15),physical:value("physical",unit==="defence"?5:0),goalkeeping:value("goalkeeping",position==="GK"?10:-25)};
+  }
+
+  function createYouthProspect(save,club,intakeYear,index,options={}) {
+    const department=club.id===save.clubId?ensureYouthSystem(save).academy:estimatedYouthDepartment(club),key=`youth|${intakeYear}|${club.id}|${index}|${options.template?.key||"new"}`,regen=Boolean(options.template),nationality=regen?options.template.nationality:youthNationForClub(club,department,key),position=regen?options.template.position:youthPosition(key),foundation=YOUTH_NATION_FOUNDATION[nationality]||74;
+    const quality=clamp((department.facilities-1)/4*.34+(department.recruitment-1)/4*.28+(Number(department.director.judgingPotential||60)-50)/46*.23+(foundation-65)/31*.15,0,1),talent=Math.pow(stableScoutingUnit(`${key}|talent`),.95+(1-quality)*1.5),rare=stableScoutingUnit(`${key}|rare`)<.012+quality*.045?4:0;
+    const potential=regen?clamp(Number(options.template.potential||88)+Math.floor(stableScoutingUnit(`${key}|regen-pa`)*7)-3,70,97):clamp(Math.round(60+quality*11+talent*25+rare),62,96),age=stableScoutingUnit(`${key}|age`)<.58?15:16,current=clamp(Math.round(42+department.facilities*2+Number(department.director.workingWithYoungsters||60)*.045+stableScoutingUnit(`${key}|ca`)*11),42,potential-8),details=youthDetailedAttributes(position,current,key);
+    return {id:`academy-${intakeYear}-${club.id}-${index}-${Math.floor(stableScoutingUnit(key)*1e6).toString(36)}`,name:youthName(nationality,key),nationality,position,age,overall:current,potential,value:Number(Math.max(.08,(current-38)*(potential-55)*.003).toFixed(2)),wage:1,fitness:94,morale:78,form:0,lastRating:null,ratingTotal:0,appearances:0,goals:0,assists:0,injured:0,injury:null,status:"trial",intakeYear,clubId:club.id,originType:regen?"regen":"newgen",templateKey:regen?options.template.key:null,trainingProgress:0,mentorshipDays:0,mentorId:null,mentorName:null,dataStatus:"academy-generated-v1",ratingSource:"game-estimate-v1",...details};
+  }
+
+  function chooseRegenClub(save,template,intakeYear) {
+    const candidates=CLUBS.map(club=>{const department=club.id===save.clubId?ensureYouthSystem(save).academy:estimatedYouthDepartment(club),home=leagueHomeNation(club)===template.nationality?1.55:1;return {club,weight:(18+youthDepartmentScore(department))*home};}),total=candidates.reduce((sum,item)=>sum+item.weight,0);let cursor=stableScoutingUnit(`${template.key}|${intakeYear}|club`)*total;return candidates.find(item=>(cursor-=item.weight)<=0)?.club||candidates[0].club;
+  }
+
+  function allocateAnnualRegens(save,intakeYear) {
+    const {world}=ensureYouthSystem(save),allocated=[];
+    world.retiredTemplates.filter(template=>!world.usedTemplateKeys.includes(template.key)&&Number(template.availableIntakeYear||0)<=intakeYear).forEach((template,index)=>{
+      const club=chooseRegenClub(save,template,intakeYear),prospect=createYouthProspect(save,club,intakeYear,`regen-${index}`,{template});world.usedTemplateKeys.push(template.key);allocated.push(prospect);
+      if(club.id!==save.clubId)world.prospects.unshift({...prospect,status:"academy",scoutedDate:`${intakeYear}-03-15`});
+    });
+    world.prospects=world.prospects.slice(0,120);return allocated;
+  }
+
+  function generateGlobalYouthClass(save,intakeYear) {
+    const {world}=ensureYouthSystem(save);if(world.lastGlobalIntakeYear===intakeYear)return;world.lastGlobalIntakeYear=intakeYear;
+    const clubs=seededShuffle(CLUBS,`global-youth|${intakeYear}`).slice(0,28),prospects=clubs.map((club,index)=>createYouthProspect(save,club,intakeYear,`global-${index}`)).filter(player=>player.potential>=82).sort((a,b)=>b.potential-a.potential).slice(0,12).map(player=>({...player,status:"academy",scoutedDate:`${intakeYear}-03-15`}));world.prospects.unshift(...prospects);world.prospects=world.prospects.filter((player,index,array)=>array.findIndex(item=>item.id===player.id)===index).slice(0,120);
+  }
+
+  function runYouthIntake(save,date) {
+    if(!/^\d{4}-03-15$/.test(date))return null;const intakeYear=Number(date.slice(0,4)),{academy}=ensureYouthSystem(save);if(Number(academy.lastIntakeYear||0)===intakeYear)return null;
+    academy.prospects=academy.prospects.filter(player=>player.status==="academy");const allocated=allocateAnnualRegens(save,intakeYear),target=10+Math.floor(stableScoutingUnit(`${save.clubId}|${intakeYear}|intake-size`)*3),ourRegens=allocated.filter(player=>player.clubId===save.clubId).slice(0,target),newgens=[];
+    for(let index=0;ourRegens.length+newgens.length<target;index++)newgens.push(createYouthProspect(save,clubById(save.clubId),intakeYear,index));
+    const intake=[...ourRegens,...newgens].sort((a,b)=>b.potential-a.potential||b.overall-a.overall);if(save.role==="player"){const openSlots=Math.max(0,20-academy.prospects.filter(player=>player.status==="academy").length),signCount=Math.min(openSlots,clamp(Math.round(3+academy.director.judgingPotential/25),4,7));intake.slice(0,signCount).forEach(player=>player.status="academy");}
+    academy.prospects.push(...intake);academy.lastIntakeYear=intakeYear;academy.currentIntake={year:intakeYear,date,playerIds:intake.map(player=>player.id),count:intake.length,signed:save.role==="player"?intake.filter(player=>player.status==="academy").length:0};academy.intakeHistory.unshift({year:intakeYear,count:intake.length,bestPotential:Math.max(...intake.map(player=>player.potential)),signed:academy.currentIntake.signed});academy.intakeHistory=academy.intakeHistory.slice(0,12);generateGlobalYouthClass(save,intakeYear);
+    addNotification({title:`青训选拔日：${intake.length} 名试训球员到队`,type:"youth",date,detail:save.role==="coach"?"青训总监已经提交本年度选拔名单。试训球员不会自动进入一线队，你可以签入学院、安排导师并在成熟后晋升。":"AI 教练组已经完成本年度青训选拔，并签下其中最受认可的年轻球员。",facts:[`青训设施：${academy.facilities} 级`,`招募网络：${academy.recruitment} 级`,`青训总监判断潜力：${academy.director.judgingPotential}`,`本届最高潜力区间：${scoutedPotentialRange(intake[0],academy)}`]});
+    return {type:"youth",title:`青训选拔日：${intake.length} 名新秀接受评估`,view:"academy"};
+  }
+
+  function scoutedPotentialRange(player,academy=ensureYouthSystem(state)?.academy) {
+    const uncertainty=clamp(Math.round(10-(Number(academy?.director?.judgingPotential||60)-50)/9),3,10),offset=Math.round((stableScoutingUnit(`${player.id}|scout`)-.5)*uncertainty),center=clamp(Number(player.potential||70)+offset,50,97);return `${clamp(center-uncertainty,45,97)}–${clamp(center+uncertainty,50,99)}`;
+  }
+
+  function advanceYouthDevelopment(save) {
+    const {academy}=ensureYouthSystem(save);academy.prospects.filter(player=>player.status==="academy").forEach(player=>{
+      const mentor=player.mentorId?save.squad.find(item=>item.id===player.mentorId):null;if(player.mentorId&&!mentor){player.mentorId=null;player.mentorName=null;}
+      const daily=.0014+academy.facilities*.00055+Number(academy.director.workingWithYoungsters||60)*.000018+(mentor?.0014:0);player.trainingProgress=Number(player.trainingProgress||0)+daily;if(mentor)player.mentorshipDays=Number(player.mentorshipDays||0)+1;
+      const growth=Math.min(Math.floor(player.trainingProgress),Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0)));if(growth>0){player.overall+=growth;player.trainingProgress-=growth;Object.assign(player,youthDetailedAttributes(player.position,player.overall,`${player.id}|growth-${player.overall}`));}
+    });
+  }
+
+  function addRetirementTemplate(save,player,endingSeason) {
+    if(Number(player.overall||0)<82)return;const {world}=ensureYouthSystem(save),sourceToken=Math.floor(stableScoutingUnit(`${comparableClubName(player.name)}|retired-source`)*1e12).toString(36),key=`retired-${sourceToken}-${endingSeason}`;if(world.retiredSourceTokens.includes(sourceToken)||world.retiredTemplates.some(item=>item.key===key)||world.usedTemplateKeys.includes(key))return;
+    world.retiredSourceTokens.push(sourceToken);world.retiredTemplates.push({key,nationality:String(player.nationality||leagueHomeNation(clubById(save.clubId))).split("/")[0],position:player.position||"CM",potential:clamp(Math.max(Number(player.potential||0),Number(player.overall||0)),82,96),availableIntakeYear:endingSeason+2});
+  }
+
+  function collectSeasonRetirements(save,endingSeason) {
+    ensureYouthSystem(save);const retired=[];save.squad.forEach(player=>{if(player.id===save.controlledId)return;const threshold=player.position==="GK"?38:35,age=Number(player.age||24),chance=age<threshold?0:clamp(.16+(age-threshold)*.19,0,1),willRetire=age>=threshold&&stableScoutingUnit(`${player.id}|retire|${endingSeason}`)<chance;if(willRetire){retired.push(player);addRetirementTemplate(save,player,endingSeason);}});
+    const world=ensureYouthSystem(save).world;REAL_PLAYERS.filter(player=>Number(player.overall||0)>=84).map(player=>({...player,simulatedAge:Number(player.age||24)+Math.max(0,endingSeason-2026)})).filter(player=>{const threshold=player.position==="GK"?38:35,chance=player.simulatedAge<threshold?0:clamp(.12+(player.simulatedAge-threshold)*.17,0,.9),sourceToken=Math.floor(stableScoutingUnit(`${comparableClubName(player.name)}|retired-source`)*1e12).toString(36);return !world.retiredSourceTokens.includes(sourceToken)&&stableScoutingUnit(`${player.id}|world-retire|${endingSeason}`)<chance;}).sort((a,b)=>b.overall-a.overall).slice(0,10).forEach(player=>addRetirementTemplate(save,player,endingSeason));
+    return retired;
+  }
+
+  function rolloverYouthSeason(save) {
+    const youthSystem=ensureYouthSystem(save),academy=youthSystem.academy;
+    academy.prospects=academy.prospects.filter(player=>player.status==="academy");
+    academy.prospects.forEach(player=>{player.age++;});
+    academy.prospects=academy.prospects.filter(player=>player.age<=19);
+    academy.currentIntake=null;
+    youthSystem.world.prospects.forEach(player=>{
+      player.age++;
+      const club=clubById(player.clubId),department=estimatedYouthDepartment(club),growth=Math.min(Math.max(0,player.potential-player.overall),1+(department.facilities>=4?1:0));
+      player.overall+=growth;
+    });
+    youthSystem.world.prospects=youthSystem.world.prospects.filter(player=>player.age<=19).slice(0,120);
+    if(save.role!=="player")return [];
+    const promoted=[];
+    academy.prospects.filter(player=>player.age>=17&&(player.potential>=80||player.overall>=64)).sort((a,b)=>b.overall+b.potential*.2-(a.overall+a.potential*.2)).slice(0,Math.max(0,Math.min(2,29-save.squad.length))).forEach(player=>promoted.push(graduateYouthPlayer(save,academy,player,save.date)));
+    return promoted;
   }
 
   function seededShuffle(items,key) {
@@ -879,7 +1021,7 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:28, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:29, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
@@ -894,6 +1036,7 @@
       activeMatch:null, selectedTransfer:null, transferNegotiations:[],transferRequestsLog:[],transferHistory:[],retired:false,
       playerCareer:setup.role==="player"?createPlayerCareer(controlled,club):null
     };
+    const youth=createYouthSystem(created);created.youthAcademy=youth.academy;created.youthWorld=youth.world;
     created.transferMarket=createTransferMarket(created.season);
     simulateTransferMarket(created,START_DATE);
     return created;
@@ -1005,7 +1148,8 @@
     if(previousVersion<20&&saved.activeMatch?.fixture?.international&&Number(saved.activeMatch.minute||0)===0)saved.activeMatch=null;
     saved.schedule?.sort((a,b)=>a.date.localeCompare(b.date));
     if(saved.role==="player")saved.playerCareer=ensurePlayerCareer(saved);
-    saved.version=28;
+    ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
+    saved.version=29;
     return saved;
   }
   function saveState() {
@@ -1419,27 +1563,27 @@
   }
 
   const NAV = [
-    ["home","layout-dashboard","总览"],["squad","users","阵容"],["fixtures","calendar-days","赛程"],["world","chart-no-axes-column-increasing","联赛"],["transfers","repeat-2","转会"],["media","newspaper","媒体"],["career","trophy","生涯"],["profile","user-round","角色"]
+    ["home","layout-dashboard","总览"],["squad","users","阵容"],["fixtures","calendar-days","赛程"],["world","chart-no-axes-column-increasing","联赛"],["academy","graduation-cap","青训"],["transfers","repeat-2","转会"],["media","newspaper","媒体"],["career","trophy","生涯"],["profile","user-round","角色"]
   ];
 
   function navButton(item) { return `<button class="nav-btn ${state.view===item[0]?"active":""}" data-view="${item[0]}">${icon(item[1])}<span>${item[2]}</span></button>`; }
-  function viewTitle() { return ({home:"生涯中心",squad:"一线队",fixtures:"赛程与结果",world:"联赛中心",transfers:"转会中心",media:"媒体中心",career:"生涯档案",profile:"角色发展"})[state.view]; }
+  function viewTitle() { return ({home:"生涯中心",squad:"一线队",fixtures:"赛程与结果",world:"联赛中心",academy:"青训中心",transfers:"转会中心",media:"媒体中心",career:"生涯档案",profile:"角色发展"})[state.view]; }
 
   function renderShell() {
     const club=clubById(state.clubId),next=nextFixture(),matchReady=Boolean(next&&next.date<=state.date),continueNote=matchReady?`${next.competition} · ${next.opponent}`:(state.continueStatus?.title||"推进至下一重要事件");
     return `<div class="shell">
       <aside class="sidebar"><div class="brand">${icon("circle-dot")}<span class="brand-name">FS 26</span><span class="version-tag">${APP_VERSION}</span></div><nav class="nav" aria-label="主导航">${NAV.map(navButton).join("")}</nav><div class="nav-spacer"></div><button class="nav-btn main-menu-button" id="return-main-menu">${icon("house")}<span>主页面</span></button><div class="profile-mini">${clubBadge(club,"club-badge-profile")}<div><strong>${esc(state.person)}</strong><span>${state.role==="coach"?"主教练":"职业球员"} · ${esc(club.name)}</span></div></div></aside>
       <main class="main"><header class="topbar"><div class="topbar-club">${clubBadge(club,"club-badge-topbar")}<div class="topbar-title"><h1>${viewTitle()}</h1><p>${esc(club.name)} · ${LEAGUES[club.league].short}</p></div></div><div class="topbar-actions"><button class="btn btn-icon topbar-home" id="return-main-menu-mobile" title="返回主页面" aria-label="返回主页面">${icon("house")}</button><div class="continue-date"><strong>${formatDate(state.date,false)}</strong><span>${weekdayLabel(state.date)}</span></div><button class="continue-button" id="continue-game" aria-label="${matchReady?"进入比赛":"继续时间"}" ${!next||state.retired?"disabled":""}><span class="continue-copy"><b>${matchReady?"进入比赛":"继续"}</b><small><span class="continue-note">${esc(continueNote)}</span><span class="continue-mobile-date">${formatDate(state.date,false)} · ${weekdayLabel(state.date)}</span></small></span>${icon(matchReady?"play":"chevrons-right")}</button></div></header><div class="content">${renderView()}</div></main>
-      <nav class="mobile-nav" aria-label="移动端主导航">${NAV.slice(0,3).map(navButton).join("")}${navButton(NAV[3])}<button class="nav-btn ${["transfers","media","career","profile"].includes(state.view)?"active":""}" id="open-mobile-menu">${icon("menu")}<span>更多</span></button></nav>
+      <nav class="mobile-nav" aria-label="移动端主导航">${NAV.slice(0,3).map(navButton).join("")}${navButton(NAV[3])}<button class="nav-btn ${["academy","transfers","media","career","profile"].includes(state.view)?"active":""}" id="open-mobile-menu">${icon("menu")}<span>更多</span></button></nav>
       ${renderModal()}
     </div>`;
   }
 
   function renderView() {
-    return ({ home:renderHome, squad:renderSquad, fixtures:renderFixtures, world:renderWorld, transfers:renderTransfers, media:renderMedia, career:renderCareer, profile:renderProfile })[state.view]();
+    return ({ home:renderHome, squad:renderSquad, fixtures:renderFixtures, world:renderWorld, academy:renderYouthAcademy, transfers:renderTransfers, media:renderMedia, career:renderCareer, profile:renderProfile })[state.view]();
   }
 
-  function notificationIcon(type) { return ({match:"clipboard-list",medical:"briefcase-medical",board:"landmark",schedule:"calendar-days",competition:"trophy",transfer:"arrow-right-left"})[type]||"bell"; }
+  function notificationIcon(type) { return ({match:"clipboard-list",medical:"briefcase-medical",board:"landmark",schedule:"calendar-days",competition:"trophy",transfer:"arrow-right-left",youth:"graduation-cap"})[type]||"bell"; }
 
   function renderHome() {
     if(state.role==="player")return renderPlayerHome();
@@ -1545,6 +1689,52 @@
   function playerRow(p,hidden=false) {
     const average = p.appearances ? averageRating(p).toFixed(2) : "—";
     return `<tr data-player-name="${esc(p.name.toLowerCase())}" ${hidden?"hidden":""}><td class="player-name"><strong>${p.id==="controlled"?"★ ":""}${playerNameLink(p,{clubId:state.clubId,clubName:clubById(state.clubId).name})}</strong><span>${p.number?`#${p.number} · `:""}${esc(p.nationality||"一线队")}</span></td><td><span class="tag">${playerRoleLabel(p.position)}</span></td><td class="num">${p.age}</td><td class="num"><span class="rating">${p.overall}</span> / ${p.potential}</td><td class="num">${p.appearances}</td><td class="num">${p.goals}</td><td class="num">${p.assists}</td><td class="num">${average}</td><td><div class="fitness-cell"><div class="meter ${p.fitness<60?"danger":p.fitness<78?"warn":""}"><span style="width:${p.fitness}%"></span></div><strong>${Math.round(p.fitness)}%</strong></div></td><td class="num hide-mobile">${money(p.value)}</td><td>${p.injured?`<span class="tag red">${esc(p.injury)}</span>`:`<span class="tag green">可出场</span>`}</td></tr>`;
+  }
+
+  function academyMentorCandidates(prospect) {
+    return state.squad.filter(player=>player.id!==state.controlledId||Number(player.age||0)>=23).filter(player=>Number(player.age||0)>=23&&positionUnit(player.position)===positionUnit(prospect.position)&&Number(player.overall||0)>=Number(prospect.overall||0)+8).sort((a,b)=>(b.overall+b.age*.12)-(a.overall+a.age*.12)).slice(0,8);
+  }
+
+  function signYouthProspect(id) {
+    if(state.role!=="coach")return;const {academy}=ensureYouthSystem(),player=academy.prospects.find(item=>item.id===id&&item.status==="trial");if(!player)return;if(academy.prospects.filter(item=>item.status==="academy").length>=20){toast("学院注册名额已满，请先晋升或放弃其他球员");return;}player.status="academy";player.signedDate=state.date;academy.currentIntake.signed=Number(academy.currentIntake.signed||0)+1;const history=academy.intakeHistory.find(item=>item.year===academy.currentIntake.year);if(history)history.signed=academy.currentIntake.signed;saveState();render();toast(`${player.name} 已签入青训学院`);
+  }
+
+  function releaseYouthProspect(id) {
+    if(state.role!=="coach")return;const {academy}=ensureYouthSystem(),player=academy.prospects.find(item=>item.id===id);if(!player)return;academy.prospects=academy.prospects.filter(item=>item.id!==id);if(player.status==="academy"&&academy.currentIntake?.playerIds?.includes(player.id)){academy.currentIntake.signed=Math.max(0,Number(academy.currentIntake.signed||0)-1);const history=academy.intakeHistory.find(item=>item.year===academy.currentIntake.year);if(history)history.signed=academy.currentIntake.signed;}saveState();render();toast(`${player.name} 已离开青训营`);
+  }
+
+  function graduateYouthPlayer(save,academy,player,date) {
+    const graduate={...player,status:undefined,number:null,joinedDate:date,academyGraduate:true,mentorHistory:player.mentorName?[{name:player.mentorName,days:player.mentorshipDays||0}]:[],consecutiveStarts:0,lastMatchMinutes:0,lastMatchDate:null,lastSelectionStatus:null};delete graduate.mentorId;delete graduate.mentorName;ensurePlayerDevelopment(graduate,save.season);ensurePlayerContract(graduate,save.season);graduate.contract={...graduate.contract,weeklyWage:Math.max(2,Math.round(graduate.overall*.035)),role:"一线队候选",endSeason:save.season+3};save.squad.push(graduate);academy.prospects=academy.prospects.filter(item=>item.id!==player.id);academy.promotions.unshift({id:graduate.id,name:graduate.name,date,age:graduate.age,overall:graduate.overall,position:graduate.position});academy.promotions=academy.promotions.slice(0,30);return graduate;
+  }
+
+  function promoteYouthProspect(id) {
+    if(state.role!=="coach")return;const {academy}=ensureYouthSystem(),player=academy.prospects.find(item=>item.id===id&&item.status==="academy");if(!player)return;if(player.age<16){toast("球员年满 16 岁后才能签署一线队合同");return;}if(state.squad.length>=32){toast("一线队阵容已达 32 人，请先清理名额");return;}
+    const graduate=graduateYouthPlayer(state,academy,player,state.date);addNotification({title:`青训晋升：${graduate.name} 进入一线队`,type:"youth",date:state.date,detail:"青训球员已经签署职业合同并加入一线队，他将参与正常的训练、轮换和比赛发展。",facts:[`${playerRoleLabel(graduate.position)} · ${graduate.age} 岁`,`当前能力：${graduate.overall}`,`青训评估潜力：${scoutedPotentialRange(graduate,academy)}`,graduate.mentorHistory.length?`导师：${graduate.mentorHistory[0].name}，共同训练 ${graduate.mentorHistory[0].days} 天`:"尚未建立导师关系"]});saveState();render();toast(`${graduate.name} 已晋升一线队`);
+  }
+
+  function assignYouthMentor(prospectId,mentorId) {
+    if(state.role!=="coach")return;const {academy}=ensureYouthSystem(),prospect=academy.prospects.find(item=>item.id===prospectId&&item.status==="academy"),mentor=state.squad.find(item=>item.id===mentorId);if(!prospect||!mentor||!academyMentorCandidates(prospect).some(item=>item.id===mentor.id))return;prospect.mentorId=mentor.id;prospect.mentorName=mentor.name;prospect.mentorAssignedDate=state.date;saveState();render();toast(`${mentor.name} 将担任 ${prospect.name} 的导师`);
+  }
+
+  function upgradeYouthArea(area) {
+    if(state.role!=="coach"||!["facilities","recruitment"].includes(area))return;const {academy}=ensureYouthSystem(),level=Number(academy[area]||1);if(level>=5){toast("该项目已经达到最高等级");return;}const next=level+1,cost=YOUTH_UPGRADE_COSTS[area][next];if(state.funds<cost){toast(`预算不足，升级需要 ${money(cost)}`);return;}state.funds=Number((state.funds-cost).toFixed(2));academy[area]=next;academy.upgrades.unshift({area,level:next,cost,date:state.date});addNotification({title:`青训${area==="facilities"?"设施":"招募网络"}升级至 ${next} 级`,type:"youth",date:state.date,detail:area==="facilities"?"更好的训练场、医疗支持和住宿条件会提高青年球员的起始能力与成长速度。":"更广的球探覆盖会提高海外苗子比例，并增加发现高潜力球员的机会。",facts:[`投入：${money(cost)}`,`当前部门综合评分：${youthDepartmentScore(academy)}/100`]});saveState();render();toast(`青训${area==="facilities"?"设施":"招募网络"}已升级`);
+  }
+
+  function youthProspectCard(player,academy,trial=false) {
+    const mentors=trial?[]:academyMentorCandidates(player),mentor=player.mentorId?state.squad.find(item=>item.id===player.mentorId):null,currentUncertainty=clamp(Math.round(8-(academy.director.judgingAbility-50)/10),2,8),currentRange=`${clamp(player.overall-currentUncertainty,35,95)}–${clamp(player.overall+currentUncertainty,40,97)}`;
+    return `<article class="youth-player"><div class="youth-player-main"><div class="academy-avatar">${initials(player.name)}</div><div><strong>${esc(player.name)}</strong><span>${esc(player.nationality)} · ${playerRoleLabel(player.position)} · ${player.age} 岁</span></div></div><div class="youth-estimates"><span>当前能力 <b>${currentRange}</b></span><span>潜力评估 <b>${scoutedPotentialRange(player,academy)}</b></span></div>${trial?`<div class="youth-actions">${state.role==="coach"?`<button class="btn btn-sm btn-primary" data-sign-youth="${esc(player.id)}">${icon("file-signature")}签入学院</button><button class="btn btn-sm" data-release-youth="${esc(player.id)}">放弃</button>`:`<span class="tag">教练组评估中</span>`}</div>`:`<div class="youth-mentor"><div><span>导师</span><strong>${mentor?esc(mentor.name):"尚未指定"}</strong><small>${mentor?`共同训练 ${player.mentorshipDays||0} 天 · 成长加速生效`:`选择同位置资深球员可提高发展速度`}</small></div>${state.role==="coach"&&mentors.length?`<select class="select" id="mentor-${esc(player.id)}">${mentors.map(item=>`<option value="${esc(item.id)}" ${player.mentorId===item.id?"selected":""}>${esc(item.name)} · ${item.age} 岁 · ${item.overall}</option>`).join("")}</select><button class="btn btn-sm" data-assign-mentor="${esc(player.id)}">${icon("users-round")}指定</button>`:""}</div><div class="youth-actions">${state.role==="coach"?`<button class="btn btn-sm btn-primary" data-promote-youth="${esc(player.id)}" ${player.age<16?"disabled":""}>${icon("arrow-up-circle")}晋升一线队</button><button class="btn btn-sm" data-release-youth="${esc(player.id)}">放弃培养</button>`:`<span class="tag green">学院培养中</span>`}</div>`}</article>`;
+  }
+
+  function renderYouthAcademy() {
+    const club=clubById(state.clubId),{academy,world}=ensureYouthSystem(),trialists=academy.prospects.filter(player=>player.status==="trial"),signed=academy.prospects.filter(player=>player.status==="academy"),dateParts=state.date.split("-").map(Number),nextYear=(dateParts[1]<3||(dateParts[1]===3&&dateParts[2]<15))?dateParts[0]:dateParts[0]+1,nextIntake=`${nextYear}-03-15`,score=youthDepartmentScore(academy),facilityNext=academy.facilities<5?YOUTH_UPGRADE_COSTS.facilities[academy.facilities+1]:0,recruitmentNext=academy.recruitment<5?YOUTH_UPGRADE_COSTS.recruitment[academy.recruitment+1]:0,global=world.prospects.filter(player=>player.clubId!==state.clubId).slice(0,8);
+    return `<div class="page-heading academy-heading"><span class="eyebrow">Youth Academy · ${state.season}/${String(state.season+1).slice(2)}</span><h2>青训中心</h2><p>设施、人力、国家足球底蕴与导师关系共同决定青年球员的产出和成长。</p></div>
+      <section class="academy-overview"><div class="academy-score"><span>部门综合评分</span><strong>${score}</strong><small>/ 100</small></div><div><span>下次选拔日</span><strong>${formatDate(nextIntake)}</strong><small>${Math.max(0,daysBetween(state.date,nextIntake))} 天后</small></div><div><span>学院人数</span><strong>${signed.length}</strong><small>上限 20 人</small></div><div><span>本届试训</span><strong>${trialists.length}</strong><small>${academy.currentIntake?`${academy.currentIntake.year} 届`:`等待 3 月 15 日`}</small></div></section>
+      <div class="academy-department-grid"><section class="panel academy-department"><div class="panel-header"><h3>青训设施</h3><span class="academy-level">${academy.facilities} / 5</span></div><div class="academy-level-track">${[1,2,3,4,5].map(level=>`<i class="${level<=academy.facilities?"active":""}"></i>`).join("")}</div><p>决定试训球员的起始能力，并持续提高学院训练成长速度。</p>${state.role==="coach"&&academy.facilities<5?`<button class="btn btn-sm" data-upgrade-youth="facilities">${icon("building-2")}升级至 ${academy.facilities+1} 级 · ${money(facilityNext)}</button>`:`<span class="tag green">${academy.facilities===5?"已达最高等级":"由俱乐部管理"}</span>`}</section>
+      <section class="panel academy-department"><div class="panel-header"><h3>招募网络</h3><span class="academy-level">${academy.recruitment} / 5</span></div><div class="academy-level-track">${[1,2,3,4,5].map(level=>`<i class="${level<=academy.recruitment?"active":""}"></i>`).join("")}</div><p>扩大海外覆盖范围，提高发现不同国家高潜力球员的概率。</p>${state.role==="coach"&&academy.recruitment<5?`<button class="btn btn-sm" data-upgrade-youth="recruitment">${icon("radar")}升级至 ${academy.recruitment+1} 级 · ${money(recruitmentNext)}</button>`:`<span class="tag green">${academy.recruitment===5?"已达最高等级":"由俱乐部管理"}</span>`}</section>
+      <section class="panel academy-director"><div class="panel-header"><div><span class="eyebrow">青训总监</span><h3>${esc(academy.director.name)}</h3></div><span class="tag">合同稳定</span></div><div class="director-attributes"><div><span>判断能力</span><strong>${academy.director.judgingAbility}</strong></div><div><span>判断潜力</span><strong>${academy.director.judgingPotential}</strong></div><div><span>培养年轻人</span><strong>${academy.director.workingWithYoungsters}</strong></div></div></section></div>
+      ${trialists.length?`<section class="panel academy-section"><div class="panel-header"><div><h3>${academy.currentIntake?.year} 青训选拔名单</h3><span class="meta">试训评估为区间值，签约后仍需长期观察</span></div><span class="tag">${trialists.length} 人待决定</span></div><div class="youth-player-list">${trialists.map(player=>youthProspectCard(player,academy,true)).join("")}</div></section>`:`<section class="panel academy-section"><div class="empty compact">${icon("calendar-search")}<h3>当前没有待评估试训球员</h3><p>每年 3 月 15 日会自动生成 10–12 人的青训选拔名单。</p></div></section>`}
+      <section class="panel academy-section"><div class="panel-header"><div><h3>学院球员与导师</h3><span class="meta">导师需与球员属于相同位置单元，并至少年长至 23 岁</span></div><span class="tag green">${signed.length} 人</span></div><div class="youth-player-list">${signed.map(player=>youthProspectCard(player,academy,false)).join("")||`<div class="empty compact">签入的试训球员会进入学院名单</div>`}</div></section>
+      <section class="panel academy-section global-youth"><div class="panel-header"><div><h3>全球青训观察</h3><span class="meta">只展示公开球探区间，不标记球员生成来源</span></div><span class="tag">${world.prospects.length} 名已记录</span></div><div class="global-youth-list">${global.map(player=>`<div><span><strong>${esc(player.name)}</strong><small>${clubNameLink(clubById(player.clubId).name)} · ${esc(player.nationality)} · ${playerRoleLabel(player.position)} · ${player.age} 岁</small></span><b>${scoutedPotentialRange(player,estimatedYouthDepartment(clubById(player.clubId)))}</b></div>`).join("")||`<div class="empty compact">下一次全球选拔日后将形成观察名单</div>`}</div></section>`;
   }
 
   function renderFixtures() {
@@ -2725,6 +2915,11 @@
     document.querySelectorAll("[data-squad-sort]").forEach(button=>button.addEventListener("click",()=>{const key=button.dataset.squadSort,current=state.squadSort||{};state.squadSort={key,direction:current.key===key&&current.direction==="desc"?"asc":current.key===key?"desc":["name","position","age"].includes(key)?"asc":"desc"};saveState();render();}));
     document.getElementById("squad-sort-select")?.addEventListener("change",e=>{const key=e.target.value;state.squadSort={key,direction:["name","position","age"].includes(key)?"asc":"desc"};saveState();render();});
     document.getElementById("squad-sort-direction")?.addEventListener("click",()=>{state.squadSort.direction=state.squadSort.direction==="asc"?"desc":"asc";saveState();render();});
+    document.querySelectorAll("[data-sign-youth]").forEach(button=>button.addEventListener("click",()=>signYouthProspect(button.dataset.signYouth)));
+    document.querySelectorAll("[data-release-youth]").forEach(button=>button.addEventListener("click",()=>releaseYouthProspect(button.dataset.releaseYouth)));
+    document.querySelectorAll("[data-promote-youth]").forEach(button=>button.addEventListener("click",()=>promoteYouthProspect(button.dataset.promoteYouth)));
+    document.querySelectorAll("[data-assign-mentor]").forEach(button=>button.addEventListener("click",()=>assignYouthMentor(button.dataset.assignMentor,document.getElementById(`mentor-${button.dataset.assignMentor}`)?.value)));
+    document.querySelectorAll("[data-upgrade-youth]").forEach(button=>button.addEventListener("click",()=>upgradeYouthArea(button.dataset.upgradeYouth)));
     document.getElementById("fixture-filter")?.addEventListener("change",event=>{state.fixtureFilter=event.target.value;saveState();render();});
     document.querySelectorAll("[data-notification]").forEach(button=>button.addEventListener("click",()=>openNotification(button.dataset.notification)));
     document.querySelectorAll("[data-player-profile]").forEach(button=>button.addEventListener("click",()=>{const player=playerProfileRegistry.get(button.dataset.playerProfile);if(!player)return;modal={type:"playerProfile",player};render();}));
@@ -2825,8 +3020,10 @@
     simulateMajorLeagueWorld(state,targetDate);
     simulateTransferMarket(state,targetDate);
     state.date=targetDate;
+    advanceYouthDevelopment(state);
+    const youthEvent=runYouthIntake(state,targetDate);
     const playerEvent=applyPlayerCareerDay(targetDate);
-    return playerEvent||importantTransferEvent(previousRecordIds,previousRumorIds);
+    return youthEvent||playerEvent||importantTransferEvent(previousRecordIds,previousRumorIds);
   }
 
   function continueGame() {
@@ -2837,8 +3034,8 @@
     while(cursor<fixture.date&&guard++<370){
       cursor=addDays(cursor,1);
       event=advanceCareerDay(cursor);
-      if(cursor===fixture.date){event={type:"match",title:`${fixture.competition}比赛日：对阵 ${fixture.opponent}`,view:"home"};break;}
       if(event)break;
+      if(cursor===fixture.date){event={type:"match",title:`${fixture.competition}比赛日：对阵 ${fixture.opponent}`,view:"home"};break;}
     }
     if(!event)event={type:"calendar",title:"时间推进已暂停",view:state.view};
     state.continueStatus={type:event.type,title:event.title,date:state.date};
@@ -4017,13 +4214,15 @@
     state.history.unshift({season:state.season,club:clubById(state.clubId).name,played:state.played,wins:state.wins,position:state.leaguePosition});
     if(state.leaguePosition===1)state.honors.unshift({name:LEAGUES[clubById(state.clubId).league].name+"冠军",season:state.season,scope:"俱乐部"});
     if(state.role==="player"&&averageRating(controlledPlayer())>=7.6)state.honors.unshift({name:"赛季最佳球员",season:state.season,scope:"个人"});
-    const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3);
+    const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3),retiredPlayers=collectSeasonRetirements(state,state.season);if(retiredPlayers.length)state.squad=state.squad.filter(player=>!retiredPlayers.includes(player));
     state.season++;state.date=`${state.season}-08-01`;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season);simulateTransferMarket(state,state.date);
     state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});
+    rolloverYouthSeason(state).forEach(graduate=>addNotification({title:`AI 教练提拔青训球员：${graduate.name}`,type:"youth",date:state.date,detail:"教练组根据年龄、当前能力、潜力和一线队名额完成了青训晋升。",facts:[`${playerRoleLabel(graduate.position)} · ${graduate.age} 岁`,`当前能力：${graduate.overall}`,`合同角色：${graduate.contract.role}`]}));
     if(state.role==="player"){
       const career=ensurePlayerCareer(),player=controlledPlayer();career.trainingDays=0;career.weeklyPlanChanges=0;career.weeklyPlanSetDate=state.date;career.matchPlan="balanced";career.matchPlanFixtureId=null;career.pendingIssues=[];career.story=null;career.nextStoryDate=addDays(state.date,10);career.selectionStreak=0;career.benchStreak=0;career.seasonObjectives=createPlayerObjectives(player);career.objectiveProgress={appearances:0,ratings:0,goals:0,assists:0,trust:Math.round(career.trust)};career.requests=career.requests.filter(item=>item.status==="pending");
     }
     if(growthLeaders.length)state.media.unshift({source:"Player Development",title:"赛季球员发展报告已发布",body:growthLeaders.map(item=>`${item.player.name} ${item.change>0?`提升 ${item.change} 点`:`下降 ${Math.abs(item.change)} 点`}`).join("；"),date:state.date,type:"career"});
+    if(retiredPlayers.length){state.media.unshift({source:"Football Daily",title:`${retiredPlayers.map(player=>player.name).join("、")} 宣布退役`,body:"退役球员的完整生涯记录已经归档。达到精英能力级别的球员会进入隐藏的后续人才模板池。",date:state.date,type:"career"});addNotification({title:`一线队退役：${retiredPlayers.length} 名球员结束生涯`,type:"youth",date:state.date,detail:"退役球员已从一线队名单移除。高水平球员的国籍、位置和潜力轮廓可能在未来青训选拔中以匿名新秀形式重新出现。",facts:retiredPlayers.map(player=>`${player.name} · ${playerRoleLabel(player.position)} · ${player.age} 岁`)});}
     state.media.unshift({source:"Football Daily",title:`${state.season}/${String(state.season+1).slice(2)} 赛季正式开启`,body:"全新的联赛和杯赛日程已经生成，阵容状态与赛季目标也已重置。",date:state.date,type:"career"});saveState();render();toast("新赛季赛程已生成");
   }
 

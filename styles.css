@@ -890,6 +890,58 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
 .career-alert strong, .career-alert small { display:block; }
 .career-alert small { margin-top:3px; color:var(--muted); font-size:10px; line-height:1.45; }
 .response-momentum { flex:0 0 auto; color:var(--green); font-size:10px; }
+.academy-heading { margin-bottom:16px; }
+.academy-overview { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:14px; border:1px solid var(--line); background:#0d1813; }
+.academy-overview > div { min-width:0; min-height:86px; padding:14px 16px; border-right:1px solid var(--line); }
+.academy-overview > div:last-child { border-right:0; }
+.academy-overview span,.academy-overview small { display:block; color:var(--muted); font-size:9px; }
+.academy-overview strong { display:block; margin:5px 0 3px; font-family:"Barlow Condensed",sans-serif; font-size:24px; }
+.academy-overview .academy-score strong { display:inline-block; color:var(--green); font-size:34px; }
+.academy-overview .academy-score small { display:inline-block; margin-left:3px; }
+.academy-department-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)) minmax(280px,.9fr); gap:14px; margin-bottom:14px; }
+.academy-department,.academy-director { min-width:0; }
+.academy-department { padding-bottom:14px; }
+.academy-department .panel-header { border-bottom:0; }
+.academy-department > p { min-height:38px; margin:4px 16px 12px; color:var(--muted); font-size:10px; line-height:1.55; }
+.academy-department > .btn,.academy-department > .tag { margin-left:16px; }
+.academy-level { margin-left:auto; color:var(--green); font-family:"Barlow Condensed",sans-serif; font-size:20px; font-weight:700; }
+.academy-level-track { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:5px; margin:0 16px 11px; }
+.academy-level-track i { height:5px; background:#26372d; }
+.academy-level-track i.active { background:var(--green); }
+.academy-director .panel-header > div { min-width:0; }
+.academy-director .panel-header h3 { margin-top:3px; font-size:18px; }
+.director-attributes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+.director-attributes > div { min-width:0; padding:16px 10px; border-right:1px solid var(--line); text-align:center; }
+.director-attributes > div:last-child { border-right:0; }
+.director-attributes span { display:block; min-height:26px; color:var(--muted); font-size:8px; line-height:1.4; }
+.director-attributes strong { display:block; margin-top:4px; color:var(--green); font-family:"Barlow Condensed",sans-serif; font-size:24px; }
+.academy-section { margin-bottom:14px; }
+.academy-section .panel-header > div { min-width:0; }
+.academy-section .panel-header .meta { display:block; margin:3px 0 0; }
+.academy-section .panel-header > .tag { margin-left:auto; }
+.youth-player-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.youth-player { min-width:0; padding:14px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
+.youth-player:nth-child(2n) { border-right:0; }
+.youth-player-main { display:grid; grid-template-columns:38px minmax(0,1fr); align-items:center; gap:10px; }
+.academy-avatar { width:38px; height:38px; display:grid; place-items:center; border:1px solid #3c5848; background:#15271e; color:var(--green); font-size:10px; font-weight:800; }
+.youth-player-main > div:last-child { min-width:0; }
+.youth-player-main strong,.youth-player-main span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.youth-player-main span { margin-top:3px; color:var(--muted); font-size:9px; }
+.youth-estimates { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:11px 0; }
+.youth-estimates span { padding:7px 8px; background:var(--surface-2); color:var(--muted); font-size:8px; }
+.youth-estimates b { display:block; margin-top:3px; color:var(--text); font-size:11px; }
+.youth-actions { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.youth-mentor { display:grid; grid-template-columns:minmax(0,1fr) minmax(130px,.8fr) auto; align-items:end; gap:7px; margin:10px 0; padding-top:10px; border-top:1px solid var(--line); }
+.youth-mentor > div { min-width:0; }
+.youth-mentor span,.youth-mentor strong,.youth-mentor small { display:block; }
+.youth-mentor span,.youth-mentor small { color:var(--muted); font-size:8px; }
+.youth-mentor strong { margin:3px 0; font-size:10px; }
+.youth-mentor .select { min-height:34px; padding:6px 8px; font-size:9px; }
+.global-youth-list > div { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:11px 14px; border-bottom:1px solid var(--line); }
+.global-youth-list > div:last-child { border-bottom:0; }
+.global-youth-list span,.global-youth-list strong,.global-youth-list small { display:block; min-width:0; }
+.global-youth-list small { margin-top:3px; color:var(--muted); font-size:9px; }
+.global-youth-list > div > b { color:var(--green); font-family:"Barlow Condensed",sans-serif; font-size:18px; }
 .player-command-grid { display:grid; grid-template-columns:minmax(0,1fr) 330px; gap:14px; align-items:start; }
 .player-command-main, .player-command-side { display:grid; gap:14px; min-width:0; }
 .player-next-match .panel-header { align-items:flex-start; }
@@ -1045,6 +1097,8 @@ body.is-busy button, body.is-busy input, body.is-busy select { pointer-events:no
   .player-status-strip.player-status-six { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .player-status-strip.player-status-six > div:nth-child(3n) { border-right:0; }
   .player-status-strip.player-status-six > div:nth-child(-n+3) { border-bottom:1px solid var(--line); }
+  .academy-department-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .academy-director { grid-column:1/-1; }
 }
 
 @media (max-width: 760px) {
@@ -1166,6 +1220,14 @@ body.is-busy button, body.is-busy input, body.is-busy select { pointer-events:no
   .player-status-strip.player-status-six > div { border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
   .player-status-strip.player-status-six > div:nth-child(2n) { border-right:0; }
   .player-status-strip.player-status-six > div:nth-last-child(-n+2) { border-bottom:0; }
+  .academy-overview { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .academy-overview > div { border-bottom:1px solid var(--line); }
+  .academy-overview > div:nth-child(2n) { border-right:0; }
+  .academy-overview > div:nth-last-child(-n+2) { border-bottom:0; }
+  .academy-department-grid,.youth-player-list { grid-template-columns:1fr; }
+  .academy-director { grid-column:auto; }
+  .youth-player { border-right:0; }
+  .youth-mentor { grid-template-columns:1fr; align-items:stretch; }
   .match-plan-options { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .live-plan-options { grid-template-columns:repeat(4,minmax(0,1fr)); }
   .player-command-side { grid-template-columns:1fr; }

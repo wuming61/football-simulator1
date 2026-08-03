@@ -1,8 +1,8 @@
-# Football Simulator v1.1 architecture
+# Football Simulator v1.2 architecture
 
 ## Runtime and delivery
 
-The v1.1 build is a dependency-free H5/PWA application. `index.html` loads the local UI, the Dongqiudi snapshot, and the simulation engine. Browser `localStorage` stores indexed career slots and MOD packs. `service-worker.js` caches the local runtime, trophies, and all 198 club badges for offline use after the first HTTP visit.
+The v1.2 build is a dependency-free H5/PWA application. `index.html` loads the local UI, the Dongqiudi snapshot, and the simulation engine. Browser `localStorage` stores indexed career slots and MOD packs. `service-worker.js` caches the local runtime, trophies, and all 198 club badges for offline use after the first HTTP visit.
 
 ## Data boundaries
 
@@ -23,7 +23,7 @@ The v1.1 build is a dependency-free H5/PWA application. `index.html` loads the l
 
 ```json
 {
-  "version": 28,
+  "version": 29,
   "role": "coach | player",
   "date": "2026-08-01",
   "season": 2026,
@@ -37,6 +37,8 @@ The v1.1 build is a dependency-free H5/PWA application. `index.html` loads the l
   "activeMatch": null,
   "matchReports": [],
   "transferHistory": [],
+  "youthAcademy": {},
+  "youthWorld": {},
   "notifications": [],
   "squadSort": {"key": "position", "direction": "asc"},
   "media": [],
@@ -65,6 +67,9 @@ The v1.1 build is a dependency-free H5/PWA application. `index.html` loads the l
 16. AI squad planning uses 27 players as its preferred working group, 29 as the normal soft ceiling, and 32 as the high-urgency ceiling. Seller-driven transfer reviews rank fringe players by depth-chart position, minutes, relative ability, age, potential, contract role, contract expiry, and listed status. Controlled players, core players, role leaders, high-potential youngsters, recent signings, and minimum positional depth remain protected. Coach careers receive advisory-only recommendations for the user's club; player careers allow the AI coach to complete non-controlled teammate sales.
 17. Completed transfers are also written to a cross-season `transferHistory` ledger. Before a player changes clubs, the engine closes an exact career segment for the selling club with appearances, goals, assists, average rating, ability movement, and the transfer date. The receiving club starts a separate current-season segment. Player profiles resolve the latest club and contract from this persistent ledger and merge all prior career segments; legacy transfers without saved individual statistics remain identified as unavailable rather than being represented as zero appearances.
 18. Player-career lineup selection does not reserve a starting place for the controlled player. Every candidate is ranked by ability, fitness, form, morale, promised squad role, tactical fit, coach preferences, opponent and competition importance, consecutive starts, prior-match minutes, and recovery time. The controlled player can start, wait on the bench and enter through the normal AI substitution system, or be left out to recover. Per-player workload fields persist between matches and reset at the new season.
+19. Every club career owns a youth department with 1–5 facility and recruitment levels plus a youth director whose judging and development attributes affect generation quality. March 15 triggers one deterministic annual intake of 10–12 trialists. Newgen nationality and potential combine national football foundation with club infrastructure and staff quality.
+20. Elite retirements enter an anonymous template pool without storing the original player's name. At the following eligible intake they are assigned to a weighted random club and regenerate with a new name, matching nationality and position, and potential within three points. The player-facing UI exposes only scouting ranges and never labels Regen/Newgen origin.
+21. Coaches can sign trialists into a 20-player academy, release them, promote eligible 16+ players into the first team, upgrade infrastructure from the transfer budget, and assign same-unit veteran mentors. Facilities, the youth director, and accumulated mentorship days drive daily academy CA growth. Player careers let the AI staff perform intake selection while preserving a read-only academy view.
 
 ## Next architecture step
 
