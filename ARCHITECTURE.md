@@ -1,8 +1,8 @@
-# Football Simulator v1.0 architecture
+# Football Simulator v1.1 architecture
 
 ## Runtime and delivery
 
-The v1.0 build is a dependency-free H5/PWA application. `index.html` loads the local UI, the Dongqiudi snapshot, and the simulation engine. Browser `localStorage` stores careers and MOD packs. `service-worker.js` caches the local runtime, trophies, and all 198 club badges for offline use after the first HTTP visit.
+The v1.1 build is a dependency-free H5/PWA application. `index.html` loads the local UI, the Dongqiudi snapshot, and the simulation engine. Browser `localStorage` stores indexed career slots and MOD packs. `service-worker.js` caches the local runtime, trophies, and all 198 club badges for offline use after the first HTTP visit.
 
 ## Data boundaries
 
@@ -23,7 +23,7 @@ The v1.0 build is a dependency-free H5/PWA application. `index.html` loads the l
 
 ```json
 {
-  "version": 25,
+  "version": 27,
   "role": "coach | player",
   "date": "2026-08-01",
   "season": 2026,
