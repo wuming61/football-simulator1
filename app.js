@@ -3316,7 +3316,7 @@
   }
 
   function registerControlledDecisionGoal(m,player) {
-    scoreForUs(m);addPlayerEvent(m,player,"goals",1.2);return player;
+    scoreForUs(m);addPlayerEvent(m,player,"goals",1.2);m.lastGoalDetail={team:"ours",scorerId:player.id,scorerName:player.name,assisterId:null,assisterName:null};return player;
   }
 
   function resolvePlayerDecision(m,decision,event) {
@@ -3755,7 +3755,7 @@
     }
     if(!onTarget){if(xg>=.24)ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,shooter.id).bigChancesMissed++;const corner=Math.random()<clamp(.2+(defence-65)*.003,.18,.38);if(corner)stats.corners++;setMatchVisualAction(m,teamKey,"shot",`${shooter.name} 完成射门`);const missTemplates=corner?[`${shooter.name} 的射门被后卫封堵后出了底线。`,`${creator&&creator!==shooter?`${creator.name} 送出传球，`:""}${shooter.name} 起脚，防守球员伸腿将球挡出。`,`${shooter.name} 在禁区边缘尝试远射，皮球折射出底线。`]:[`${creator&&creator!==shooter?`${creator.name} 送出传球，`:""}${shooter.name} 的射门稍稍偏出。`,`${shooter.name} 在防守压力下起脚，皮球高出横梁。`,`${shooter.name} 抢到落点，但仓促攻门没有压住。`,`${shooter.name} 从肋部内切后低射，皮球擦柱而出。`];m.commentary.push({minute:m.minute,text:missTemplates[Math.floor(rand(0,missTemplates.length))]});return true;}
     stats.onTarget++;const defendingKey=opponent?"ours":"opponent",keeper=activeMatchPlayers(m,defendingKey).find(player=>player.position==="GK"),keeperSkill=keeper?effectiveMatchAttribute(keeper,"goalkeeping",m,defendingKey):60,finishingEdge=clamp(1+(shooterSkill-keeperSkill)*.008+strengthEdge*.008,.58,1.45),goalChance=clamp(xg*finishingEdge,.015,.62),goal=Math.random()<clamp(goalChance/targetChance,.04,.78);
-    if(goal){const scorer=opponent?registerOpponentGoal(m,shooter,creator):registerOurGoal(m,shooter,creator);setMatchVisualAction(m,teamKey,"goal",`${scorer.name} 破门`);m.commentary.push({minute:m.minute,text:`进球！${creator&&creator!==scorer?`${creator.name} 创造机会，`:""}${scorer.name} 用${shooterSkill>=84?"高质量":"果断"}射门攻破球门。`});}
+    if(goal){const scorer=opponent?registerOpponentGoal(m,shooter,creator):registerOurGoal(m,shooter,creator),assister=m.lastGoalDetail?.team===teamKey?m.lastGoalDetail.assisterName:null;setMatchVisualAction(m,teamKey,"goal",`${scorer.name} 破门`);m.commentary.push({minute:m.minute,text:`进球！${assister?`${assister} 送出助攻，`:""}${scorer.name} 用${shooterSkill>=84?"高质量":"果断"}射门攻破球门。`});}
     else{if(xg>=.28)ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,shooter.id).bigChancesMissed++;registerGoalkeeperSave(m,!opponent,xg);setMatchVisualAction(m,teamKey,"save",`${shooter.name} 的射门被扑出`);m.commentary.push({minute:m.minute,text:`${shooter.name} 的射门命中目标，${keeper?.name||"门将"} 完成扑救。`});}
     return true;
   }
@@ -3887,14 +3887,21 @@
     event[type]=(event[type]||0)+1;event.ratingDelta=Number(((event.ratingDelta||0)+delta).toFixed(2));adjustRating(m.opponentRatings,player.id,delta);
   }
 
+  const MATCH_ASSIST_RATES={created:.86,unstructured:.68};
+
+  function selectGoalAssister(lineup,scorer,selectedAssister=null) {
+    const assistPool=lineup.filter(player=>player.id!==scorer.id&&player.position!=="GK");if(!assistPool.length)return null;
+    const preferred=selectedAssister?assistPool.find(player=>player.id===selectedAssister.id):null,rate=preferred?MATCH_ASSIST_RATES.created:MATCH_ASSIST_RATES.unstructured;if(Math.random()>=rate)return null;
+    return preferred||weightedPick(assistPool,player=>attackRoleWeight(player.position,true)*Math.pow(matchAttribute(player,"passing")/70,2.1));
+  }
+
   function registerOurGoal(m,selectedScorer=null,selectedAssister=null) {
     scoreForUs(m);const lineup=m.lineupIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(Boolean);
     if(!lineup.length)return {name:"本队球员"};
     const attackers=lineup.filter(player=>["ST","RW","LW","WG","AM","CM"].includes(player.position)),pool=attackers.length?attackers:lineup;
     const scorer=selectedScorer||weightedPick(pool,player=>attackRoleWeight(player.position,false)*Math.pow(matchAttribute(player,"shooting")/70,2.2));
     addPlayerEvent(m,scorer,"goals",1.2);
-    const assistPool=lineup.filter(player=>player!==scorer&&player.position!=="GK");
-    if(assistPool.length&&Math.random()<.74){const assister=selectedAssister&&selectedAssister!==scorer?selectedAssister:weightedPick(assistPool,player=>attackRoleWeight(player.position,true)*Math.pow(matchAttribute(player,"passing")/70,2.1));addPlayerEvent(m,assister,"assists",.7);}
+    const assister=selectGoalAssister(lineup,scorer,selectedAssister);if(assister)addPlayerEvent(m,assister,"assists",.7);m.lastGoalDetail={team:"ours",scorerId:scorer.id,scorerName:scorer.name,assisterId:assister?.id||null,assisterName:assister?.name||null};
     if(Math.random()<.22){const defenders=m.opponentLineupIds.map(id=>m.opponentPlayers.find(player=>player.id===id)).filter(player=>player&&["GK","CB","DF","FB","RB","LB","DM"].includes(player.position));const mistake=defenders[Math.floor(rand(0,defenders.length))];if(mistake){addOpponentEvent(m,mistake,"mistakes",-1);ensureMatchEvent(m.opponentEvents,mistake.id).errorsLeadingToGoal++;}}
     return scorer;
   }
@@ -3903,7 +3910,7 @@
     scoreForOpponent(m);const lineup=m.opponentLineupIds.map(id=>m.opponentPlayers.find(player=>player.id===id)).filter(Boolean);
     if(!lineup.length)return {name:"对手球员"};
     const attackers=lineup.filter(player=>["ST","RW","LW","WG","AM","CM"].includes(player.position)),pool=attackers.length?attackers:lineup,scorer=selectedScorer||weightedPick(pool,player=>attackRoleWeight(player.position,false)*Math.pow(matchAttribute(player,"shooting")/70,2.2));addOpponentEvent(m,scorer,"goals",1.2);
-    const assistPool=lineup.filter(player=>player!==scorer&&player.position!=="GK");if(assistPool.length&&Math.random()<.72){const assister=selectedAssister&&selectedAssister!==scorer?selectedAssister:weightedPick(assistPool,player=>attackRoleWeight(player.position,true)*Math.pow(matchAttribute(player,"passing")/70,2.1));addOpponentEvent(m,assister,"assists",.7);}
+    const assister=selectGoalAssister(lineup,scorer,selectedAssister);if(assister)addOpponentEvent(m,assister,"assists",.7);m.lastGoalDetail={team:"opponent",scorerId:scorer.id,scorerName:scorer.name,assisterId:assister?.id||null,assisterName:assister?.name||null};
     if(Math.random()<.2){const defenders=m.lineupIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(player=>player&&["GK","CB","DF","FB","RB","LB","DM"].includes(player.position));const mistake=defenders[Math.floor(rand(0,defenders.length))];if(mistake){addPlayerEvent(m,mistake,"mistakes",-1);ensureMatchEvent(m.playerEvents,mistake.id).errorsLeadingToGoal++;}}
     return scorer;
   }
