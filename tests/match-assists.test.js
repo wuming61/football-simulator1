@@ -11,7 +11,7 @@ const context={console,Intl,Date,Math:seededMath,setTimeout,clearTimeout,setInte
 context.window=context;vm.createContext(context);vm.runInContext(fs.readFileSync(path.join(root,"data/dongqiudi-data.js"),"utf8"),context);
 let source=fs.readFileSync(path.join(root,"app.js"),"utf8");
 source=source.replace(/\n  render\(\);\n\}\)\(\);\s*$/,`
-  Object.assign(window.__test,{CLUBS,createSquad,emptyMatchEvent,registerOurGoal,registerOpponentGoal,setTestState:value=>{state=value;}});
+  Object.assign(window.__test,{CLUBS,createSquad,emptyMatchEvent,registerOurGoal,registerOpponentGoal,selectAttackPlayer,setTestState:value=>{state=value;}});
 })();
 `);
 vm.runInContext(source,context);
@@ -37,4 +37,16 @@ assert.ok(Math.abs(opponentRatio-createdRatio)<.04,`both teams must use the same
 assert.equal(opponentMatch.lastGoalDetail.team,"opponent");
 assert.equal(opponentMatch.lastGoalDetail.scorerId,opponentScorer.id);
 
-console.log(`match assist tests passed: created ${createdRatio.toFixed(3)}, unstructured ${unstructuredRatio.toFixed(3)}, opponent ${opponentRatio.toFixed(3)}`);
+const positions=["GK","RB","CB","CB","LB","DM","CM","CM","RW","LW","ST"],balancedLineup=positions.map((position,index)=>({id:`distribution-${index}`,name:`Distribution ${index}`,position,overall:76,passing:76,dribbling:76,pace:76,shooting:76,fitness:90,morale:78}));
+api.setTestState({role:"coach",clubId:club.id,squad:balancedLineup,controlledId:null});
+const distributionMatch={fixture:{home:true,international:false},minute:45,substitutions:[],controlledMatchPlan:"balanced",lineupIds:balancedLineup.map(player=>player.id),ourPlayers:balancedLineup,playerEvents:{},liveRatings:Object.fromEntries(balancedLineup.map(player=>[player.id,6]))},providerPositions={};
+for(let index=0;index<8000;index++){const scorer=api.selectAttackPlayer(distributionMatch,"ours",false),provider=api.selectAttackPlayer(distributionMatch,"ours",true,scorer);assert.notEqual(provider.id,scorer.id,"the scorer cannot also be credited as the final-pass creator");providerPositions[provider.position]=(providerPositions[provider.position]||0)+1;}
+const frontlineAssists=["RW","LW","WG","ST","CF"].reduce((sum,position)=>sum+Number(providerPositions[position]||0),0),frontlineShare=frontlineAssists/8000,strikerShare=Number(providerPositions.ST||0)/8000;
+assert.ok(frontlineShare>=.46&&frontlineShare<=.64,`front-line players must create a realistic share of chances, received ${(frontlineShare*100).toFixed(1)}%`);
+assert.ok(strikerShare>=.045,`centre-forwards must remain meaningful assist providers, received ${(strikerShare*100).toFixed(1)}%`);
+const fallbackMatch={fixture:{home:true,international:false},minute:1,home:0,away:0,lineupIds:balancedLineup.map(player=>player.id),ourPlayers:balancedLineup,opponentLineupIds:[],opponentPlayers:[],playerEvents:{},opponentEvents:{},liveRatings:Object.fromEntries(balancedLineup.map(player=>[player.id,6])),opponentRatings:{},scoreTimeline:[]},frontlineScorers=balancedLineup.filter(player=>["RW","LW","ST"].includes(player.position));
+for(let index=0;index<6000;index++)api.registerOurGoal(fallbackMatch,frontlineScorers[index%frontlineScorers.length],null);
+const fallbackAssistTotal=total(fallbackMatch.playerEvents,"assists"),fallbackFrontlineAssists=frontlineScorers.reduce((sum,player)=>sum+Number(fallbackMatch.playerEvents[player.id]?.assists||0),0),fallbackFrontlineShare=fallbackFrontlineAssists/Math.max(1,fallbackAssistTotal);
+assert.ok(fallbackFrontlineShare>=.42,`fallback assist attribution must not collapse back into midfield concentration, received ${(fallbackFrontlineShare*100).toFixed(1)}%`);
+
+console.log(`match assist tests passed: created ${createdRatio.toFixed(3)}, unstructured ${unstructuredRatio.toFixed(3)}, opponent ${opponentRatio.toFixed(3)}, front line ${(frontlineShare*100).toFixed(1)}%, striker ${(strikerShare*100).toFixed(1)}%, fallback front line ${(fallbackFrontlineShare*100).toFixed(1)}%`);

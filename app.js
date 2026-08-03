@@ -3913,8 +3913,15 @@
   }
 
   function attackRoleWeight(position,creator=false) {
-    if(creator)return ({GK:.08,CB:.42,DF:.42,RB:.92,LB:.92,FB:.92,DM:1.05,CM:1.8,MF:1.8,AM:2.35,RW:2.05,LW:2.05,WG:2.05,ST:1.15,CF:1.35})[position]||1;
+    if(creator)return ({GK:.05,CB:.25,DF:.25,RB:.85,LB:.85,FB:.85,DM:.75,CM:1.3,MF:1.3,AM:2.15,RW:2.75,LW:2.75,WG:2.75,ST:1.9,CF:2.2})[position]||1;
     return ({GK:.02,CB:.22,DF:.22,RB:.5,LB:.5,FB:.5,DM:.55,CM:.8,MF:.8,AM:1.55,RW:2.05,LW:2.05,WG:2.05,ST:3.1,CF:2.8})[position]||1;
+  }
+
+  function assistPartnershipWeight(providerPosition,scorerPosition) {
+    if(["ST","CF"].includes(scorerPosition))return ["RW","LW","WG"].includes(providerPosition)?1.2:["AM"].includes(providerPosition)?1.1:["ST","CF"].includes(providerPosition)?.86:1;
+    if(["RW","LW","WG"].includes(scorerPosition))return ["ST","CF"].includes(providerPosition)?1.38:["RB","LB","FB"].includes(providerPosition)?1.12:providerPosition==="AM"?1.06:1;
+    if(scorerPosition==="AM")return ["ST","CF"].includes(providerPosition)?1.22:["RW","LW","WG"].includes(providerPosition)?1.12:1;
+    return ["ST","CF"].includes(providerPosition)?1.12:["RW","LW","WG"].includes(providerPosition)?1.08:1;
   }
 
   function teamMatchQuality(m,teamKey,mode) {
@@ -3948,7 +3955,8 @@
       const passing=effectiveMatchAttribute(player,"passing",m,teamKey),dribbling=effectiveMatchAttribute(player,"dribbling",m,teamKey),pace=effectiveMatchAttribute(player,"pace",m,teamKey),shooting=effectiveMatchAttribute(player,"shooting",m,teamKey);
       const skill=creator?passing*.6+dribbling*.28+pace*.12:shooting*.68+pace*.18+dribbling*.14;
       const opponent=teamKey==="opponent",event=ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,player.id),usage=creator?Number(event.keyPasses||0):Number(event.shots||0),usageBalance=1/(1+usage*(creator ? .075 : .18)),controlledBoost=teamKey==="ours"&&state.role==="player"&&player.id===state.controlledId?controlledPlayerInvolvementBoost(m,creator):1;
-      return usageBalance*controlledBoost*attackRoleWeight(player.position,creator)*Math.pow(clamp(skill/70,.45,1.5),2.35);
+      const partnership=creator&&exclude?assistPartnershipWeight(player.position,exclude.position):1;
+      return usageBalance*controlledBoost*attackRoleWeight(player.position,creator)*partnership*Math.pow(clamp(skill/70,.45,1.5),2.35);
     });
   }
 
@@ -3969,7 +3977,7 @@
   function simulateTeamAttack(m,teamKey) {
     const opponent=teamKey==="opponent",possession=opponent?100-m.possession:m.possession,attack=teamMatchQuality(m,teamKey,"attack"),defence=teamMatchQuality(m,opponent?"ours":"opponent","defence"),strengthEdge=matchStrengthEdge(m,teamKey),dominance=Math.sign(strengthEdge)*Math.pow(Math.abs(strengthEdge)/10,1.25),plan=m.aiTacticalPlans?.[teamKey]||"balanced",planModifier=({press:.012,push:.02,counter:-.004,protect:-.028,balanced:0})[plan]||0,risk=teamKey==="ours"?Number(m.decisionRisk||0):-Number(m.decisionRisk||0);
     const chance=clamp(.118+(possession-50)*.0016+(attack-defence)*.0025+strengthEdge*.0025+dominance*.008+planModifier+risk*.0012,.035,.29);if(Math.random()>=chance)return false;
-    const creator=selectAttackPlayer(m,teamKey,true),shooter=selectAttackPlayer(m,teamKey,false);if(!shooter)return false;
+    const shooter=selectAttackPlayer(m,teamKey,false);if(!shooter)return false;const creator=selectAttackPlayer(m,teamKey,true,shooter);
     const shooterSkill=effectiveMatchAttribute(shooter,"shooting",m,teamKey),creatorSkill=creator?effectiveMatchAttribute(creator,"passing",m,teamKey):attack,pace=effectiveMatchAttribute(shooter,"pace",m,teamKey),defencePressure=defence-70;
     const xg=clamp(rand(.025,.16)+(shooterSkill-70)*.0015+(creatorSkill-70)*.0008+(pace-70)*.0004-defencePressure*.001+strengthEdge*.0014+Math.max(0,dominance)*.006,.015,.48),stats=m.stats[teamKey];stats.shots++;stats.xg=Number((stats.xg+xg).toFixed(2));if(teamKey==="ours")m.shots=stats.shots;
     const targetChance=clamp(.29+(shooterSkill-68)*.0045+xg*.35-(defence-70)*.0012,.2,.6),onTarget=Math.random()<targetChance;recordShot(m,teamKey,shooter,onTarget);recordChanceCreation(m,teamKey,creator,shooter);
@@ -3978,7 +3986,7 @@
     }
     if(!onTarget){if(xg>=.24)ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,shooter.id).bigChancesMissed++;const corner=Math.random()<clamp(.2+(defence-65)*.003,.18,.38);if(corner)stats.corners++;setMatchVisualAction(m,teamKey,"shot",`${shooter.name} 完成射门`);const missTemplates=corner?[`${shooter.name} 的射门被后卫封堵后出了底线。`,`${creator&&creator!==shooter?`${creator.name} 送出传球，`:""}${shooter.name} 起脚，防守球员伸腿将球挡出。`,`${shooter.name} 在禁区边缘尝试远射，皮球折射出底线。`]:[`${creator&&creator!==shooter?`${creator.name} 送出传球，`:""}${shooter.name} 的射门稍稍偏出。`,`${shooter.name} 在防守压力下起脚，皮球高出横梁。`,`${shooter.name} 抢到落点，但仓促攻门没有压住。`,`${shooter.name} 从肋部内切后低射，皮球擦柱而出。`];m.commentary.push({minute:m.minute,text:missTemplates[Math.floor(rand(0,missTemplates.length))]});return true;}
     stats.onTarget++;const defendingKey=opponent?"ours":"opponent",keeper=activeMatchPlayers(m,defendingKey).find(player=>player.position==="GK"),keeperSkill=keeper?effectiveMatchAttribute(keeper,"goalkeeping",m,defendingKey):60,finishingEdge=clamp(1+(shooterSkill-keeperSkill)*.008+strengthEdge*.008,.58,1.45),goalChance=clamp(xg*finishingEdge,.015,.62),goal=Math.random()<clamp(goalChance/targetChance,.04,.78);
-    if(goal){const scorer=opponent?registerOpponentGoal(m,shooter,creator):registerOurGoal(m,shooter,creator),assister=m.lastGoalDetail?.team===teamKey?m.lastGoalDetail.assisterName:null;setMatchVisualAction(m,teamKey,"goal",`${scorer.name} 破门`);m.commentary.push({minute:m.minute,text:`进球！${assister?`${assister} 送出助攻，`:""}${scorer.name} 用${shooterSkill>=84?"高质量":"果断"}射门攻破球门。`});}
+    if(goal){const scorer=opponent?registerOpponentGoal(m,shooter,creator):registerOurGoal(m,shooter,creator),assisterId=m.lastGoalDetail?.team===teamKey?m.lastGoalDetail.assisterId:null,assister=assisterId?activeMatchPlayers(m,teamKey).find(player=>player.id===assisterId):null,assistLead=assistCommentaryLead(assister,scorer);setMatchVisualAction(m,teamKey,"goal",`${scorer.name} 破门`);m.commentary.push({minute:m.minute,text:`进球！${assistLead?`${assistLead}，`:""}${scorer.name} 用${shooterSkill>=84?"高质量":"果断"}射门攻破球门。`});}
     else{if(xg>=.28)ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,shooter.id).bigChancesMissed++;registerGoalkeeperSave(m,!opponent,xg);setMatchVisualAction(m,teamKey,"save",`${shooter.name} 的射门被扑出`);m.commentary.push({minute:m.minute,text:`${shooter.name} 的射门命中目标，${keeper?.name||"门将"} 完成扑救。`});}
     return true;
   }
@@ -4112,10 +4120,14 @@
 
   const MATCH_ASSIST_RATES={created:.86,unstructured:.68};
 
+  function assistCommentaryLead(assister,scorer) {
+    if(!assister)return "";if(["ST","CF"].includes(assister.position))return `${assister.name} 回撤做球送出助攻`;if(["RW","LW","WG"].includes(assister.position))return `${assister.name} 从边路送出传中助攻`;if(["RB","LB","FB"].includes(assister.position))return `${assister.name} 套边后送出助攻`;if(assister.position==="AM")return `${assister.name} 在禁区前沿送出直塞助攻`;return `${assister.name} 送出最后一传`;
+  }
+
   function selectGoalAssister(lineup,scorer,selectedAssister=null) {
     const assistPool=lineup.filter(player=>player.id!==scorer.id&&player.position!=="GK");if(!assistPool.length)return null;
     const preferred=selectedAssister?assistPool.find(player=>player.id===selectedAssister.id):null,rate=preferred?MATCH_ASSIST_RATES.created:MATCH_ASSIST_RATES.unstructured;if(Math.random()>=rate)return null;
-    return preferred||weightedPick(assistPool,player=>attackRoleWeight(player.position,true)*Math.pow(matchAttribute(player,"passing")/70,2.1));
+    return preferred||weightedPick(assistPool,player=>attackRoleWeight(player.position,true)*assistPartnershipWeight(player.position,scorer.position)*Math.pow(matchAttribute(player,"passing")/70,2.1));
   }
 
   function registerOurGoal(m,selectedScorer=null,selectedAssister=null) {
