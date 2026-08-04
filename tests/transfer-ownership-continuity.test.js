@@ -1,0 +1,17 @@
+"use strict";
+
+const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
+const root=path.resolve(__dirname,".."),elements={app:{innerHTML:""},"toast-region":{appendChild:()=>{}},"busy-region":{setAttribute:()=>{},innerHTML:""}},context={console,Intl,Date,Math,setTimeout,clearTimeout,setInterval,clearInterval,localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}},document:{getElementById:id=>elements[id]||null,querySelectorAll:()=>[],createElement:()=>({remove:()=>{}})},navigator:{},addEventListener:()=>{},__test:{}};context.window=context;vm.createContext(context);
+vm.runInContext(fs.readFileSync(path.join(root,"data/dongqiudi-data.js"),"utf8"),context);
+let source=fs.readFileSync(path.join(root,"app.js"),"utf8");source=source.replace(/\n  render\(\);\n\}\)\(\);\s*$/,`\n  Object.assign(window.__test,{CLUBS,REAL_PLAYERS,createTransferMarket,repairTransferOwnership,currentPlayerClubId,completeTransfer,playerProfileData,setTestState:value=>{state=value;}});\n})();\n`);vm.runInContext(source,context);
+
+const api=context.__test,player=api.REAL_PLAYERS.find(item=>item.club&&item.id),origin=api.CLUBS.find(item=>item.id===player.club),destinations=api.CLUBS.filter(club=>club.id!==origin.id).slice(0,3),[firstClub,secondClub,thirdClub]=destinations;
+const first={id:"legacy-first",season:2028,windowKey:"summer-2028",date:"2029-09-05",playerId:player.id,playerName:player.name,fromId:origin.id,toId:firstClub.id,fee:14.6,careerSegment:{clubId:origin.id,club:origin.name,dataUnavailable:true}};
+const brokenSecond={id:"legacy-second",season:2030,windowKey:"winter-2031",date:"2031-01-18",playerId:player.id,playerName:player.name,fromId:origin.id,toId:secondClub.id,fee:17.1,careerSegment:{clubId:origin.id,club:origin.name,dataUnavailable:true}};
+const save={version:38,role:"coach",clubId:thirdClub.id,controlledId:null,squad:[],season:2031,date:"2031-07-01",funds:9999,media:[],notifications:[],transferRequestsLog:[],transferHistory:[brokenSecond,first],transferMarket:api.createTransferMarket(2031)};Object.keys(save.transferMarket.budgets).forEach(id=>{save.transferMarket.budgets[id]=9999;});api.setTestState(save);
+
+api.repairTransferOwnership(save,save.transferMarket);assert.equal(brokenSecond.fromId,firstClub.id,"a later transfer must start at the previous destination");assert.equal(brokenSecond.careerSegment.clubId,firstClub.id,"the repaired career segment must use the actual selling club");assert.equal(api.currentPlayerClubId(save,player),secondClub.id,"current ownership must survive a fresh seasonal market");
+const profile=api.playerProfileData(player);assert.equal(profile.clubId,secondClub.id);assert.equal(profile.transferHistory[1].fromId,firstClub.id,"the player profile must show the repaired transfer chain");
+const rumor={id:"third-rumor",season:2031,windowKey:"summer-2031",status:"active",confidence:100,playerId:player.id,playerName:player.name,position:player.position,overall:player.overall,potential:player.potential,fromId:secondClub.id,toId:thirdClub.id,fee:20,reason:"连续转会归属测试"};assert.equal(api.completeTransfer(save,rumor,save.date,true),true,"the player must remain transferable from the actual current club");const third=save.transferHistory[0];assert.equal(third.fromId,secondClub.id);assert.equal(third.toId,thirdClub.id);assert.equal(api.currentPlayerClubId(save,player),thirdClub.id);
+
+console.log(`transfer ownership continuity tests passed: ${origin.name} -> ${firstClub.name} -> ${secondClub.name} -> ${thirdClub.name}`);

@@ -1151,7 +1151,7 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:38, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:39, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
@@ -1260,10 +1260,12 @@
     if ((saved.version || 1) < 6) saved.version=6;
     if(previousVersion<38||!saved.majorLeagueWorld)rebuildMajorLeagueWorld(saved);else simulateMajorLeagueWorld(saved,saved.date||START_DATE);
     saved.majorLeagueId=saved.majorLeagueWorld.leagues[saved.majorLeagueId]?saved.majorLeagueId:clubById(saved.clubId).league;
-    if(previousVersion<8||!saved.transferMarket){saved.transferMarket=createTransferMarket(saved.season||2026);simulateTransferMarket(saved,saved.date||START_DATE);}
+    saved.transferHistory=Array.isArray(saved.transferHistory)?saved.transferHistory:[];if(saved.transferMarket)repairTransferOwnership(saved,saved.transferMarket);
+    if(previousVersion<8||!saved.transferMarket){saved.transferMarket=createTransferMarket(saved.season||2026);repairTransferOwnership(saved,saved.transferMarket);simulateTransferMarket(saved,saved.date||START_DATE);}
     else if(previousVersion<10)rebuildTransferMarketFromPostOpeningActivity(saved);
     else simulateTransferMarket(saved,saved.date||START_DATE);
     const historicalTransfers=[...(Array.isArray(saved.transferHistory)?saved.transferHistory:[]),...(saved.transferMarket?.records||[])],uniqueTransfers=new Map();historicalTransfers.forEach(record=>uniqueTransfers.set(record.id,record));saved.transferHistory=[...uniqueTransfers.values()].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,500);
+    repairTransferOwnership(saved,saved.transferMarket);
     saved.transferHistory.forEach(record=>{record.careerHistory=Array.isArray(record.careerHistory)?record.careerHistory:[];record.careerSegment||={id:`career-legacy-transfer-${record.id}`,season:record.season||saved.season,club:clubById(record.fromId).name,clubId:record.fromId,appearances:0,goals:0,assists:0,average:0,overallStart:record.overall,overallEnd:record.overall,change:0,partialSeason:true,endDate:record.date,dataUnavailable:true};});
     if(previousVersion<17&&saved.role==="player"){
       const player=saved.squad.find(item=>item.id===saved.controlledId);saved.schedule=(saved.schedule||[]).filter(item=>!item.international||item.status==="played");
@@ -1286,7 +1288,7 @@
     ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
     ensureMarketValuation(saved);
     ensureClubFinances(saved);
-    saved.version=38;
+    saved.version=39;
     return saved;
   }
   function saveState() {
@@ -2201,6 +2203,21 @@
     return {season,currentDate:openingDate,nextTickDate:addDays(openingDate,transferTickDelay(openingDate,season)),records:[],rumors:[],userOffers:[],clubOverrides:{},budgets:openingBudgets?{...openingBudgets}:Object.fromEntries(CLUBS.map(club=>[club.id,Number(club.budget)||10])),sequence:0};
   }
 
+  function transferOwnershipSignature(save,market) {
+    const edge=records=>records.length?`${records.length}:${records[0]?.id||""}:${records[0]?.fromId||""}:${records[0]?.toId||""}:${records.at(-1)?.id||""}`:"0";
+    return `${edge(save?.transferHistory||[])}|${edge(market?.records||[])}`;
+  }
+
+  function repairTransferOwnership(save,market=save?.transferMarket) {
+    if(!save||!market)return {};
+    market.records=Array.isArray(market.records)?market.records:[];market.clubOverrides=market.clubOverrides&&typeof market.clubOverrides==="object"?market.clubOverrides:{};
+    const signature=transferOwnershipSignature(save,market);if(market.ownershipHistorySignature===signature)return market.clubOverrides;
+    const references=new Map(),unique=new Map();[...(save.transferHistory||[]),...market.records].forEach(record=>{if(!record?.toId)return;const key=record.id||`${record.playerId}|${record.date}|${record.toId}`;if(!references.has(key))references.set(key,[]);references.get(key).push(record);if(!unique.has(key))unique.set(key,record);});
+    const groups=new Map();unique.forEach((record,key)=>{const playerId=record.playerId||record.sourcePlayerId;if(!playerId)return;if(!groups.has(playerId))groups.set(playerId,[]);groups.get(playerId).push({key,record});});
+    groups.forEach((entries,playerId)=>{entries.sort((a,b)=>String(a.record.date||"").localeCompare(String(b.record.date||""))||String(a.record.id||"").localeCompare(String(b.record.id||"")));const canonical=REAL_PLAYERS.find(player=>player.id===playerId);let currentClubId=canonical?.club||entries[0]?.record.fromId||null;entries.forEach(({key,record})=>{const oldFromId=record.fromId;if(currentClubId&&oldFromId!==currentClubId){(references.get(key)||[record]).forEach(copy=>{copy.fromId=currentClubId;if(copy.careerSegment&&(!copy.careerSegment.clubId||copy.careerSegment.clubId===oldFromId)){copy.careerSegment.clubId=currentClubId;copy.careerSegment.club=clubById(currentClubId).name;}});}currentClubId=record.toId||currentClubId;});if(currentClubId)market.clubOverrides[playerId]=currentClubId;});
+    market.ownershipHistorySignature=transferOwnershipSignature(save,market);return market.clubOverrides;
+  }
+
   function transferSeasonOpening(season=2026) {
     return season===2026?START_DATE:`${season}-06-15`;
   }
@@ -2214,7 +2231,7 @@
     );
     market.records=market.records.filter(record=>record.date>=transferSeasonOpening(record.season||market.season)&&!cameFromPreOpeningRumor(record));
     market.rumors=oldRumors.filter(rumor=>(rumor.createdDate||"")>=transferSeasonOpening(rumor.season||market.season));
-    market.clubOverrides={};
+    market.clubOverrides={};delete market.ownershipHistorySignature;
     market.budgets=Object.fromEntries(CLUBS.map(club=>[club.id,Number(club.budget)||10]));
     [...market.records].sort((a,b)=>a.date.localeCompare(b.date)).forEach(record=>{
       market.clubOverrides[record.playerId]=record.toId;
@@ -2227,12 +2244,13 @@
     save.media=(save.media||[]).filter(item=>item.type!=="transfer"||(item.date||openingDate)>=openingDate);
     market.currentDate=save.date||openingDate;
     market.nextTickDate=addDays(market.currentDate,transferTickDelay(market.currentDate,market.season));
+    repairTransferOwnership(save,market);
   }
 
   function ensureTransferMarket(save) {
     const market=save.transferMarket||(save.transferMarket=createTransferMarket(save.season||2026));
     market.records=Array.isArray(market.records)?market.records:[];market.rumors=Array.isArray(market.rumors)?market.rumors:[];market.userOffers=Array.isArray(market.userOffers)?market.userOffers:[];market.clubOverrides||={};market.budgets||={};market.sequence??=0;
-    CLUBS.forEach(club=>{market.budgets[club.id]??=Number(club.budget)||10;});
+    CLUBS.forEach(club=>{market.budgets[club.id]??=Number(club.budget)||10;});repairTransferOwnership(save,market);
     return market;
   }
 
@@ -4918,7 +4936,7 @@
     const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3),retiredPlayers=collectSeasonRetirements(state,state.season);if(retiredPlayers.length)state.squad=state.squad.filter(player=>!retiredPlayers.includes(player));
     returnControlledPlayerFromLoan();
     const nextSeasonFinances=seasonFinancePlans(state,state.season+1,previousClubLeaguePositions(state));
-    state.season++;state.date=transitionDate;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season,nextSeasonFinances.budgets);state.funds=Number(nextSeasonFinances.budgets[state.clubId]||clubById(state.clubId).budget||10);const financeReport=activateSeasonFinances(state,nextSeasonFinances,state.date);simulateTransferMarket(state,state.date);
+    state.season++;state.date=transitionDate;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season,nextSeasonFinances.budgets);repairTransferOwnership(state,state.transferMarket);state.funds=Number(nextSeasonFinances.budgets[state.clubId]||clubById(state.clubId).budget||10);const financeReport=activateSeasonFinances(state,nextSeasonFinances,state.date);simulateTransferMarket(state,state.date);
     state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});resetSeasonMarketValueBaseline(state);
     rolloverYouthSeason(state).forEach(graduate=>addNotification({title:`AI 教练提拔青训球员：${graduate.name}`,type:"youth",date:state.date,detail:"教练组根据年龄、当前能力、潜力和一线队名额完成了青训晋升。",facts:[`${playerRoleLabel(graduate.position)} · ${graduate.age} 岁`,`当前能力：${graduate.overall}`,`合同角色：${graduate.contract.role}`]}));
     if(state.role==="player"){
