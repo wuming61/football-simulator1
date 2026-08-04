@@ -21,12 +21,13 @@ const fixture={id:"state-event-fixture",date:"2026-08-10",competition:"欧冠",r
 const state={version:29,role:"player",person:controlled.name,clubId:club.id,controlledId:controlled.id,squad,season:2026,date:"2026-08-03",schedule:[fixture],played:0,leaguePosition:1,playerCareer:null,notifications:[],media:[],honors:[],history:[],transferHistory:[]};api.setTestState(state);
 const career=api.ensurePlayerCareer();career.trust=70;career.tactical=72;career.chemistry=72;career.pressure=45;career.relationships.fans=70;career.benchStreak=1;controlled.fitness=80;controlled.morale=74;controlled.lastRating=7.4;
 
-assert.equal(api.PLAYER_STATE_EVENTS.length,12,"the career must provide twelve distinct temporary-state event types");
+assert.equal(api.PLAYER_STATE_EVENTS.length,15,"the career must provide fifteen distinct temporary-state event types");
 assert.ok(api.PLAYER_STATE_EVENTS.every(event=>event.choices.length===3),"every temporary-state event must offer three meaningful choices");
-assert.equal(new Set(api.PLAYER_STATE_EVENTS.map(event=>event.id)).size,12,"temporary-state event ids must be unique");
+assert.equal(new Set(api.PLAYER_STATE_EVENTS.map(event=>event.id)).size,15,"temporary-state event ids must be unique");
 const eligibleIds=api.eligiblePlayerStateEvents().map(event=>event.id);
 for(const expected of ["training-flow","analyst-report","coach-detail","teammate-sync","captain-rally","family-reset","supporters-energy","media-momentum","recovery-breakthrough","bench-spark","big-match-clarity"])assert.ok(eligibleIds.includes(expected),`${expected} must react to the prepared match context`);
 assert.ok(!eligibleIds.includes("keeper-clinic"),"outfield players must not receive goalkeeper-only events");
+assert.ok(api.eligiblePlayerStateEvents(career,{...controlled,fitness:75}).some(event=>event.id==="load-warning"),"fatigue-aware load choices must become available when the player carries a real workload risk");
 
 const basePassing=controlled.passing,baseOverall=controlled.overall,story=api.startPlayerStateEvent(state.date,"analyst-report");
 assert.equal(story.type,"state-boost");assert.equal(api.playerStoryChoices(story).length,3);api.setModal({type:"playerStory"});
