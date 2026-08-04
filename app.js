@@ -36,14 +36,19 @@
   const LEAGUES = {
     ENG1: { name: "英格兰超级联赛", short: "英超", country: "英格兰", tier: 1, matches: 38, cup: "足总杯", extraCup: "联赛杯" },
     ENG2: { name: "英格兰冠军联赛", short: "英冠", country: "英格兰", tier: 2, matches: 46, cup: "足总杯", extraCup: "联赛杯" },
+    ENG3: { name: "英格兰足球甲级联赛", short: "英甲", country: "英格兰", tier: 3, matches: 46, cup: "足总杯", extraCup: "联赛杯" },
     ESP1: { name: "西班牙甲级联赛", short: "西甲", country: "西班牙", tier: 1, matches: 38, cup: "国王杯" },
     ESP2: { name: "西班牙乙级联赛", short: "西乙", country: "西班牙", tier: 2, matches: 42, cup: "国王杯" },
+    ESP3: { name: "西班牙皇家足协甲级联赛", short: "西协甲", country: "西班牙", tier: 3, matches: 38, cup: "国王杯" },
     GER1: { name: "德国甲级联赛", short: "德甲", country: "德国", tier: 1, matches: 34, cup: "德国杯" },
     GER2: { name: "德国乙级联赛", short: "德乙", country: "德国", tier: 2, matches: 34, cup: "德国杯" },
+    GER3: { name: "德国足球丙级联赛", short: "德丙", country: "德国", tier: 3, matches: 38, cup: "德国杯" },
     ITA1: { name: "意大利甲级联赛", short: "意甲", country: "意大利", tier: 1, matches: 38, cup: "意大利杯" },
     ITA2: { name: "意大利乙级联赛", short: "意乙", country: "意大利", tier: 2, matches: 38, cup: "意大利杯" },
+    ITA3: { name: "意大利足球丙级联赛", short: "意丙", country: "意大利", tier: 3, matches: 38, cup: "意大利杯" },
     FRA1: { name: "法国甲级联赛", short: "法甲", country: "法国", tier: 1, matches: 34, cup: "法国杯" },
-    FRA2: { name: "法国乙级联赛", short: "法乙", country: "法国", tier: 2, matches: 34, cup: "法国杯" }
+    FRA2: { name: "法国乙级联赛", short: "法乙", country: "法国", tier: 2, matches: 34, cup: "法国杯" },
+    FRA3: { name: "法国全国联赛", short: "法丙", country: "法国", tier: 3, matches: 34, cup: "法国杯" }
   };
 
   const CLUBS = [
@@ -100,14 +105,19 @@
   const OPPONENTS = {
     ENG1:["Arsenal","Aston Villa","Bournemouth","Brentford","Brighton","Burnley","Chelsea","Crystal Palace","Everton","Fulham","Leeds United","Liverpool","Manchester City","Manchester United","Newcastle United","Nottingham Forest","Sunderland","Tottenham Hotspur","West Ham United","Wolverhampton"],
     ENG2:["Birmingham City","Blackburn Rovers","Bristol City","Charlton Athletic","Coventry City","Derby County","Hull City","Ipswich Town","Leicester City","Middlesbrough","Millwall","Norwich City","Oxford United","Portsmouth","Preston North End","Queens Park Rangers","Sheffield United","Sheffield Wednesday","Southampton","Stoke City","Swansea City","Watford","West Bromwich Albion","Wrexham"],
+    ENG3:["AFC Wimbledon","Barnsley","Blackpool","Bolton Wanderers","Bradford City","Burton Albion","Cardiff City","Doncaster Rovers","Exeter City","Huddersfield Town","Leyton Orient","Lincoln City","Luton Town","Mansfield Town","Northampton Town","Peterborough United","Plymouth Argyle","Port Vale","Reading","Rotherham United","Stevenage","Stockport County","Wigan Athletic","Wycombe Wanderers"],
     ESP1:["Athletic Club","Atlético Madrid","Barcelona","Celta Vigo","Deportivo Alavés","Elche","Espanyol","Getafe","Girona","Levante","Mallorca","Osasuna","Rayo Vallecano","Real Betis","Real Madrid","Real Oviedo","Real Sociedad","Sevilla","Valencia","Villarreal"],
     ESP2:["Albacete","Almería","Burgos","Cádiz","Castellón","Córdoba","Cultural Leonesa","Deportivo La Coruña","Eibar","Granada","Huesca","Las Palmas","Leganés","Málaga","Mirandés","Racing Santander","Real Valladolid","Real Zaragoza","Sporting Gijón","Valladolid Promesas","Ceuta","Andorra"],
+    ESP3:["Alcorcón","Antequera","Arenteiro","Barakaldo","Cartagena","Celta Fortuna","Eldense","Europa","Gimnàstic","Hércules","Ibiza","Lugo","Marbella","Mérida","Ponferradina","Real Murcia","Sabadell","Sanluqueño","Tenerife","Unionistas"],
     GER1:["Augsburg","Bayern München","Bayer Leverkusen","Borussia Dortmund","Borussia Mönchengladbach","Eintracht Frankfurt","Freiburg","Hamburger SV","Heidenheim","Hoffenheim","Köln","Mainz 05","RB Leipzig","St. Pauli","Stuttgart","Union Berlin","Werder Bremen","Wolfsburg"],
     GER2:["Arminia Bielefeld","Bochum","Darmstadt 98","Dynamo Dresden","Elversberg","Fortuna Düsseldorf","Greuther Fürth","Hannover 96","Hertha BSC","Holstein Kiel","Kaiserslautern","Karlsruher SC","Magdeburg","Nürnberg","Paderborn","Preußen Münster","Schalke 04","Südtirol"],
+    GER3:["1860 München","Alemannia Aachen","Energie Cottbus","Erzgebirge Aue","Hansa Rostock","Jahn Regensburg","MSV Duisburg","Rot-Weiss Essen","Saarbrücken","Schweinfurt 05","Stuttgart II","Verl","Viktoria Köln","Waldhof Mannheim","Wehen Wiesbaden","Osnabrück","Ingolstadt","Havelse","Dortmund II","Freiburg II"],
     ITA1:["Atalanta","Bologna","Cagliari","Como","Cremonese","Fiorentina","Genoa","Hellas Verona","Inter","Juventus","Lazio","Lecce","AC Milan","Napoli","Parma","Pisa","Roma","Sassuolo","Torino","Udinese"],
     ITA2:["Avellino","Bari","Carrarese","Catanzaro","Cesena","Empoli","Frosinone","Juve Stabia","Mantova","Modena","Monza","Padova","Palermo","Pescara","Reggiana","Sampdoria","Spezia","Südtirol","Venezia","Virtus Entella"],
+    ITA3:["Arezzo","Ascoli","Audace Cerignola","Benevento","Catania","Crotone","Feralpisalò","Gubbio","Lecco","Novara","Perugia","Pineto","Pontedera","Pro Vercelli","Rimini","Sorrento","Ternana","Triestina","Vicenza","Virtus Verona"],
     FRA1:["Angers","Auxerre","Brest","Le Havre","Lens","Lille","Lorient","Lyon","Marseille","Metz","Monaco","Nantes","Nice","Paris FC","Paris Saint-Germain","Rennes","Strasbourg","Toulouse"],
-    FRA2:["Amiens","Annecy","Bastia","Boulogne","Clermont","Dunkerque","Grenoble","Guingamp","Laval","Le Mans","Montpellier","Nancy","Pau","Red Star","Reims","Rodez","Saint-Étienne","Troyes"]
+    FRA2:["Amiens","Annecy","Bastia","Boulogne","Clermont","Dunkerque","Grenoble","Guingamp","Laval","Le Mans","Montpellier","Nancy","Pau","Red Star","Reims","Rodez","Saint-Étienne","Troyes"],
+    FRA3:["Aubagne","Bourg-Péronnas","Caen","Châteauroux","Concarneau","Dijon","Fleury 91","Le Puy","Orléans","Paris 13 Atletico","Quevilly-Rouen","Rouen","Sochaux","Valenciennes","Versailles","Villefranche","Nancy II","Nîmes"]
   };
 
   const CUP_ROUNDS = {
@@ -221,7 +231,7 @@
     });
     CLUBS.splice(0, CLUBS.length, ...clubs);
     Object.keys(OPPONENTS).forEach(leagueId => {
-      OPPONENTS[leagueId] = DQD_DATA.teams.filter(team => team.leagueId === leagueId).map(team => team.name);
+      const imported=DQD_DATA.teams.filter(team => team.leagueId === leagueId).map(team => team.name);if(imported.length)OPPONENTS[leagueId]=imported;
     });
     REAL_PLAYERS.forEach(player => { player.club = LEGACY_TEAM_MAP[player.club] || player.club; });
     COACHES.forEach(coach => { coach.club = LEGACY_TEAM_MAP[coach.club] || coach.club; });
@@ -245,7 +255,7 @@
       names.forEach((name,index) => {
         if (CLUBS.some(club => comparableClubName(club.name) === comparableClubName(name))) return;
         const tier=LEAGUES[leagueId].tier;
-        const prestige=clamp((tier===1?76:64)+((names.length-index)%7),58,86);
+        const prestige=clamp((tier===1?76:tier===2?64:56)+((names.length-index)%7),52,86);
         CLUBS.push({
           id:`${leagueId.toLowerCase()}-${index+1}`,
           name,
@@ -261,7 +271,8 @@
   }
 
   applyDongqiudiData();
-  if (!DQD_DATA.teams.length) completeClubDirectory();
+  completeClubDirectory();
+  const BASE_CLUB_LEAGUES=Object.fromEntries(CLUBS.map(club=>[club.id,club.league]));
 
   const FIRST = ["Alex","Mateo","Luca","Noah","Daniel","João","Theo","Elias","Samuel","Nico","Leo","Tom","Milan","Iker","Hugo","Ben","Adam","Oscar","Julian","Rafael","Marco","Felix","David","Yanis"];
   const LAST = ["Martin","Silva","Costa","Meyer","Rossi","Bernard","Wilson","Santos","Garcia","Novak","Diallo","Murphy","Keller","Lopez","Marin","Andersson","Ricci","Bauer","Fernandes","Moreau","Taylor","Pereira","Schmidt","Romero"];
@@ -296,6 +307,9 @@
   function icon(name) { return `<i data-lucide="${name}" class="icon" aria-hidden="true"></i>`; }
   function clubById(id) { return CLUBS.find(c => c.id === id) || CLUBS[0]; }
   function leagueOf(club) { return LEAGUES[club.league]; }
+  function resetClubLeagueAssignments() {CLUBS.forEach(club=>{club.league=BASE_CLUB_LEAGUES[club.id]||club.league;});}
+  function applyClubLeagueAssignments(save) {resetClubLeagueAssignments();Object.entries(save?.worldClubLeagues||{}).forEach(([clubId,leagueId])=>{const club=CLUBS.find(item=>item.id===clubId);if(club&&LEAGUES[leagueId])club.league=leagueId;});}
+  function leagueClubNames(leagueId) {const names=CLUBS.filter(club=>club.league===leagueId).map(club=>club.name);return names.length?names:[...(OPPONENTS[leagueId]||[])];}
   function rand(min, max) { return Math.random() * (max - min) + min; }
   function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
   function money(n) { return `€${Number(n).toFixed(n >= 10 ? 1 : 2)}m`; }
@@ -373,15 +387,31 @@
     return `<button type="button" class="club-profile-link" data-club-profile="${token}">${esc(context.label||club.name)}</button>`;
   }
 
-  function clubHonors(club) {
-    const league=leagueOf(club), honors=[];
+  function createWorldHistory() {return {seasons:[],competitions:{},clubHonors:{},promotions:[]};}
+  function ensureWorldHistory(save=state) {
+    if(!save)return createWorldHistory();
+    const history=save.worldHistory||(save.worldHistory=createWorldHistory());history.seasons=Array.isArray(history.seasons)?history.seasons:[];history.competitions=history.competitions&&typeof history.competitions==="object"?history.competitions:{};history.clubHonors=history.clubHonors&&typeof history.clubHonors==="object"?history.clubHonors:{};history.promotions=Array.isArray(history.promotions)?history.promotions:[];
+    save.worldClubLeagues=save.worldClubLeagues&&typeof save.worldClubLeagues==="object"?save.worldClubLeagues:Object.fromEntries(CLUBS.map(club=>[club.id,club.league]));
+    (save.honors||[]).filter(item=>item.scope==="俱乐部").forEach(item=>recordClubHonor(save,save.clubId,item.name,item.season,item.name,{legacy:true}));return history;
+  }
+  function recordClubHonor(save,clubId,name,season,competition=name,details={}) {
+    if(!save||!clubId||!name)return null;const history=save.worldHistory||(save.worldHistory=createWorldHistory());history.clubHonors||={};const records=history.clubHonors[clubId]||=([]),key=`${season}|${name}`;let record=records.find(item=>`${item.season}|${item.name}`===key);if(!record){record={id:`honor-${clubId}-${season}-${comparableClubName(name)}`,clubId,name,competition,season,...details};records.unshift(record);}else Object.assign(record,details);return record;
+  }
+  function recordCompetitionSeason(save,name,record) {const history=ensureWorldHistory(save),records=history.competitions[name]||=([]),existing=records.find(item=>Number(item.season)===Number(record.season));if(existing)Object.assign(existing,record);else records.unshift({...record,name});records.sort((a,b)=>b.season-a.season);history.competitions[name]=records.slice(0,30);return existing||records[0];}
+
+  function historicalClubHonors(club) {
+    const league=LEAGUES[BASE_CLUB_LEAGUES[club.id]]||leagueOf(club), honors=[];
     if (!club) return honors;
     const seed=String(club.id).split("").reduce((sum,ch)=>sum+ch.charCodeAt(0),0);
     const top=Number(club.prestige||0)>=86;
     if (top) honors.push({name:`${league?.name||"国内顶级联赛"}冠军`,count:1+(seed%5),asset:trophyAsset(`${league?.name||"联赛"}冠军`)});
     if (Number(club.prestige||0)>=80) honors.push({name:league?.cup||"国内杯赛",count:1+(seed%3),asset:trophyAsset(league?.cup||"国内杯赛")});
     if (Number(club.prestige||0)>=92) honors.push({name:"洲际赛事冠军",count:1+(seed%2),asset:"continental-cup.png"});
-    return honors;
+    return honors.map(item=>({...item,source:"历史资料",seasons:[]}));
+  }
+  function clubHonors(club) {
+    if(!club)return [];const earned=state?ensureWorldHistory(state).clubHonors[club.id]||[]:[],groups=new Map();
+    historicalClubHonors(club).forEach(item=>groups.set(item.name,{...item}));earned.forEach(record=>{const item=groups.get(record.name)||{name:record.name,count:0,asset:trophyAsset(record.name),source:"存档记录",seasons:[]};item.count=Number(item.count||0)+1;item.seasons=[...new Set([...(item.seasons||[]),record.season])].sort((a,b)=>b-a);item.source=item.source==="历史资料"?"历史资料 + 存档记录":"存档记录";groups.set(record.name,item);});return [...groups.values()].sort((a,b)=>(b.seasons?.[0]||0)-(a.seasons?.[0]||0)||b.count-a.count);
   }
   function addDays(value, days) {
     const d = new Date(`${value}T12:00:00`); d.setDate(d.getDate() + days); return d.toISOString().slice(0,10);
@@ -554,7 +584,7 @@
   }
 
   function leagueHomeNation(club) {
-    return ({ENG1:"英格兰",ENG2:"英格兰",ESP1:"西班牙",ESP2:"西班牙",GER1:"德国",GER2:"德国",ITA1:"意大利",ITA2:"意大利",FRA1:"法国",FRA2:"法国"})[club?.league]||leagueOf(club)?.country||"英格兰";
+    return ({ENG1:"英格兰",ENG2:"英格兰",ENG3:"英格兰",ESP1:"西班牙",ESP2:"西班牙",ESP3:"西班牙",GER1:"德国",GER2:"德国",GER3:"德国",ITA1:"意大利",ITA2:"意大利",ITA3:"意大利",FRA1:"法国",FRA2:"法国",FRA3:"法国"})[club?.league]||leagueOf(club)?.country||"英格兰";
   }
 
   function estimatedYouthDepartment(club) {
@@ -747,7 +777,7 @@
       else if(leagueRank===uclPlaces+3)domesticQualification=EUROPEAN_COMPETITIONS.uecl;
       return [domesticQualification,titleQualification].filter(Boolean).sort((a,b)=>rank[a.key]-rank[b.key])[0]||null;
     }
-    const previous=(state.history||[]).find(item=>item.season===season-1);if(!previous)return titleQualification;
+    const previous=(state.history||[]).find(item=>item.season===season-1);if(!previous||previous.leagueId&&previous.leagueId!==club.league)return titleQualification;
     const uclPlaces=club.league==="FRA1"?3:4;
     if(previous.position<=uclPlaces)domesticQualification=EUROPEAN_COMPETITIONS.ucl;
     else if(previous.position<=uclPlaces+2)domesticQualification=EUROPEAN_COMPETITIONS.uel;
@@ -857,7 +887,7 @@
 
   function generateSchedule(club, season = 2026, careerPlayer=null) {
     const league = leagueOf(club);
-    const opponents = (OPPONENTS[club.league] || []).filter(n => comparableClubName(n)!==comparableClubName(club.name));
+    const opponents = leagueClubNames(club.league).filter(n => comparableClubName(n)!==comparableClubName(club.name));
     const firstLeg=seededShuffle(opponents,`league-first|${season}|${club.id}`),homePattern=leagueHomePattern(firstLeg,`league-home|${season}|${club.id}`),homeByOpponent=new Map(firstLeg.map((name,index)=>[name,homePattern[index]]));
     const secondLeg=seededShuffle(firstLeg,`league-second|${season}|${club.id}`),ordered=[...firstLeg,...secondLeg],dates=leagueRoundDates(club.league,season,league.matches);
     const fixtures = [],start = `${season}-08-08`;
@@ -909,7 +939,7 @@
   }
 
   function drawDomesticOpponent(club, excluded) {
-    const pool=(OPPONENTS[club.league]||[]).filter(name=>comparableClubName(name)!==comparableClubName(club.name)&&!excluded.includes(name));
+    const pool=leagueClubNames(club.league).filter(name=>comparableClubName(name)!==comparableClubName(club.name)&&!excluded.includes(name));
     return pool[Math.floor(rand(0,pool.length))]||"待定对手";
   }
 
@@ -991,7 +1021,7 @@
   const MAJOR_LEAGUE_IDS=["ENG1","ESP1","GER1","ITA1","FRA1"];
 
   function createMajorLeagueWorld(season=2026,userClubId) {
-    const userLeague=clubById(userClubId).league,leagueIds=[...new Set([userLeague,...MAJOR_LEAGUE_IDS])],leagues={};
+    const leagueIds=Object.keys(LEAGUES),leagues={};
     leagueIds.forEach(leagueId=>{
       const clubs=CLUBS.filter(club=>club.league===leagueId).map(club=>({
         id:club.id,name:club.name,code:club.code,sourceId:club.id,prestige:club.prestige,ability:club.prestige,
@@ -1101,6 +1131,7 @@
   }
 
   function createState() {
+    resetClubLeagueAssignments();
     const club = clubById(setup.clubId);
     let controlled = null;
     let person;
@@ -1120,7 +1151,7 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:37, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:38, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
@@ -1131,7 +1162,7 @@
         { source:"Football Daily", title:`${person} 正式开启 ${club.name} 生涯`, body:`新赛季从 2026 年 8 月 1 日开始。外界将密切关注这段生涯的第一步。`, date:START_DATE, type:"career" },
         { source:"The Tactical Room", title:`${club.name} 季前展望：稳定性将决定上限`, body:`球队需要在密集赛程中管理体能，并在两个转会窗口做出准确判断。`, date:START_DATE, type:"analysis" }
       ],
-      honors:[], history:[], notifications:initialNotifications(club,schedule),matchReports:[],squadSort:{key:"position",direction:"asc"},squadSearch:"",fixtureFilter:"all",
+      honors:[], history:[], worldHistory:createWorldHistory(),worldClubLeagues:Object.fromEntries(CLUBS.map(item=>[item.id,item.league])),notifications:initialNotifications(club,schedule),matchReports:[],squadSort:{key:"position",direction:"asc"},squadSearch:"",fixtureFilter:"all",
       activeMatch:null, selectedTransfer:null, transferNegotiations:[],transferRequestsLog:[],transferHistory:[],retired:false,
       playerCareer:setup.role==="player"?createPlayerCareer(controlled,club):null
     };
@@ -1161,7 +1192,9 @@
   function migrateState(saved) {
     if (!saved) return null;
     const previousVersion=saved.version||1;
+    resetClubLeagueAssignments();
     saved.clubId = LEGACY_TEAM_MAP[saved.clubId] || saved.clubId;
+    saved.honors=Array.isArray(saved.honors)?saved.honors:[];ensureWorldHistory(saved);applyClubLeagueAssignments(saved);
     saved.competitionProgress ||= { cups:{} };
     const legacyUcl=saved.competitionProgress.ucl;
     saved.competitionProgress.europe ||= legacyUcl?{ucl:{...legacyUcl}}:createEuropeanProgress(clubById(saved.clubId),saved.season||2026);
@@ -1225,7 +1258,7 @@
     }
     if ((saved.version || 1) < 5) saved.version=5;
     if ((saved.version || 1) < 6) saved.version=6;
-    if(previousVersion<7||!saved.majorLeagueWorld)rebuildMajorLeagueWorld(saved);else simulateMajorLeagueWorld(saved,saved.date||START_DATE);
+    if(previousVersion<38||!saved.majorLeagueWorld)rebuildMajorLeagueWorld(saved);else simulateMajorLeagueWorld(saved,saved.date||START_DATE);
     saved.majorLeagueId=saved.majorLeagueWorld.leagues[saved.majorLeagueId]?saved.majorLeagueId:clubById(saved.clubId).league;
     if(previousVersion<8||!saved.transferMarket){saved.transferMarket=createTransferMarket(saved.season||2026);simulateTransferMarket(saved,saved.date||START_DATE);}
     else if(previousVersion<10)rebuildTransferMarketFromPostOpeningActivity(saved);
@@ -1253,7 +1286,7 @@
     ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
     ensureMarketValuation(saved);
     ensureClubFinances(saved);
-    saved.version=37;
+    saved.version=38;
     return saved;
   }
   function saveState() {
@@ -1887,7 +1920,7 @@
     const unread=state.notifications.filter(item=>!item.read).length;
     return `<div class="page-heading"><span class="eyebrow">${state.season}/${String(state.season+1).slice(2)} 赛季</span><h2>${greeting()}，${esc(state.person)}</h2><p>${state.retired?"你的职业生涯已经结束，所有记录已归档。":"这里是今天最需要你处理的事项。"}</p></div>
       <section class="stats" aria-label="赛季关键数据">
-        <div class="stat"><div class="stat-label">联赛排名</div><div class="stat-value">${played?state.leaguePosition:"—"}<small> / ${OPPONENTS[club.league].length}</small></div><div class="stat-context">${state.points} 分 · ${played} 场</div></div>
+        <div class="stat"><div class="stat-label">联赛排名</div><div class="stat-value">${played?state.leaguePosition:"—"}<small> / ${leagueClubNames(club.league).length}</small></div><div class="stat-context">${state.points} 分 · ${played} 场</div></div>
         <div class="stat"><div class="stat-label">${state.role==="coach"?"执教评分":"当前能力"}</div><div class="stat-value">${state.role==="coach"?state.coachProfile.overall:p.overall}</div><div class="stat-context">声望 ${state.reputation}</div></div>
         <div class="stat"><div class="stat-label">${state.role==="coach"?"转会预算":"赛季评分"}</div><div class="stat-value">${state.role==="coach"?money(state.funds):(averageRating(p)||6).toFixed(2)}</div><div class="stat-context">${state.role==="coach"?`本季经营划拨 +${money(finance.operatingAllocated||0)}`:`${p.goals} 球 · ${p.assists} 助`}</div></div>
         <div class="stat"><div class="stat-label">球队状态</div><div class="stat-value">${Math.round(state.squad.reduce((s,x)=>s+x.fitness,0)/state.squad.length)}%</div><div class="stat-context">${state.squad.filter(x=>x.injured>0).length} 名伤员</div></div>
@@ -2047,8 +2080,10 @@
   function resultLabel(f) { const ours=f.home?f.score.home:f.score.away, theirs=f.home?f.score.away:f.score.home; if(f.penalties)return f.penalties.winner==="us"?"点球胜":"点球负"; return ours>theirs?"胜":ours===theirs?"平":"负"; }
 
   function leaguePositionZone(league,index,total) {
-    if(league.tier===2){if(index<2)return {className:"promotion",label:"直接升级"};if(index<6)return {className:"playoff",label:"升级附加赛"};if(index>=total-3)return {className:"relegation",label:"降级区"};return null;}
-    if(index===0)return {className:"champion",label:"榜首"};if(index<4)return {className:"continental",label:"欧冠区"};if(index>=total-3)return {className:"relegation",label:"降级区"};return null;
+    const versusPlayoff=PROMOTION_RULES[league.country]?.playoff==="versus";
+    if(league.tier===2){if(index<2)return {className:"promotion",label:"直接升级"};if(versusPlayoff&&index===2)return {className:"playoff",label:"升级附加赛"};if(!versusPlayoff&&index<6)return {className:"playoff",label:"升级附加赛"};if(versusPlayoff&&index===total-3)return {className:"playoff",label:"保级附加赛"};if(index>=total-(versusPlayoff?2:3))return {className:"relegation",label:"直接降级"};return null;}
+    if(league.tier===3){if(index<2)return {className:"promotion",label:"直接升级"};if((versusPlayoff&&index===2)||(!versusPlayoff&&index<6))return {className:"playoff",label:"升级附加赛"};return null;}
+    if(index===0)return {className:"champion",label:"榜首"};if(index<4)return {className:"continental",label:"欧冠区"};if(versusPlayoff&&index===total-3)return {className:"playoff",label:"保级附加赛"};if(index>=total-(versusPlayoff?2:3))return {className:"relegation",label:"直接降级"};return null;
   }
 
   function renderLeagueForm(form=[]) {
@@ -2057,19 +2092,21 @@
 
   function renderWorld() {
     state.majorLeagueWorld||=createMajorLeagueWorld(state.season,state.clubId);
-    const world=state.majorLeagueWorld,userClub=clubById(state.clubId),leagueIds=[...new Set([userClub.league,...MAJOR_LEAGUE_IDS])].filter(id=>world.leagues[id]);
+    const world=state.majorLeagueWorld,userClub=clubById(state.clubId),leagueIds=Object.keys(LEAGUES).filter(id=>world.leagues[id]);
     if(!world.leagues[state.majorLeagueId])state.majorLeagueId=userClub.league;
     const league=world.leagues[state.majorLeagueId],table=majorStandings(league),latest=league.results[0],matchesPlayed=Math.round(league.clubs.reduce((sum,club)=>sum+club.p,0)/2),leader=table[0],averageGoals=matchesPlayed?league.totalGoals/matchesPlayed:0;
     const background=state.backgroundWorld||createBackgroundWorld(state.season),backgroundIds=Object.keys(background.leagues),packs=loadModPacks();
     if(!background.leagues[state.worldLeague])state.worldLeague=backgroundIds[0];
-    const selectedBackground=background.leagues[state.worldLeague];
+    const selectedBackground=background.leagues[state.worldLeague],worldHistory=ensureWorldHistory(state),leagueHistory=worldHistory.competitions[league.name]||[],europeHistory=Object.values(EUROPEAN_COMPETITIONS).flatMap(config=>(worldHistory.competitions[config.fullName]||[]).slice(0,4)).sort((a,b)=>b.season-a.season||a.name.localeCompare(b.name)),nationalHistory=Object.values(worldHistory.competitions).flat().filter(record=>record.kind==="national").sort((a,b)=>b.season-a.season||a.name.localeCompare(b.name)).slice(0,12),seasonLabel=season=>`${season}/${String(Number(season)+1).slice(2)}`,userRecord=record=>record.userStage?`${esc(record.userStage)} · ${Number(record.userPoints||0)} 分 · ${Number(record.userGoalsFor||0)}/${Number(record.userGoalsAgainst||0)}`:"未参赛";
     return `<div class="league-page">
       <section class="league-banner"><img src="assets/trophies/${leagueTrophyAsset(league.id)}" alt="${esc(league.short)}冠军奖杯"><div><span class="eyebrow">${state.season}/${String(state.season+1).slice(2)} · ${esc(league.country)}</span><h2>${esc(league.name)}</h2><p>${league.id===userClub.league?`${esc(userClub.name)} 所在联赛`:"五大联赛实时追踪"} · 更新至 ${formatDate(world.currentDate)}</p></div><div class="league-live">${icon("radio")}游戏内实时</div></section>
       <nav class="league-tabs" role="tablist" aria-label="选择联赛">${leagueIds.map(id=>`<button role="tab" aria-selected="${id===league.id}" class="league-tab ${id===league.id?"active":""}" data-major-league="${id}"><span>${LEAGUES[id].short}</span>${id===userClub.league?`<small>我的联赛</small>`:""}</button>`).join("")}</nav>
       <section class="stats league-stats" aria-label="联赛关键数据"><div class="stat"><div class="stat-label">领头羊</div><div class="stat-value league-team-value">${esc(leader?.name||"待定")}</div><div class="stat-context">${leader?.pts||0} 分 · 净胜 ${leader?.gd>0?"+":""}${leader?.gd||0}</div></div><div class="stat"><div class="stat-label">已完成轮次</div><div class="stat-value">${league.round}</div><div class="stat-context">共 ${matchesPlayed} 场比赛</div></div><div class="stat"><div class="stat-label">联赛进球</div><div class="stat-value">${league.totalGoals}</div><div class="stat-context">场均 ${averageGoals.toFixed(2)} 球</div></div><div class="stat"><div class="stat-label">射手榜首</div><div class="stat-value league-team-value">${league.scorers[0]?playerNameLink(league.scorers[0],{position:"ST",clubName:league.scorers[0].club}):"待定"}</div><div class="stat-context">${league.scorers[0]?.goals||0} 球${league.scorers[0]?` · ${esc(league.scorers[0].club)}`:""}</div></div></section>
-      <div class="league-layout"><section class="panel league-table-panel"><div class="panel-header"><h3>实时积分榜</h3><span class="meta">胜负关系依次按积分、净胜球、进球数排列</span></div><div class="table-wrap"><table class="league-table"><thead><tr><th class="num">排名</th><th>俱乐部</th><th>近况</th><th class="num">赛</th><th class="num">胜</th><th class="num">平</th><th class="num">负</th><th class="num league-goals-col">进/失</th><th class="num">净胜</th><th class="num">积分</th></tr></thead><tbody>${table.map((club,index)=>{const zone=leaguePositionZone(league,index,table.length),isUser=club.id===state.clubId;return `<tr class="${isUser?"user-club-row":""}"><td class="num position-cell"><span class="position-mark ${zone?.className||""}" title="${zone?.label||""}">${index+1}</span></td><td class="league-club-cell">${clubBadge(club,"club-badge-table")}<div class="player-name"><strong>${isUser?"★ ":""}${esc(club.name)}</strong><span>${zone?.label||`俱乐部战力 ${club.ability}`}</span></div></td><td>${renderLeagueForm(club.form)}</td><td class="num">${club.p}</td><td class="num">${club.w}</td><td class="num">${club.d}</td><td class="num">${club.l}</td><td class="num league-goals-col">${club.gf}/${club.ga}</td><td class="num">${club.gd>0?"+":""}${club.gd}</td><td class="num"><span class="rating league-points">${club.pts}</span></td></tr>`;}).join("")}</tbody></table></div><div class="league-legend"><span><i class="champion"></i>榜首</span><span><i class="continental"></i>${league.tier===1?"欧冠区":"直接升级"}</span>${league.tier===2?`<span><i class="playoff"></i>附加赛</span>`:""}<span><i class="relegation"></i>降级区</span></div></section>
+      <div class="league-layout"><section class="panel league-table-panel"><div class="panel-header"><h3>实时积分榜</h3><span class="meta">胜负关系依次按积分、净胜球、进球数排列</span></div><div class="table-wrap"><table class="league-table"><thead><tr><th class="num">排名</th><th>俱乐部</th><th>近况</th><th class="num">赛</th><th class="num">胜</th><th class="num">平</th><th class="num">负</th><th class="num league-goals-col">进/失</th><th class="num">净胜</th><th class="num">积分</th></tr></thead><tbody>${table.map((club,index)=>{const zone=leaguePositionZone(league,index,table.length),isUser=club.id===state.clubId;return `<tr class="${isUser?"user-club-row":""}"><td class="num position-cell"><span class="position-mark ${zone?.className||""}" title="${zone?.label||""}">${index+1}</span></td><td class="league-club-cell">${clubBadge(club,"club-badge-table")}<div class="player-name"><strong>${isUser?"★ ":""}${clubNameLink(club.name)}</strong><span>${zone?.label||`俱乐部战力 ${club.ability}`}</span></div></td><td>${renderLeagueForm(club.form)}</td><td class="num">${club.p}</td><td class="num">${club.w}</td><td class="num">${club.d}</td><td class="num">${club.l}</td><td class="num league-goals-col">${club.gf}/${club.ga}</td><td class="num">${club.gd>0?"+":""}${club.gd}</td><td class="num"><span class="rating league-points">${club.pts}</span></td></tr>`;}).join("")}</tbody></table></div><div class="league-legend"><span><i class="champion"></i>榜首</span><span><i class="continental"></i>${league.tier===1?"欧冠区":"直接升级"}</span>${league.tier!==1?`<span><i class="playoff"></i>附加赛</span>`:""}${league.tier<3?`<span><i class="relegation"></i>降级区</span>`:""}</div></section>
         <aside class="league-sidebar"><section class="panel"><div class="panel-header"><h3>最近赛果</h3><span class="meta">${latest?`${formatDate(latest.date,false)} · 第 ${latest.round} 轮`:"等待首轮"}</span></div>${latest?`<div class="league-results">${latest.matches.map(match=>`<div class="league-result ${match.homeId===state.clubId||match.awayId===state.clubId?"user-result":""}"><span class="league-result-team">${clubBadge(match.homeId||match.home,"club-badge-result")}<b>${esc(match.home)}</b></span><strong>${match.homeGoals} - ${match.awayGoals}</strong><span class="league-result-team away">${clubBadge(match.awayId||match.away,"club-badge-result")}<b>${esc(match.away)}</b></span></div>`).join("")}</div>`:`<div class="empty">首轮比赛完成后显示赛果</div>`}</section>
         <section class="panel"><div class="panel-header"><h3>射手榜</h3><span class="meta">前 8 名</span></div><div class="league-scorers">${league.scorers.slice(0,8).map((scorer,index)=>`<div class="league-scorer"><span class="scorer-rank">${index+1}</span><div><strong>${playerNameLink(scorer,{position:"ST",clubName:scorer.club})}</strong><small>${esc(scorer.club)}${scorer.generated?" · 模拟球员":""}</small></div><b>${scorer.goals}</b></div>`).join("")||`<div class="empty">尚无进球记录</div>`}</div></section></aside></div>
+      <section class="panel"><div class="panel-header"><h3>${esc(league.name)} 历史赛季</h3><span class="meta">最终积分榜、冠军、升降级与射手</span></div><div class="table-wrap"><table class="player-career-table"><thead><tr><th>赛季</th><th>冠军 / 亚军</th><th>赛季规模</th><th>最佳射手</th><th>升级</th><th>降级</th></tr></thead><tbody>${leagueHistory.map(record=>`<tr><td>${seasonLabel(record.season)}</td><td><strong>${clubNameLink(record.champion)}</strong><small> / ${clubNameLink(record.runnerUp)}</small></td><td>${record.matches} 场 · ${record.goals} 球</td><td>${esc(record.topScorer||"—")} · ${record.topScorerGoals||0} 球</td><td>${(record.promoted||[]).map(name=>clubNameLink(name)).join("、")||"—"}</td><td>${(record.relegated||[]).map(name=>clubNameLink(name)).join("、")||"—"}</td></tr><tr class="season-history-row"><td colspan="6"><details class="season-history-details"><summary>${icon("table-2")}查看 ${seasonLabel(record.season)} 完整最终积分榜</summary><div class="table-wrap"><table class="league-table archived-league-table"><thead><tr><th class="num">排名</th><th>俱乐部</th><th class="num">赛</th><th class="num">胜</th><th class="num">平</th><th class="num">负</th><th class="num">进/失</th><th class="num">净胜</th><th class="num">积分</th></tr></thead><tbody>${(record.table||[]).map(row=>`<tr><td class="num">${row.position}</td><td>${clubNameLink(row.name)}</td><td class="num">${row.p}</td><td class="num">${row.w}</td><td class="num">${row.d}</td><td class="num">${row.l}</td><td class="num">${row.gf}/${row.ga}</td><td class="num">${row.gd>0?"+":""}${row.gd}</td><td class="num"><strong>${row.pts}</strong></td></tr>`).join("")}</tbody></table></div></details></td></tr>`).join("")||`<tr><td colspan="6"><div class="empty compact">完成首个赛季后生成历史档案</div></td></tr>`}</tbody></table></div></section>
+      <div class="grid grid-2"><section class="panel"><div class="panel-header"><h3>欧洲赛事历史</h3><span class="meta">欧冠、欧联杯、欧协联</span></div><div class="table-wrap"><table class="player-career-table"><thead><tr><th>赛季</th><th>赛事</th><th>冠军</th><th>亚军</th><th>比赛 / 进球</th><th>本队记录</th></tr></thead><tbody>${europeHistory.map(record=>`<tr><td>${seasonLabel(record.season)}</td><td>${esc(record.shortName||record.name)}</td><td>${clubNameLink(record.champion)}</td><td>${clubNameLink(record.runnerUp)}</td><td>${record.matches} / ${record.goals}</td><td>${userRecord(record)}</td></tr>`).join("")||`<tr><td colspan="6">暂无历史赛季</td></tr>`}</tbody></table></div></section><section class="panel"><div class="panel-header"><h3>国家队赛事历史</h3><span class="meta">冠军、亚军与赛事规模</span></div><div class="table-wrap"><table class="player-career-table"><thead><tr><th>赛季</th><th>赛事</th><th>冠军</th><th>亚军</th><th>比赛 / 进球</th><th>国家队记录</th></tr></thead><tbody>${nationalHistory.map(record=>`<tr><td>${seasonLabel(record.season)}</td><td>${esc(record.name)}</td><td>${esc(record.champion||"—")}</td><td>${esc(record.runnerUp||"—")}</td><td>${record.matches} / ${record.goals}</td><td>${record.userTeam?`${esc(record.userTeam)} · ${userRecord(record)}`:"未参赛"}</td></tr>`).join("")||`<tr><td colspan="6">暂无历史赛季</td></tr>`}</tbody></table></div></section></div>
       <details class="panel league-extension"><summary>${icon("globe-2")}<span>扩展联赛与社区 MOD</span><small>${backgroundIds.length} 个后台联赛 · ${packs.length} 个 MOD</small>${icon("chevron-down")}</summary><div class="panel-body"><div class="filterbar"><select class="select" id="world-league">${backgroundIds.map(id=>`<option value="${esc(id)}" ${id===state.worldLeague?"selected":""}>${esc(background.leagues[id].name)} · ${esc(background.leagues[id].country)}</option>`).join("")}</select><button class="btn" id="import-mod">${icon("upload")}导入 MOD</button><button class="btn" id="export-mod">${icon("download")}导出数据包</button><button class="btn btn-danger" id="clear-mods" ${packs.length?"":"disabled"}>${icon("trash-2")}清除 MOD</button><input id="mod-file" type="file" accept="application/json,.json" hidden></div><div class="extension-summary"><span>${esc(selectedBackground?.name||"扩展联赛")}</span><strong>第 ${selectedBackground?.round||0} 轮</strong><small>后台模拟，不影响五大联赛正式积分榜</small></div></div></details>
       <div class="data-note"><strong>数据口径：</strong>俱乐部和球员名称来自 2026-07-31 数据快照；积分、赛果、进球及排名是当前存档内随日期实时更新的模拟数据。</div>
     </div>`;
@@ -2092,7 +2129,7 @@
   }
 
   const LEAGUE_BROADCAST_BASE={ENG1:118,ENG2:45,ESP1:78,ESP2:18,GER1:72,GER2:16,ITA1:65,ITA2:15,FRA1:48,FRA2:12};
-  function clubLeagueSize(club) {return Math.max(2,CLUBS.filter(item=>item.league===club.league).length||Number(LEAGUES[club.league]?.matches||38)/2+1);}
+  function clubLeagueSize(club) {return Math.max(2,leagueClubNames(club.league).length||Number(LEAGUES[club.league]?.matches||38)/2+1);}
   function seasonBroadcastRevenue(club,position=clubLeagueSize(club),participants=clubLeagueSize(club)) {
     const league=LEAGUES[club.league]||{tier:1},base=LEAGUE_BROADCAST_BASE[club.league]??(league.tier===1?42:10),rank=clamp(Math.round(Number(position)||participants),1,participants),placeRate=club.league==="ENG1"?3.25:league.tier===1?1.75:.42;
     return Number((base+Math.max(0,participants-rank)*placeRate).toFixed(1));
@@ -3264,12 +3301,12 @@
   function renderClubProfileModal(value) {
     const data=clubProfileData(value),club=data.club,league=data.league,roster=[...(data.roster||[])].sort((a,b)=>positionSortRank(a.position)-positionSortRank(b.position)||Number(b.overall||0)-Number(a.overall||0));
     if(!club)return "";
-    const standing=state.majorLeagueWorld?.leagues?.[club.league]?.clubs?.find(item=>item.id===club.id),table=state.majorLeagueWorld?.leagues?.[club.league]?majorStandings(state.majorLeagueWorld.leagues[club.league]):[],rank=table.findIndex(item=>item.id===club.id)+1,honors=[...clubHonors(club),...(club.id===state.clubId?(state.honors||[]).filter(item=>item.scope==="俱乐部").map(item=>({name:item.name,count:1,asset:trophyAsset(item.name)})):[])];
+    const standing=state.majorLeagueWorld?.leagues?.[club.league]?.clubs?.find(item=>item.id===club.id),table=state.majorLeagueWorld?.leagues?.[club.league]?majorStandings(state.majorLeagueWorld.leagues[club.league]):[],rank=table.findIndex(item=>item.id===club.id)+1,honors=clubHonors(club);
     const average=roster.length?Math.round(roster.reduce((sum,p)=>sum+Number(p.overall||0),0)/roster.length):0,totalValue=roster.reduce((sum,p)=>sum+currentPlayerMarketValue(p,state),0);
     return `<div class="modal-backdrop"><div class="modal club-profile-modal" role="dialog" aria-modal="true" aria-labelledby="club-profile-title"><div class="modal-header club-profile-header"><div class="club-profile-badge">${clubBadge(club,"club-badge-profile-modal")}</div><div><span>${esc(league?.short||"俱乐部")}${league?.country?` · ${esc(league.country)}`:""}</span><h2 id="club-profile-title">${esc(club.name)}</h2><p>${esc(club.city||"城市资料待更新")} · ${esc(club.stadium||"主场资料待更新")} · 主教练 ${esc(club.coach||"资料待更新")}</p></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body club-profile-body">
       <section class="club-profile-summary"><div><label>俱乐部声望</label><strong>${club.prestige||"—"}</strong></div><div><label>阵容人数</label><strong>${roster.length}</strong></div><div><label>平均能力</label><strong>${average||"—"}</strong></div><div><label>阵容总身价</label><strong>${money(totalValue)}</strong></div><div><label>当前排名</label><strong>${rank||"—"}${rank?` / ${table.length}`:""}</strong></div><div><label>本赛季积分</label><strong>${standing?.pts??"—"}</strong></div></section>
       <section class="club-profile-section"><div class="club-profile-section-head"><h3>一线队阵容</h3><span>按位置排序 · ${roster.length} 人</span></div><div class="table-wrap"><table class="club-roster-table"><thead><tr><th>球员</th><th>位置</th><th class="num">年龄</th><th class="num">能力 / 潜力</th><th class="num">身价</th></tr></thead><tbody>${roster.map(player=>`<tr><td class="player-name"><strong>${playerNameLink(player,{clubName:club.name})}</strong><span>${player.nationality?esc(player.nationality):"球员"}</span></td><td><span class="tag">${playerRoleLabel(player.position)}</span></td><td class="num">${player.age||"—"}</td><td class="num"><span class="rating">${player.overall||"—"}</span> / ${player.potential||player.overall||"—"}</td><td class="num">${money(currentPlayerMarketValue(player,state))}</td></tr>`).join("")||`<tr><td colspan="5"><div class="empty compact">暂无可用阵容数据</div></td></tr>`}</tbody></table></div></section>
-      <section class="club-profile-grid"><div class="club-profile-section"><div class="club-profile-section-head"><h3>俱乐部荣誉</h3><span>主要荣誉概览</span></div><div class="club-honors">${honors.map(item=>`<div class="club-honor"><img src="assets/trophies/${item.asset||"league.png"}" alt=""><div><strong>${esc(item.name)}</strong><span>${item.count} 次</span></div></div>`).join("")||`<p class="report-copy">暂无已记录荣誉。</p>`}</div></div><div class="club-profile-section"><div class="club-profile-section-head"><h3>近期状态</h3><span>${standing?`${standing.w}胜 ${standing.d}平 ${standing.l}负`:"当前赛季"}</span></div><div class="club-form-row"><div><label>战绩</label><strong>${standing?`${standing.w}-${standing.d}-${standing.l}`:"—"}</strong></div><div><label>进失球</label><strong>${standing?`${standing.gf} / ${standing.ga}`:"—"}</strong></div><div><label>近况</label><strong>${standing?.form?.length?standing.form.map(item=>`<i class="form-dot ${item}"></i>`).join(""):"—"}</strong></div></div></div></section>
+      <section class="club-profile-grid"><div class="club-profile-section"><div class="club-profile-section-head"><h3>俱乐部荣誉</h3><span>历史资料与存档实绩</span></div><div class="club-honors">${honors.map(item=>`<div class="club-honor"><img src="assets/trophies/${item.asset||"league.png"}" alt=""><div><strong>${esc(item.name)}</strong><span>${item.count} 次${item.seasons?.length?` · 存档：${item.seasons.map(season=>`${season}/${String(season+1).slice(2)}`).join("、")}`:` · ${item.source||"历史资料"}`}</span></div></div>`).join("")||`<p class="report-copy">暂无已记录荣誉。</p>`}</div></div><div class="club-profile-section"><div class="club-profile-section-head"><h3>近期状态</h3><span>${standing?`${standing.w}胜 ${standing.d}平 ${standing.l}负`:"当前赛季"}</span></div><div class="club-form-row"><div><label>战绩</label><strong>${standing?`${standing.w}-${standing.d}-${standing.l}`:"—"}</strong></div><div><label>进失球</label><strong>${standing?`${standing.gf} / ${standing.ga}`:"—"}</strong></div><div><label>近况</label><strong>${standing?.form?.length?standing.form.map(item=>`<i class="form-dot ${item}"></i>`).join(""):"—"}</strong></div></div></div></section>
     </div></div></div>`;
   }
 
@@ -3634,7 +3671,7 @@
     if(/决赛/.test(round))importance=.99;else if(/半决赛/.test(round))importance=Math.max(importance,.94);else if(/八强|四分之一/.test(round))importance=Math.max(importance,.89);
     const ourClub=state?.clubId?clubById(state.clubId):null,opponent=findClubByName(fixture.opponent),opponentStrength=Number(fixture.opponentStrength||opponent?.prestige||74);
     if(ourClub)importance+=clamp((opponentStrength-ourClub.prestige)/35,-.08,.12);
-    if(!knockout&&state?.played>=28&&(state.leaguePosition<=4||state.leaguePosition>=Math.max(15,(OPPONENTS[ourClub?.league]||[]).length-4)))importance+=.08;
+    if(!knockout&&state?.played>=28&&(state.leaguePosition<=4||state.leaguePosition>=Math.max(15,leagueClubNames(ourClub?.league).length-4)))importance+=.08;
     return clamp(importance,.42,1);
   }
   function tacticalSelectionFit(player,tactic="balanced") {
@@ -4825,6 +4862,37 @@
     if(offer)modal={type:"playerTransferOffer",id:offer.id};saveState();render();toast(offer?"已有俱乐部立即送来正式报价":"正式转会申请已提交，市场会优先寻找买家");
   }
 
+  const LEAGUE_LADDERS={英格兰:["ENG1","ENG2","ENG3"],西班牙:["ESP1","ESP2","ESP3"],德国:["GER1","GER2","GER3"],意大利:["ITA1","ITA2","ITA3"],法国:["FRA1","FRA2","FRA3"]};
+  const PROMOTION_RULES={英格兰:{direct:2,total:3,playoff:"lower"},西班牙:{direct:2,total:3,playoff:"lower"},德国:{direct:2,total:3,playoff:"versus"},意大利:{direct:2,total:3,playoff:"lower"},法国:{direct:2,total:3,playoff:"versus"}};
+
+  function simulatedFinalLeagueTable(save,leagueId,season=save.season) {
+    const current=save.majorLeagueWorld?.leagues?.[leagueId],members=CLUBS.filter(club=>club.league===leagueId);
+    if(current&&current.clubs.length===members.length&&current.clubs.some(club=>club.p>0))return majorStandings(current).map(club=>({...club}));
+    const matches=Number(LEAGUES[leagueId]?.matches||Math.max(2,(members.length-1)*2)),ordered=members.map(club=>({club,score:Number(club.prestige||60)+(stableScoutingUnit(`league-final|${season}|${leagueId}|${club.id}`)-.5)*17})).sort((a,b)=>b.score-a.score||a.club.name.localeCompare(b.club.name,"zh-CN"));
+    return ordered.map((entry,index)=>{const strength=(ordered.length-index-1)/Math.max(1,ordered.length-1),points=clamp(Math.round(matches*(.72+strength*.98)+(stableScoutingUnit(`league-points|${season}|${entry.club.id}`)-.5)*7),Math.round(matches*.35),matches*3),wins=Math.min(matches,Math.floor(points/3)),draws=Math.min(matches-wins,points-wins*3),losses=Math.max(0,matches-wins-draws),gf=Math.max(12,Math.round(matches*(.78+strength*.92))),ga=Math.max(10,Math.round(matches*(1.5-strength*.78)));return {id:entry.club.id,name:entry.club.name,code:entry.club.code,prestige:entry.club.prestige,ability:entry.club.prestige,p:matches,w:wins,d:draws,l:losses,gf,ga,gd:gf-ga,pts:points,form:[]};});
+  }
+
+  function playoffPromotedClub(save,lowerTable,rule,country,boundary) {
+    if(rule.playoff==="lower"){const pool=lowerTable.slice(rule.direct,Math.min(lowerTable.length,rule.direct+4));return [...pool].sort((a,b)=>(Number(b.prestige||clubById(b.id).prestige)+stableScoutingUnit(`promotion-playoff|${save.season}|${boundary}|${b.id}`)*8)-(Number(a.prestige||clubById(a.id).prestige)+stableScoutingUnit(`promotion-playoff|${save.season}|${boundary}|${a.id}`)*8))[0]||lowerTable[rule.direct];}
+    return lowerTable[rule.direct]||null;
+  }
+
+  function archiveSeasonCompetitions(save,leagueRecords) {
+    const history=ensureWorldHistory(save),season=save.season,userClub=clubById(save.clubId),userHonor=name=>(save.honors||[]).some(item=>item.season===season&&item.scope==="俱乐部"&&item.name===name),pickFinalists=(key,candidates)=>[...candidates].map(club=>({club,score:Number(club.prestige||60)+stableScoutingUnit(`${key}|${season}|${club.id}`)*15})).sort((a,b)=>b.score-a.score).slice(0,2).map(item=>item.club);
+    Object.entries(leagueRecords).forEach(([leagueId,record])=>{recordCompetitionSeason(save,LEAGUES[leagueId].name,{...record,kind:"league"});if(record.championId)recordClubHonor(save,record.championId,`${LEAGUES[leagueId].name}冠军`,season,LEAGUES[leagueId].name,{type:"league"});});
+    const cupNames=[...new Set(Object.values(LEAGUES).map(league=>league.cup).filter(Boolean))];cupNames.forEach(cup=>{const candidates=CLUBS.filter(club=>leagueOf(club)?.cup===cup),[simChampion,simRunnerUp]=pickFinalists(`cup|${cup}`,candidates),champion=userHonor(`${cup}冠军`)?userClub:simChampion,runnerUp=champion?.id===simChampion?.id?simRunnerUp:simChampion;recordCompetitionSeason(save,cup,{season,kind:"cup",champion:champion?.name||"待定",championId:champion?.id||null,runnerUp:runnerUp?.name||"待定",matches:Math.round(candidates.length*1.8),goals:Math.round(candidates.length*4.4)});if(champion)recordClubHonor(save,champion.id,`${cup}冠军`,season,cup,{type:"cup"});});
+    const europeanRanked=CLUBS.filter(club=>leagueOf(club)?.tier===1).sort((a,b)=>b.prestige-a.prestige);Object.values(EUROPEAN_COMPETITIONS).forEach(config=>{const candidates=config.key==="ucl"?europeanRanked.slice(0,40):config.key==="uel"?europeanRanked.slice(24,68):europeanRanked.slice(46),[simChampion,simRunnerUp]=pickFinalists(`europe|${config.key}`,candidates),honorName=`${config.fullName}冠军`,champion=userHonor(honorName)?userClub:simChampion,runnerUp=champion?.id===simChampion?.id?simRunnerUp:simChampion,progress=save.competitionProgress?.europe?.[config.key];recordCompetitionSeason(save,config.fullName,{season,kind:"europe",shortName:config.name,champion:champion?.name||"待定",championId:champion?.id||null,runnerUp:runnerUp?.name||"待定",participants:36,matches:config.key==="uecl"?141:189,goals:Math.round((config.key==="ucl"?3.02:2.83)*(config.key==="uecl"?141:189)),userClubId:progress?save.clubId:null,userStage:progress?userHonor(honorName)?"冠军":progress.eliminated?"出局":progress.position?`联赛阶段第 ${progress.position} 名`:"参赛中":null,userPoints:progress?.points??null,userGoalsFor:progress?.gf??null,userGoalsAgainst:progress?.ga??null});if(champion)recordClubHonor(save,champion.id,honorName,season,config.fullName,{type:"europe"});});
+    const scheduledNational=[...new Set([...(save.schedule||[]).filter(fixture=>fixture.international).map(fixture=>fixture.competition),...["英格兰","阿根廷","摩洛哥","日本"].map(nation=>nationalCompetitionFor(nation,season))])];scheduledNational.filter(Boolean).forEach(name=>{const nations=[...new Set(Object.values(NATIONAL_OPPONENTS).flat())],ranked=nations.map(nation=>({nation,score:Number(NATIONAL_TEAM_STRENGTH[nation]||74)+stableScoutingUnit(`national-final|${name}|${season}|${nation}`)*13})).sort((a,b)=>b.score-a.score),controlledNation=save.role==="player"?primaryNationality(controlledPlayer()):null,nationalWon=(save.honors||[]).some(item=>item.season===season&&item.scope==="国家队"&&item.name===`${name}冠军`),champion=nationalWon&&controlledNation?controlledNation:ranked[0]?.nation,runnerUp=ranked.find(item=>item.nation!==champion)?.nation,progress=save.competitionProgress?.international?.[name];recordCompetitionSeason(save,name,{season,kind:"national",champion,runnerUp,matches:["世界杯","欧洲杯"].includes(name)?64:Math.max(24,nations.length*2),goals:["世界杯","欧洲杯"].includes(name)?172:Math.round(nations.length*4.2),userTeam:progress?controlledNation:null,userStage:progress?nationalWon?"冠军":progress.eliminated?"出局":"完成赛程":null,userPoints:progress?.points??null,userGoalsFor:progress?.gf??null,userGoalsAgainst:progress?.ga??null});});
+    history.seasons.unshift({season,date:save.date,leagueIds:Object.keys(leagueRecords),competitionCount:Object.values(history.competitions).filter(records=>records.some(item=>item.season===season)).length});history.seasons=history.seasons.filter((item,index,list)=>list.findIndex(other=>other.season===item.season)===index).slice(0,30);
+  }
+
+  function archiveWorldSeasonAndApplyPromotion(save) {
+    const history=ensureWorldHistory(save),leagueRecords={},tables={},userLeagueId=clubById(save.clubId).league,userLeagueTitle=`${LEAGUES[userLeagueId].name}冠军`,userWonLeague=(save.honors||[]).some(item=>item.season===save.season&&item.scope==="俱乐部"&&item.name===userLeagueTitle);Object.keys(LEAGUES).forEach(leagueId=>{const table=simulatedFinalLeagueTable(save,leagueId,save.season),userIndex=leagueId===userLeagueId&&userWonLeague?table.findIndex(club=>club.id===save.clubId):-1;if(userIndex>0){const [userRow]=table.splice(userIndex,1);table.unshift({...userRow,p:Number(save.played||userRow.p),w:Number(save.wins||userRow.w),d:Number(save.draws||userRow.d),l:Number(save.losses||userRow.l),pts:Number(save.points||userRow.pts)});}tables[leagueId]=table;leagueRecords[leagueId]={season:save.season,leagueId,champion:table[0]?.name||"待定",championId:table[0]?.id||null,runnerUp:table[1]?.name||"待定",matches:Math.round(table.reduce((sum,club)=>sum+Number(club.p||0),0)/2),goals:Math.round(table.reduce((sum,club)=>sum+Number(club.gf||0),0)),topScorer:save.majorLeagueWorld?.leagues?.[leagueId]?.scorers?.[0]?.name||"赛季数据模拟",topScorerGoals:save.majorLeagueWorld?.leagues?.[leagueId]?.scorers?.[0]?.goals||Math.round(18+stableScoutingUnit(`scorer|${save.season}|${leagueId}`)*15),table:table.map((club,index)=>({position:index+1,id:club.id,name:club.name,p:club.p,w:club.w,d:club.d,l:club.l,gf:club.gf,ga:club.ga,gd:club.gd,pts:club.pts})),promoted:[],relegated:[],incomingPromoted:[],incomingRelegated:[]};});
+    const changes=[];Object.entries(LEAGUE_LADDERS).forEach(([country,ladder])=>{const rule=PROMOTION_RULES[country];for(let level=0;level<ladder.length-1;level++){const upperId=ladder[level],lowerId=ladder[level+1],upper=tables[upperId]||[],lower=tables[lowerId]||[];if(!upper.length||!lower.length)continue;const promoted=lower.slice(0,rule.direct),relegated=upper.slice(-rule.total);if(rule.playoff==="lower"){const winner=playoffPromotedClub(save,lower,rule,country,`${upperId}-${lowerId}`);if(winner&&!promoted.some(item=>item.id===winner.id))promoted.push(winner);}else{const lowerCandidate=lower[rule.direct],upperCandidate=upper[upper.length-rule.total],lowerScore=Number(clubById(lowerCandidate?.id).prestige||0)+stableScoutingUnit(`versus|${save.season}|${upperId}|${lowerCandidate?.id}`)*8,upperScore=Number(clubById(upperCandidate?.id).prestige||0)+stableScoutingUnit(`versus|${save.season}|${upperId}|${upperCandidate?.id}`)*8;if(lowerCandidate&&upperCandidate&&lowerScore>upperScore)promoted.push(lowerCandidate);else relegated.splice(0,1);}
+      promoted.slice(0,rule.total).forEach(club=>changes.push({clubId:club.id,clubName:club.name,fromId:lowerId,toId:upperId,type:"promoted",season:save.season}));relegated.slice(-promoted.length).forEach(club=>changes.push({clubId:club.id,clubName:club.name,fromId:upperId,toId:lowerId,type:"relegated",season:save.season}));leagueRecords[upperId].relegated.push(...relegated.slice(-promoted.length).map(club=>club.name));leagueRecords[upperId].incomingPromoted.push(...promoted.slice(0,rule.total).map(club=>club.name));leagueRecords[lowerId].promoted.push(...promoted.slice(0,rule.total).map(club=>club.name));leagueRecords[lowerId].incomingRelegated.push(...relegated.slice(-promoted.length).map(club=>club.name));}});
+    archiveSeasonCompetitions(save,leagueRecords);changes.forEach(change=>{save.worldClubLeagues[change.clubId]=change.toId;const club=clubById(change.clubId);club.league=change.toId;});history.promotions.unshift(...changes);history.promotions=history.promotions.slice(0,300);const userChange=changes.find(change=>change.clubId===save.clubId);if(userChange)addNotification({title:`联赛变动：${userChange.type==="promoted"?"升级":"降级"}至 ${LEAGUES[userChange.toId].name}`,type:"competition",date:save.date,detail:`赛季最终排名触发了正式升降级。下赛季赛程、转播收入、转会预算和对手将全部按照 ${LEAGUES[userChange.toId].name} 重新生成。`,facts:[`${LEAGUES[userChange.fromId].name} → ${LEAGUES[userChange.toId].name}`,`生效赛季：${save.season+1}/${String(save.season+2).slice(2)}`]});return {leagueRecords,changes,userChange};
+  }
+
   function returnControlledPlayerFromLoan() {
     if(state.role!=="player")return false;
     const career=ensurePlayerCareer(),player=controlledPlayer(),parentId=career?.loanParentClubId;
@@ -4843,9 +4911,10 @@
 
   function newSeason() {
     const transitionDate=state.date;
-    state.history.unshift({season:state.season,club:clubById(state.clubId).name,played:state.played,wins:state.wins,position:state.leaguePosition});
+    state.history.unshift({season:state.season,club:clubById(state.clubId).name,clubId:state.clubId,leagueId:clubById(state.clubId).league,league:LEAGUES[clubById(state.clubId).league].name,played:state.played,wins:state.wins,position:state.leaguePosition,points:state.points});
     if(state.leaguePosition===1)state.honors.unshift({name:LEAGUES[clubById(state.clubId).league].name+"冠军",season:state.season,scope:"俱乐部"});
     if(state.role==="player"&&averageRating(controlledPlayer())>=7.6)state.honors.unshift({name:"赛季最佳球员",season:state.season,scope:"个人"});
+    archiveWorldSeasonAndApplyPromotion(state);
     const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3),retiredPlayers=collectSeasonRetirements(state,state.season);if(retiredPlayers.length)state.squad=state.squad.filter(player=>!retiredPlayers.includes(player));
     returnControlledPlayerFromLoan();
     const nextSeasonFinances=seasonFinancePlans(state,state.season+1,previousClubLeaguePositions(state));
