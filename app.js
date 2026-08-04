@@ -675,7 +675,7 @@
   function rolloverYouthSeason(save) {
     const youthSystem=ensureYouthSystem(save),academy=youthSystem.academy;
     academy.prospects=academy.prospects.filter(player=>player.status==="academy");
-    academy.prospects.forEach(player=>{player.age++;});
+    academy.prospects.forEach(player=>{dynamicPotentialAssessment(player,save,{academy:true,facilities:academy.facilities,mentorDays:player.mentorshipDays});player.age++;});
     academy.prospects=academy.prospects.filter(player=>player.age<=19);
     academy.currentIntake=null;
     youthSystem.world.prospects.forEach(player=>{
@@ -1120,7 +1120,7 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:33, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:34, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
@@ -1253,7 +1253,7 @@
     ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
     ensureMarketValuation(saved);
     ensureClubFinances(saved);
-    saved.version=33;
+    saved.version=34;
     return saved;
   }
   function saveState() {
@@ -1682,9 +1682,26 @@
 
   function ensurePlayerDevelopment(player,season=state?.season||2026) {
     player.careerStats=Array.isArray(player.careerStats)?player.careerStats:[];
+    player.potentialHistory=Array.isArray(player.potentialHistory)?player.potentialHistory:[];
     if(!player.development||player.development.season!==season)player.development={season,startOverall:Number(player.overall||65),startAttributes:playerAttributeSnapshot(player),minutes:0,injuryDays:0};
-    player.development.startOverall??=Number(player.overall||65);player.development.startAttributes||=playerAttributeSnapshot(player);player.development.minutes??=0;player.development.injuryDays??=0;player.development.trainingScore??=0;player.development.attributeFocus||={};player.development.inSeasonProgress??=0;player.development.inSeasonGrowth??=0;player.development.lastProgressDate??=null;
+    player.development.startOverall??=Number(player.overall||65);player.development.startPotential??=Number(player.potential||player.overall||65);player.development.startAttributes||=playerAttributeSnapshot(player);player.development.minutes??=0;player.development.injuryDays??=0;player.development.trainingScore??=0;player.development.attributeFocus||={};player.development.inSeasonProgress??=0;player.development.inSeasonGrowth??=0;player.development.lastProgressDate??=null;player.development.potentialAssessed??=false;
     return player.development;
+  }
+
+  function dynamicPotentialAssessment(player,save=state,options={}) {
+    if(!player)return null;const season=Number(options.season??save?.season??state?.season??2026);player.potentialHistory=Array.isArray(player.potentialHistory)?player.potentialHistory:[];if(player.potentialAssessmentSeason===season)return {change:0,before:Number(player.potential||player.overall||65),after:Number(player.potential||player.overall||65)};
+    const development=options.academy?null:ensurePlayerDevelopment(player,season),before=Math.max(Number(player.overall||40),Number(player.potential||player.overall||40)),age=Number(player.age||24),average=Number(player.appearances||0)>=3?averageRating(player):0,minutes=Number(options.minutes??player.development?.minutes??Number(player.appearances||0)*75),training=Number(options.trainingScore??player.development?.trainingScore??0),injuryDays=Number(options.injuryDays??player.development?.injuryDays??0),seasonGrowth=Number(player.overall||0)-Number(development?.startOverall||player.overall||0),mentorDays=Number(options.mentorDays??player.mentorshipDays??0),facilities=Number(options.facilities??0);
+    let evidence=0,change=0,reason="潜力评估保持稳定";
+    if(options.academy){evidence=(facilities-2)*.55+mentorDays/70+Number(player.trainingProgress||0)*.7+(Number(player.overall||0)-Number(player.development?.startOverall||player.overall||0))*.35;if(age<=17&&evidence>=2.2)change=1;else if(age<=19&&evidence>=3.8)change=1;reason=change>0?"青训培养质量与导师反馈":"青训培养轨迹";}
+    else{
+      const ageEvidence=age<=18?3.1:age<=20?2.6:age<=22?2.1:age<=24?1.35:age<=27?.55:0,performance=average?clamp((average-6.55)*2.7,-1.5,3.8):0,exposure=minutes>=2600?1.45:minutes>=1800?1.05:minutes>=1000?.55:minutes<350?-.8:0,trainingEvidence=clamp(training/70,0,.95)+(save?.training==="intense"?.22:save?.training==="recovery"?-.12:0),growthEvidence=clamp(seasonGrowth*.28,-1,1.5),availability=injuryDays>=120?-1.25:injuryDays>=60?-.45:0;
+      evidence=ageEvidence+performance+exposure+trainingEvidence+growthEvidence+availability;
+      if(age<=20&&evidence>=6.1)change=2;else if(age<=23&&evidence>=5.1)change=2;else if(age<=27&&evidence>=5.8)change=1;else if(age<=23&&evidence>=3.9)change=1;
+      if(change>0)reason="高质量出场与持续成长重新上调潜力";
+      if(!change&&evidence<=-1.8&&before-Number(player.overall||0)>2&&age>=22) {change=-1;reason="长期低出场、伤病或表现下滑导致潜力下调";}
+    }
+    const after=clamp(before+change,Number(player.overall||40),99);change=after-before;player.potential=after;player.potentialAssessmentSeason=season;if(development)development.potentialAssessed=true;const record={season,before,after,change,reason,evidence:Number(evidence.toFixed(2))};if(change){player.potentialHistory.unshift(record);player.potentialHistory=player.potentialHistory.slice(0,8);player.lastPotentialChange=record;}else if(!player.lastPotentialChange)player.lastPotentialChange=null;
+    return record;
   }
 
   function recordPlayerDevelopment(player,minutes) {
@@ -3128,7 +3145,8 @@
 
   function developmentOutlook(player) {
     const score=playerDevelopmentScore(player),gap=Math.max(0,player.potential-player.overall);
-    if(!gap&&player.age<30)return ["接近能力上限","本赛季重点是保持稳定表现"];
+    if(!gap&&player.age<=27&&score>=.75)return ["等待潜力重估","高质量出场和持续成长仍可能重新打开能力上限"];
+    if(!gap&&player.age<30)return ["接近当前能力上限","突破表现仍可能在赛季结算时上调潜力"];
     if(score>=1.45)return ["突破赛季","训练与高评分比赛会在赛季中推动成长，全年可能提升 3–4 点"];
     if(score>=.75)return ["明显上升","稳定出场和良好评分可在赛季中提升 1–2 点"];
     if(score>=.25)return ["稳步发展","训练积累达到阈值后会即时提升能力"];
@@ -3137,10 +3155,10 @@
   }
 
   function renderPlayerProfileModal(player) {
-    const p=playerProfileData(player),groups=playerAttributeGroups(p),traits=playerTraits(p),[outlook,outlookText]=developmentOutlook(p),currentAverage=p.appearances?(averageRating(p)||6).toFixed(2):"—",attributeDevelopment=p.lastAttributeDevelopment,attributeChangeCount=Object.keys(attributeDevelopment?.changes||{}).length,attributeChangeLabel=attributeChangeCount?`${attributeDevelopment.reason} · ${attributeDevelopment.season}/${String(attributeDevelopment.season+1).slice(2)}`:"1–99",seasonValueChange=Number((Number(p.value||0)-Number(p.marketValueState?.seasonStartValue??p.value??0)).toFixed(2));
+    const p=playerProfileData(player),groups=playerAttributeGroups(p),traits=playerTraits(p),[outlook,outlookText]=developmentOutlook(p),currentAverage=p.appearances?(averageRating(p)||6).toFixed(2):"—",attributeDevelopment=p.lastAttributeDevelopment,attributeChangeCount=Object.keys(attributeDevelopment?.changes||{}).length,attributeChangeLabel=attributeChangeCount?`${attributeDevelopment.reason} · ${attributeDevelopment.season}/${String(attributeDevelopment.season+1).slice(2)}`:"1–99",seasonValueChange=Number((Number(p.value||0)-Number(p.marketValueState?.seasonStartValue??p.value??0)).toFixed(2)),potentialChange=p.lastPotentialChange;
     const career=[...(p.careerStats||[])],transfers=[...(p.transferHistory||[])].sort((a,b)=>b.date.localeCompare(a.date)),latest=p.latestTransfer,contractEnd=p.contractEnd||state.season+2+Math.floor(stableScoutingUnit(`${p.id||p.name}|contract`)*3);
     return `<div class="modal-backdrop"><div class="modal player-profile-modal" role="dialog" aria-modal="true" aria-labelledby="player-profile-title"><div class="modal-header player-profile-header"><div class="player-profile-avatar">${initials(p.name)}</div><div><span>${clubNameLink(p.clubName)}</span><h2 id="player-profile-title">${esc(p.name)}</h2><p>${playerRoleLabel(p.position)} · ${p.age} 岁 · ${esc(p.nationality||"国籍未知")}</p></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body player-profile-body">
-      <section class="player-profile-summary"><div><label>当前能力</label><strong>${p.overall}</strong></div><div><label>潜力</label><strong>${p.potential}</strong></div><div><label>身价 · 季度更新</label><strong>${money(p.value||0)}</strong><small class="market-value-change ${seasonValueChange>0?"up":seasonValueChange<0?"down":""}">本季 ${seasonValueChange>0?"↑":seasonValueChange<0?"↓":"持平"}${seasonValueChange?` ${money(Math.abs(seasonValueChange))}`:""}</small></div><div><label>合同</label><strong>${contractEnd} 年</strong></div><div><label>体能</label><strong>${Math.round(p.fitness??100)}%</strong></div><div><label>士气</label><strong>${Math.round(p.morale??75)}%</strong></div></section>
+      <section class="player-profile-summary"><div><label>当前能力</label><strong>${p.overall}</strong></div><div><label>动态潜力</label><strong>${p.potential}</strong>${potentialChange?.change?`<small class="potential-change ${potentialChange.change>0?"up":"down"}" title="${esc(potentialChange.reason)}">${potentialChange.season}/${String(potentialChange.season+1).slice(2)} ${potentialChange.change>0?"↑":"↓"}${Math.abs(potentialChange.change)}</small>`:`<small class="potential-change">持续评估</small>`}</div><div><label>身价 · 季度更新</label><strong>${money(p.value||0)}</strong><small class="market-value-change ${seasonValueChange>0?"up":seasonValueChange<0?"down":""}">本季 ${seasonValueChange>0?"↑":seasonValueChange<0?"↓":"持平"}${seasonValueChange?` ${money(Math.abs(seasonValueChange))}`:""}</small></div><div><label>合同</label><strong>${contractEnd} 年</strong></div><div><label>体能</label><strong>${Math.round(p.fitness??100)}%</strong></div><div><label>士气</label><strong>${Math.round(p.morale??75)}%</strong></div></section>
       <section class="player-profile-grid"><div class="player-profile-section"><div class="player-profile-section-head"><h3>当前合同</h3><span>${esc(p.contract?.role||"轮换球员")}</span></div><div class="profile-stat-list"><div><span>所属俱乐部</span><strong>${clubNameLink(p.clubName)}</strong></div><div><span>合同到期</span><strong>${contractEnd} 年</strong></div><div><span>周薪</span><strong>€${Math.round(Number(p.contract?.weeklyWage||p.wage||0))}K</strong></div><div><span>出场津贴</span><strong>€${Math.round(Number(p.contract?.appearanceFee||0))}K</strong></div><div><span>解约金</span><strong>${money(p.contract?.releaseClause||0)}</strong></div><div><span>队内角色</span><strong>${esc(p.contract?.role||"轮换球员")}</strong></div></div></div><div class="player-profile-section"><div class="player-profile-section-head"><h3>加盟信息</h3><span>${latest?formatDate(latest.date,false):"青训或原有球员"}</span></div><div class="profile-stat-list"><div><span>当前球队</span><strong>${clubNameLink(p.clubName)}</strong></div><div><span>加盟日期</span><strong>${latest?formatDate(latest.date):"赛季开始前"}</strong></div><div><span>来自</span><strong>${latest?clubNameLink(clubById(latest.fromId).name):"原有阵容"}</strong></div><div><span>转会费</span><strong>${latest?money(latest.fee):"—"}</strong></div><div><span>交易方式</span><strong>${latest?.clauses?"协商转会":"永久转会"}</strong></div><div><span>生涯转会</span><strong>${transfers.length} 次</strong></div></div></div></section>
       <section class="player-profile-section"><div class="player-profile-section-head"><h3>细分属性</h3><span>${esc(attributeChangeLabel)}</span></div><div class="detailed-attributes">${groups.map(([title,attrs])=>`<div class="attribute-column"><h4>${title}</h4>${attrs.map(([label,key,modifier,sourceKey])=>{const value=profileAttribute(p,key,modifier,sourceKey),change=Number(attributeDevelopment?.changes?.[key]||0);return `<div><span>${label}</span><span class="attribute-reading"><strong class="${value>=85?"elite":value<60?"weak":""}">${value}</strong>${change?`<small class="attribute-change ${change>0?"up":"down"}" title="${esc(`${attributeDevelopment.reason}：${change>0?"提升":"下降"} ${Math.abs(change)} 点`)}">${change>0?"+":""}${change}</small>`:""}</span></div>`;}).join("")}</div>`).join("")}</div></section>
       <section class="player-profile-grid"><div class="player-profile-section"><div class="player-profile-section-head"><h3>本赛季数据</h3><span>${state.season}/${String(state.season+1).slice(2)}</span></div><div class="profile-stat-list"><div><span>出场</span><strong>${p.appearances||0}</strong></div><div><span>进球</span><strong>${p.goals||0}</strong></div><div><span>助攻</span><strong>${p.assists||0}</strong></div><div><span>场均评分</span><strong>${currentAverage}</strong></div><div><span>国家队</span><strong>${p.internationalAppearances||0} 场</strong></div><div><span>国家队进球/助攻</span><strong>${p.internationalGoals||0} / ${p.internationalAssists||0}</strong></div></div></div><div class="player-profile-section"><div class="player-profile-section-head"><h3>发展趋势</h3><span>${outlook}</span></div><div class="development-outlook"><strong>${outlook}</strong><p>${outlookText}。训练与比赛积累达到阈值后会在赛季中即时成长，季度身价评估会同步反映变化。</p><div class="meter"><span style="width:${clamp(50+playerDevelopmentScore(p)*35,8,92)}%"></span></div></div></div></section>
@@ -4649,18 +4667,18 @@
   function updateCoachAbility(won,draw,tactical) {const c=state.coachProfile;const chance=(won?.12:draw?.035:-.025)+(tactical-70)/800;if(chance>0&&Math.random()<chance){c.overall=clamp(c.overall+1,1,99);c.tactics=clamp(c.tactics+(Math.random()<.5?1:0),1,99);}if(chance<0&&Math.random()<Math.abs(chance)){c.overall=clamp(c.overall-1,1,99);}state.reputation=c.overall;}
 
   function settlePlayerSeason(player) {
-    const development=ensurePlayerDevelopment(player,state.season),start=Number(development.startOverall||player.overall||65),score=playerDevelopmentScore(player),gap=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
+    const development=ensurePlayerDevelopment(player,state.season),start=Number(development.startOverall||player.overall||65),potentialResult=dynamicPotentialAssessment(player,state),score=playerDevelopmentScore(player),gap=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
     const annualTarget=annualPlayerGrowthTarget(player,score);let change=annualTarget;
     if(change>0)change=Math.max(0,change-Number(development.inSeasonGrowth||0));
     if(change>0&&!gap)change=0;
     if(change>gap)change=gap;
     player.overall=clamp(Number(player.overall||65)+change,40,99);adjustPlayerCoreAttributes(player,change,development);
     const seasonalChange=Number(player.overall||65)-start;recordAttributeDevelopment(player,development.startAttributes,{season:state.season,reason:"赛季发展",overallChange:seasonalChange});
-    if(development.injuryDays>=120&&player.potential>player.overall&&Math.random()<.24)player.potential=Math.max(player.overall,player.potential-1);
-    const seasonRecord={season:state.season,club:clubById(state.clubId).name,clubId:state.clubId,appearances:Number(player.appearances||0),goals:Number(player.goals||0),assists:Number(player.assists||0),average:Number((averageRating(player)||0).toFixed(2)),overallStart:start,overallEnd:player.overall,change:seasonalChange};
+    const seasonRecord={season:state.season,club:clubById(state.clubId).name,clubId:state.clubId,appearances:Number(player.appearances||0),goals:Number(player.goals||0),assists:Number(player.assists||0),average:Number((averageRating(player)||0).toFixed(2)),overallStart:start,overallEnd:player.overall,change:seasonalChange,potentialStart:Number(development.startPotential||potentialResult?.before||player.potential),potentialEnd:Number(player.potential),potentialChange:Number(player.potential)-Number(development.startPotential||potentialResult?.before||player.potential)};
     ["keyPasses","chancesCreated","successfulDribbles","progressivePasses","tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","recoveries","pressuresWon","saves","cleanSheets"].forEach(key=>{seasonRecord[key]=Number(player[key]||0);});
     player.careerStats=[...(player.careerStats||[]),seasonRecord].slice(-12);
-    return {player,change:seasonalChange,settlementChange:change,annualTarget,score};
+    if(state.role==="player"&&player.id===state.controlledId&&potentialResult?.change)addNotification({title:`潜力重新评估：${player.name} ${potentialResult.change>0?"上调":"下调"}至 ${player.potential}`,type:"general",date:state.date,detail:potentialResult.reason,facts:[`潜力：${potentialResult.before} → ${potentialResult.after}`,`本季 ${player.appearances||0} 场 · 场均 ${(averageRating(player)||0).toFixed(2)}`,`当前能力：${player.overall}`]});
+    return {player,change:seasonalChange,settlementChange:change,annualTarget,score,potentialResult};
   }
 
   function confirmTransfer() {
