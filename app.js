@@ -1120,7 +1120,7 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:32, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:33, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
@@ -1253,7 +1253,7 @@
     ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
     ensureMarketValuation(saved);
     ensureClubFinances(saved);
-    saved.version=32;
+    saved.version=33;
     return saved;
   }
   function saveState() {
@@ -1285,7 +1285,7 @@
       lastInteractionDate:null,interactionHistory:[],conversationHistory:[],pendingIssues:[],requests:[],story:null,storyHistory:[],nextStoryDate:addDays(START_DATE,9),
       responseMomentum:0,responseMatches:0,responseSource:null,recentRatings:[],
       trainingDays:0,weeklyReportDate:START_DATE,selectionStreak:0,benchStreak:0,lastOutcome:"新赛季报到",seasonObjectives:createPlayerObjectives(player),
-      objectiveProgress:{appearances:0,ratings:0,goals:0,assists:0},contractStance:"留队竞争"
+      objectiveProgress:{appearances:0,ratings:0,goals:0,assists:0},contractStance:"留队竞争",renewalNegotiation:null,renewalLastEvaluatedDate:null
     };
   }
 
@@ -1311,6 +1311,7 @@
     career.storyHistory=Array.isArray(career.storyHistory)?career.storyHistory:[];
     career.seasonObjectives=Array.isArray(career.seasonObjectives)&&career.seasonObjectives.length?career.seasonObjectives:createPlayerObjectives(player);
     career.objectiveProgress={...base.objectiveProgress,...(career.objectiveProgress||{})};
+    if(career.renewalNegotiation&&typeof career.renewalNegotiation!=="object")career.renewalNegotiation=null;
     career.lastInteractions={...(career.lastInteractions||{})};
     ["trust","confidence","tactical","professionalism","chemistry","pressure"].forEach(key=>career[key]=clamp(Number(career[key]??base[key]),0,100));
     career.responseMomentum=clamp(Number(career.responseMomentum||0),0,6);career.responseMatches=clamp(Math.round(Number(career.responseMatches||0)),0,4);career.recentRatings=Array.isArray(career.recentRatings)?career.recentRatings.slice(0,5):[];
@@ -1390,10 +1391,73 @@
     const career=ensurePlayerCareer(),plan=PLAYER_WEEKLY_PLANS[career?.weeklyPlan]||PLAYER_WEEKLY_PLANS.balanced;return plan.training;
   }
 
+  function renewalPerformanceScore(player,career) {
+    const club=clubById(state.clubId),average=averageRating(player)||6.35,appearances=Number(player.appearances||0),minutes=Number(player.development?.minutes||appearances*72),unit=positionUnit(player.position);
+    const direct=Number(player.goals||0)*(["attack","midfield"].includes(unit)?2.1:.8)+Number(player.assists||0)*(["attack","midfield"].includes(unit)?1.8:1.1);
+    const defensive=(Number(player.tacklesWon||0)+Number(player.interceptions||0)+Number(player.clearances||0)*.35)/Math.max(4,appearances)*(["defence","goalkeeper"].includes(unit)?1.5:.45);
+    return (Number(player.overall||65)-Number(club.prestige||70))*.85+(average-6.35)*18+Math.min(10,appearances*.45)+Math.min(6,minutes/700)+Math.min(8,direct)+Math.min(6,defensive)+(Number(career.trust||50)-55)*.18+(Number(career.professionalism||50)-55)*.08;
+  }
+
+  function renewalClubOffer(player,date=state.date) {
+    const career=ensurePlayerCareer(),club=clubById(state.clubId),average=averageRating(player)||6.35,performance=renewalPerformanceScore(player,career),current=Math.max(2,Number(player.contract?.weeklyWage||player.wage||20));
+    const raise=clamp(.08+Math.max(0,Number(player.overall||65)-Number(club.prestige||70))*.012+Math.max(0,average-6.45)*.11,0.06,.42),weeklyWage=Math.round(current*(1+raise));
+    const role=Number(player.overall||0)>=club.prestige+4?"核心主力":Number(player.overall||0)>=club.prestige-2?"常规主力":Number(player.overall||0)>=club.prestige-7?"轮换球员":"替补球员",years=player.age<=23?4:player.age>=31?2:3;
+    const offer={weeklyWage,signingBonus:Number(Math.max(.1,weeklyWage*(.035+Math.max(0,performance)*.0008)).toFixed(1)),appearanceFee:Math.max(1,Math.round(weeklyWage*.09)),releaseClause:Number(Math.max(Number(player.value||1)*1.9,Number(player.contract?.releaseClause||0)*.92).toFixed(1)),role,years};
+    return {offer,performance,date};
+  }
+
+  function createRenewalNegotiation(date=state.date,source="club") {
+    const career=ensurePlayerCareer(),player=controlledPlayer();if(!career||!player)return null;
+    const existing=career.renewalNegotiation;if(existing&&["active","completed"].includes(existing.status))return existing;
+    const proposal=renewalClubOffer(player,date),club=clubById(state.clubId),session={id:`renewal-${state.season}-${player.id}-${date}`,status:"active",round:1,clubPatience:82,createdDate:date,deadlineDate:addDays(date,28),source,clubTarget:{...proposal.offer},offer:{...proposal.offer},lastSubmitted:{...proposal.offer},history:[{round:1,speaker:club.name,text:`俱乐部提出正式续约报价：周薪 €${proposal.offer.weeklyWage}K，${proposal.offer.years} 年合同，承诺${proposal.offer.role}。`} ]};
+    career.renewalNegotiation=session;career.contractStance="续约谈判中";career.renewalLastEvaluatedDate=date;
+    addNotification({title:`正式续约报价：${club.name} 希望与你续约`,type:"transfer",date,detail:`俱乐部已送上完整个人条款，报价在 ${formatDate(session.deadlineDate,false)} 前有效。你可以接受、还价、拒绝或稍后处理。`,facts:[`周薪：€${proposal.offer.weeklyWage}K`,`合同：${proposal.offer.years} 年`,`角色承诺：${proposal.offer.role}`]});
+    return session;
+  }
+
+  function evaluatePlayerRenewal(date=state.date,requested=false) {
+    const career=ensurePlayerCareer(),player=controlledPlayer();if(!career||!player||Number(player.contract?.endSeason||state.season+2)>state.season+1)return null;
+    const current=career.renewalNegotiation;if(current&&["active","completed"].includes(current.status))return current;
+    if(!requested&&career.renewalLastEvaluatedDate&&daysBetween(career.renewalLastEvaluatedDate,date)<30)return null;
+    career.renewalLastEvaluatedDate=date;const score=renewalPerformanceScore(player,career),threshold=4+(stableScoutingUnit(`${player.id}|renewal|${date.slice(0,7)}`)-.5)*5;
+    if(requested?score>=-1:score>=threshold)return createRenewalNegotiation(date,requested?"agent":"club");
+    career.contractStance="等待俱乐部报价";
+    if(requested)addNotification({title:"俱乐部暂未提出续约报价",type:"transfer",date,detail:"教练组希望先观察接下来的出场时间和比赛表现。合同不会自动续签，经纪人会在表现或处境改变后再次评估。",facts:[`合同至 ${player.contract.endSeason} 年`,`教练信任：${Math.round(career.trust)}%`,`赛季评分：${(averageRating(player)||6.35).toFixed(2)}`]});
+    return null;
+  }
+
+  function renewalById(id) {const session=ensurePlayerCareer()?.renewalNegotiation;return session?.id===id?session:null;}
+
+  function renewalRoleRank(role){return ({"替补球员":0,"轮换球员":1,"常规主力":2,"核心主力":3})[role]??1;}
+
+  function completePlayerRenewal(session) {
+    const career=ensurePlayerCareer(),player=controlledPlayer(),offer=session.offer;player.contract={...(player.contract||{}),weeklyWage:Number(offer.weeklyWage),signingBonus:Number(offer.signingBonus),appearanceFee:Number(offer.appearanceFee),releaseClause:Number(offer.releaseClause),role:offer.role,endSeason:state.season+Number(offer.years)};player.wage=Number(offer.weeklyWage);
+    session.status="completed";session.completedDate=state.date;session.history.push({round:session.round,speaker:"双方",text:`续约完成：合同至 ${player.contract.endSeason} 年，周薪 €${player.contract.weeklyWage}K，角色为${player.contract.role}。`});career.contractStance="续约达成";changePlayerCareer({trust:2,confidence:3,"relationship:agent":3,"relationship:coach":2});
+    addNotification({title:`官方：${player.name} 完成续约`,type:"transfer",date:state.date,detail:`你已与 ${clubById(state.clubId).name} 签署新合同，全部谈判条款已经写入球员详情。`,facts:[`合同至 ${player.contract.endSeason} 年`,`周薪 €${player.contract.weeklyWage}K`,`角色承诺：${player.contract.role}`]});modal=null;saveState();render();toast("续约合同已经签署");
+  }
+
+  function acceptPlayerRenewal(id) {const session=renewalById(id);if(session?.status==="active")completePlayerRenewal(session);}
+
+  function submitPlayerRenewalCounter(id) {
+    const session=renewalById(id);if(!session||session.status!=="active")return;const number=(selector,fallback)=>Number(document.getElementById(selector)?.value??fallback),offer={weeklyWage:number("renew-wage",session.offer.weeklyWage),signingBonus:number("renew-signing",session.offer.signingBonus),appearanceFee:number("renew-appearance",session.offer.appearanceFee),releaseClause:number("renew-release",session.offer.releaseClause),role:document.getElementById("renew-role")?.value||session.offer.role,years:number("renew-years",session.offer.years)};
+    if(!offer.weeklyWage||offer.signingBonus<0||offer.appearanceFee<0||offer.releaseClause<1||offer.years<1||offer.years>5)return toast("请检查合同条款");
+    const target=session.clubTarget,changes=Object.keys(offer).filter(key=>String(offer[key])!==String(session.lastSubmitted?.[key])).length,wagePressure=offer.weeklyWage/Math.max(1,target.weeklyWage),bonusPressure=offer.signingBonus/Math.max(.1,target.signingBonus),feePressure=offer.appearanceFee/Math.max(1,target.appearanceFee),releasePressure=target.releaseClause/Math.max(1,offer.releaseClause),rolePressure=Math.max(0,renewalRoleRank(offer.role)-renewalRoleRank(target.role))*.14,yearsPressure=Math.max(0,offer.years-target.years)*.05;
+    const demand=(wagePressure*.48+bonusPressure*.16+feePressure*.1+releasePressure*.12+rolePressure+yearsPressure),tolerance=1.03+(100-session.clubPatience)*.0007+Math.max(0,renewalPerformanceScore(controlledPlayer(),ensurePlayerCareer()))*.004;
+    session.round+=1;session.offer=offer;session.lastSubmitted={...offer};session.history.push({round:session.round,speaker:"经纪人",text:`还价：周薪 €${Math.round(offer.weeklyWage)}K，${offer.years} 年，角色承诺${offer.role}，并调整奖金、津贴与解约金。`});
+    if(demand<=tolerance){session.history.push({round:session.round,speaker:clubById(state.clubId).name,text:"俱乐部接受这份还价，可以立即签署合同。"});completePlayerRenewal(session);return;}
+    const loss=clamp(Math.round(Math.max(4,(demand-tolerance)*70)+Math.max(0,changes-2)*3),4,38);session.clubPatience=clamp(session.clubPatience-loss,0,100);
+    if(!session.clubPatience){session.status="withdrawn";session.closedReason="俱乐部因谈判分歧过大撤回报价";ensurePlayerCareer().contractStance="续约谈判破裂";session.history.push({round:session.round,speaker:clubById(state.clubId).name,text:"双方要求相距过大，俱乐部退出谈判。"});}
+    else{const soften=.3,adjust=(asked,targetValue)=>Number((asked+(targetValue-asked)*soften).toFixed(1));session.offer={weeklyWage:Math.round(adjust(offer.weeklyWage,target.weeklyWage)),signingBonus:adjust(offer.signingBonus,target.signingBonus),appearanceFee:Math.round(adjust(offer.appearanceFee,target.appearanceFee)),releaseClause:adjust(offer.releaseClause,target.releaseClause),role:renewalRoleRank(offer.role)<=renewalRoleRank(target.role)?offer.role:target.role,years:Math.round(adjust(offer.years,target.years))};session.history.push({round:session.round,speaker:clubById(state.clubId).name,text:`无法接受当前要求。俱乐部给出调整后的报价，耐心剩余 ${session.clubPatience}%。`});}
+    saveState();render();
+  }
+
+  function rejectPlayerRenewal(id) {const session=renewalById(id);if(!session||session.status!=="active")return;session.status="rejected";session.closedReason="你拒绝了俱乐部的续约报价";session.history.push({round:session.round,speaker:"球员",text:"拒绝续约，合同到期前将继续履行现有合同。"});const career=ensurePlayerCareer();career.contractStance="拒绝续约";career.renewalLastEvaluatedDate=state.date;changePlayerCareer({trust:-3,"relationship:coach":-2,"relationship:agent":2});modal=null;saveState();render();toast("你已拒绝续约报价");}
+
   function applyPlayerCareerDay(targetDate) {
     if(state.role!=="player")return null;
     const career=ensurePlayerCareer(),player=controlledPlayer(),plan=PLAYER_WEEKLY_PLANS[career.weeklyPlan]||PLAYER_WEEKLY_PLANS.balanced;if(!player)return null;
     career.trainingDays=Number(career.trainingDays||0)+1;
+    if(career.renewalNegotiation?.status==="active"&&targetDate>career.renewalNegotiation.deadlineDate){career.renewalNegotiation.status="withdrawn";career.renewalNegotiation.closedReason="续约报价已经过期";career.renewalNegotiation.history.push({round:career.renewalNegotiation.round,speaker:clubById(state.clubId).name,text:"报价有效期已过，俱乐部撤回本轮续约方案。"});career.contractStance="续约报价已过期";addNotification({title:"续约报价已经过期",type:"transfer",date:targetDate,detail:"你没有在截止日前作出决定，俱乐部已经撤回报价。之后是否重启谈判将取决于合同期限和比赛表现。",facts:[`现有合同至 ${player.contract?.endSeason} 年`,`教练信任：${Math.round(career.trust)}%`]});}
     player.fitness=clamp(Number(player.fitness||70)+plan.fitness,25,100);
     player.morale=clamp(Number(player.morale||75)+plan.morale,25,100);
     career.trust=clamp(career.trust+plan.trust,0,100);career.tactical=clamp(career.tactical+plan.tactical,0,100);
@@ -1402,6 +1466,7 @@
     const focusAttribute=plan.attribute;if(focusAttribute)development.attributeFocus={...(development.attributeFocus||{}),[focusAttribute]:Number((development.attributeFocus?.[focusAttribute]||0)+plan.development)};
     const dueRequest=career.requests.find(item=>item.status==="pending"&&item.dueDate<=targetDate);
     if(dueRequest)return resolveCareerRequest(dueRequest,targetDate);
+    const renewal=evaluatePlayerRenewal(targetDate);if(renewal?.status==="active"&&renewal.createdDate===targetDate)return {type:"player-renewal",title:"俱乐部提出正式续约报价",view:"home"};
     if(career.story&&career.story.status==="waiting"&&career.story.nextDate<=targetDate){career.story.status="active";return {type:"player-career",title:career.story.title,view:"home"};}
     if(!career.story&&targetDate>=career.nextStoryDate){startPlayerStory(targetDate);return {type:"player-career",title:career.story.title,view:"home"};}
     return null;
@@ -1533,8 +1598,8 @@
   function resolveCareerRequest(request,date) {
     const career=ensurePlayerCareer(),player=controlledPlayer(),average=averageRating(player)||6.35,club=clubById(state.clubId);request.status="resolved";request.resolvedDate=date;
     if(request.type==="contract"){
-      const accepted=career.trust>=64&&average>=6.55;if(accepted){player.contract.weeklyWage=Math.round(Number(player.contract.weeklyWage||player.wage||25)*(1.1+Math.max(0,average-6.5)*.08));player.contract.endSeason=Math.max(Number(player.contract.endSeason||state.season+2),state.season+3);career.contractStance="续约达成";changePlayerCareer({trust:2,"relationship:agent":3});request.outcome=`俱乐部同意续约至 ${player.contract.endSeason} 年，周薪调整为 €${player.contract.weeklyWage}K。`;}
-      else{career.contractStance="等待机会";changePlayerCareer({confidence:-2,"relationship:agent":1});request.outcome="俱乐部暂时拒绝续约，要求先改善出场时间和表现。";}
+      const session=evaluatePlayerRenewal(date,true);if(session){request.outcome=`俱乐部同意开启正式续约谈判，完整报价已送达。周薪 €${session.offer.weeklyWage}K，拟签 ${session.offer.years} 年。`;changePlayerCareer({"relationship:agent":3});}
+      else{career.contractStance="等待俱乐部报价";changePlayerCareer({confidence:-2,"relationship:agent":1});request.outcome="俱乐部暂时没有提出正式报价，将继续根据出场时间和表现评估。";}
     }else if(request.type==="loan"){
       const accepted=career.trust<72||player.contract?.role==="替补球员";career.contractStance=accepted?"允许寻求外租":"留队竞争";request.outcome=accepted?"俱乐部同意在下一个转会窗口评估外租报价。":"教练希望你继续留队竞争，本次外租申请被拒绝。";changePlayerCareer({trust:accepted?-2:1,"relationship:agent":2});
     }else{const interest=clamp(Math.round((player.overall-club.prestige+16)*3+(average-6.3)*18),5,92);request.outcome=`经纪人评估：当前获得合适报价的概率约为 ${interest}%，${interest>=55?"已有同级别俱乐部关注。":"现阶段更适合先提高比赛影响力。"}`;changePlayerCareer({"relationship:agent":2});}
@@ -1822,13 +1887,14 @@
   }
 
   function renderPlayerHome() {
-    const player=controlledPlayer(),career=ensurePlayerCareer(),club=clubById(state.clubId),fixture=nextFixture(),continueMode=continueActionMode(),seasonReady=continueMode==="season",forecast=seasonReady?{label:"赛季结束",tone:"good",detail:"可以结算本赛季并进入下一赛季"}:playerSelectionForecast(player,career,fixture),weekly=PLAYER_WEEKLY_PLANS[career.weeklyPlan]||PLAYER_WEEKLY_PLANS.balanced;
+    const player=controlledPlayer(),career=ensurePlayerCareer(),club=clubById(state.clubId),fixture=nextFixture(),continueMode=continueActionMode(),seasonReady=continueMode==="season",forecast=seasonReady?{label:"赛季结束",tone:"good",detail:"可以结算本赛季并进入下一赛季"}:playerSelectionForecast(player,career,fixture),weekly=PLAYER_WEEKLY_PLANS[career.weeklyPlan]||PLAYER_WEEKLY_PLANS.balanced,renewal=career.renewalNegotiation;
     const currentMatchPlan=career.matchPlanFixtureId===fixture?.id?career.matchPlan:"balanced",openIssue=career.pendingIssues.find(item=>item.status==="open"),activeStory=career.story?.status==="active"?career.story:null,pendingRequests=career.requests.filter(item=>item.status==="pending");
     const recentAverage=recentPlayerAverage(career),seasonAverage=player.appearances?(averageRating(player)||6):null,responseActive=career.responseMatches>0&&career.temporaryBoostMatches>0,responseSummary=temporaryBoostSummary(career);
     const fitness=Math.round(Number(player.fitness||0)),fitnessTone=fitness<60?"danger":fitness<78?"warn":"good",fitnessLabel=player.injured?"伤病恢复中":fitness>=90?"状态充沛":fitness>=78?"体力良好":fitness>=68?"可以出场":"建议恢复";
     const contact=(id,detail)=>{const item=CONVERSATION_CONTACTS[id],last=career.lastInteractions[`conversation:${id}`],available=!last||daysBetween(last,state.date)>=3;return `<button class="career-command" data-conversation="${id}" ${available?"":"disabled"}>${icon(item.icon)}<span><strong>${item.label}</strong><small>${available?detail:"刚刚交流过，过几天再谈"}</small></span>${icon("message-circle")}</button>`;};
     return `<div class="player-command-heading"><div><span class="eyebrow">${state.season}/${String(state.season+1).slice(2)} · 球员生涯</span><h2>${esc(player.name)}</h2><p>${clubNameLink(club.name)} · ${playerRoleLabel(player.position)} · ${career.status}</p></div><div class="player-heading-metrics"><div class="player-overall"><span>当前能力</span><strong>${player.overall}</strong></div><div class="player-fitness-summary ${fitnessTone}"><span>体力</span><strong>${fitness}%</strong><i><b style="width:${fitness}%"></b></i><small>${fitnessLabel}</small></div></div></div>
       <section class="player-status-strip player-status-six" aria-label="个人关键状态"><div><span>教练信任</span><strong>${Math.round(career.trust)}%</strong><i><b style="width:${career.trust}%"></b></i></div><div><span>比赛信心</span><strong>${Math.round(career.confidence)}%</strong><i><b style="width:${career.confidence}%"></b></i></div><div><span>战术理解</span><strong>${Math.round(career.tactical)}%</strong><i><b style="width:${career.tactical}%"></b></i></div><div><span>队友默契</span><strong>${Math.round(career.chemistry)}%</strong><i><b style="width:${career.chemistry}%"></b></i></div><div><span>心理压力</span><strong>${Math.round(career.pressure)}%</strong><i><b class="pressure" style="width:${career.pressure}%"></b></i></div><div><span>${recentAverage!==null?"近五场评分":"赛季评分"}</span><strong>${(recentAverage??seasonAverage)?.toFixed(2)||"—"}</strong><small>${recentAverage!==null?`赛季 ${seasonAverage?.toFixed(2)||"—"} · `:""}${player.appearances||0} 场 · ${player.goals||0} 球 · ${player.assists||0} 助</small></div></section>
+      ${renewal?.status==="active"?`<section class="career-alert renewal"><div>${icon("file-signature")}<span><strong>${esc(club.name)} 已提出正式续约报价</strong><small>周薪 €${Math.round(renewal.offer.weeklyWage)}K · ${renewal.offer.years} 年 · ${esc(renewal.offer.role)} · ${formatDate(renewal.deadlineDate,false)} 前回复</small></span></div><button class="btn btn-primary" data-open-renewal="${renewal.id}">谈判</button></section>`:""}
       ${responseActive?`<section class="career-alert recovery"><div>${icon("trending-up")}<span><strong>${esc(career.responseSource||"状态调整")}正在转化为比赛状态</strong><small>${esc(responseSummary)} · 剩余 ${Math.min(career.responseMatches,career.temporaryBoostMatches)} 场有效出场${recentAverage!==null?` · 近期均分 ${recentAverage.toFixed(2)}`:""}</small></span></div><b class="response-momentum">状态动量 ${Number(career.responseMomentum||0).toFixed(1)}</b></section>`:""}
       ${(openIssue||activeStory)?`<section class="career-alert ${openIssue?"urgent":"story"}"><div>${icon(openIssue?"triangle-alert":"radio")}<span><strong>${esc((openIssue||activeStory).title)}</strong><small>${esc((openIssue||activeStory).detail)}</small></span></div><button class="btn btn-primary" data-open-career-event="${openIssue?`issue:${openIssue.id}`:"story"}">处理</button></section>`:""}
       <div class="player-command-grid">
@@ -2178,10 +2244,25 @@
     return rank>=Math.max(1,Math.floor(group.length*.42))||(player.age>=29&&rank>=1)||Number(player.overall||0)<sellerClub.prestige-10;
   }
 
+  function youngBreakoutScore(save,player,seller,buyer,date=save.date) {
+    const age=Number(player.age||effectivePlayerAge(player,save)||25),overall=Number(player.overall||60),potential=Number(player.potential||overall),appearances=Number(player.appearances||0),minutes=Number(player.development?.minutes||appearances*72),average=appearances?averageRating(player):Number(player.lastRating||player.form||0),unit=positionUnit(player.position);
+    if(age>23||buyer.prestige<82||buyer.prestige-seller.prestige<9||potential<Math.max(80,overall+4))return -Infinity;
+    const attacking=Number(player.goals||0)*(["attack","midfield"].includes(unit)?1.8:.45)+Number(player.assists||0)*(["attack","midfield"].includes(unit)?1.55:.7),defending=(Number(player.tacklesWon||0)+Number(player.interceptions||0)+Number(player.clearances||0)*.3)/Math.max(3,appearances)*(["defence","goalkeeper"].includes(unit)?1.35:.4);
+    const exposure=Math.min(13,appearances*.7+minutes/850),form=average?clamp((average-6.35)*16,-8,17):0,growth=Math.max(0,potential-overall),contract=Math.max(0,2-(Number(player.contract?.endSeason||save.season+3)-save.season))*4;
+    return (24-age)*2.2+growth*1.3+(potential-78)*.8+exposure+form+Math.min(10,attacking)+Math.min(7,defending)+(buyer.prestige-seller.prestige)*.45+contract;
+  }
+
+  function aiCanPoachYoungTalent(save,sellerId,player,buyer,indexedGroup=null,date=save.date) {
+    const seller=clubById(sellerId),role=positionUnit(player.position),group=indexedGroup||aiSquadNeeds(save,sellerId).groups[role]||[],minimum=AI_TRANSFER_MINIMUMS[role]||3,controlled=player.id===save.controlledId||sameTransferPlayer(player,(save.squad||[]).find(item=>item.id===save.controlledId));
+    if(controlled||group.length<=minimum||youngBreakoutScore(save,player,seller,buyer,date)<25)return false;
+    const active=activeOutgoingRumors(save,sellerId).filter(rumor=>positionUnit(rumor.position)===role).length;return group.length-active>minimum;
+  }
+
   function transferFee(player,buyer,seller,sequence=0,save=state) {
-    const value=Math.max(.5,currentPlayerMarketValue(player,save)||Math.max(1,Number(player.overall||65)-64)),potentialPremium=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0))*.045,prestigePressure=Math.max(0,seller.prestige-buyer.prestige)*.012;
+    const value=Math.max(.5,currentPlayerMarketValue(player,save)||Math.max(1,Number(player.overall||65)-64)),potentialPremium=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0))*.045,prestigePressure=Math.max(0,seller.prestige-buyer.prestige)*.012,breakout=youngBreakoutScore(save,player,seller,buyer,save.date);
+    const youthProtection=Number.isFinite(breakout)&&breakout>=25?clamp(.2+(23-Number(player.age||23))*.035+Math.max(0,(averageRating(player)||6.35)-6.6)*.22+Math.max(0,Number(player.potential||0)-84)*.025,.2,.72):0;
     const variation=.9+stableScoutingUnit(`${player.id}|${buyer.id}|${seller.id}|${sequence}`)*.28;
-    return Number(Math.max(.5,value*(1+potentialPremium+prestigePressure)*variation).toFixed(1));
+    return Number(Math.max(.5,value*(1+potentialPremium+prestigePressure+youthProtection)*variation).toFixed(1));
   }
 
   function aiTransferCandidate(save,buyerId,date=save.date) {
@@ -2195,24 +2276,26 @@
     });if(!need||budget<1)return null;
     const sellerRoleGroups=aiTransferRuntimeCache?.save===save?aiTransferRuntimeCache.sellerRoleGroups:new Map();
     if(!sellerRoleGroups.size){REAL_PLAYERS.forEach(player=>{const clubId=currentPlayerClubId(save,player),key=`${clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});[...sellerRoleGroups.keys()].filter(key=>key.startsWith(`${save.clubId}|`)).forEach(key=>sellerRoleGroups.delete(key));(save.squad||[]).forEach(player=>{const key=`${save.clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});sellerRoleGroups.forEach(group=>group.sort((a,b)=>(b.overall||0)-(a.overall||0)));}
-    const candidates=REAL_PLAYERS.filter(player=>{
+    const candidatePool=[...sellerRoleGroups.values()].flat();
+    const candidates=candidatePool.filter(player=>{
       const sellerId=currentPlayerClubId(save,player);if(sellerId===buyerId)return false;
       if(market.records.some(record=>record.season===save.season&&record.playerId===player.id))return false;
       if(save.role==="coach"&&sellerId===save.clubId)return false;
       if(save.role==="player"&&sellerId===save.clubId&&comparableClubName(player.name)===comparableClubName((save.squad||[]).find(item=>item.id===save.controlledId)?.name||""))return false;
       const seller=clubById(sellerId),role=positionUnit(player.position),fee=transferFee(player,buyer,seller,market.sequence,save);
       const spendingLimit=budget*(.72+coach.risk*.14+coach.budgetDiscipline*.08);
-      if(role!==need.role||fee>spendingLimit||!aiCanSell(save,sellerId,player,sellerRoleGroups.get(`${sellerId}|${role}`)||[]))return false;
+      const sellerGroup=sellerRoleGroups.get(`${sellerId}|${role}`)||[],poaching=aiCanPoachYoungTalent(save,sellerId,player,buyer,sellerGroup,date);
+      if(role!==need.role||fee>spendingLimit||(!aiCanSell(save,sellerId,player,sellerGroup)&&!poaching))return false;
       if(player.overall>=85&&buyer.prestige<85)return false;
       if(player.potential>=88&&buyer.prestige<80)return false;
       if(player.overall>buyer.prestige+6||player.overall<Math.max(54,buyer.prestige-18))return false;
       return true;
     }).map(player=>{
-      const sellerId=currentPlayerClubId(save,player),seller=clubById(sellerId),fee=transferFee(player,buyer,seller,market.sequence,save),improvement=Number(player.overall||0)-need.average,growth=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0));
+      const sellerId=currentPlayerClubId(save,player),seller=clubById(sellerId),fee=transferFee(player,buyer,seller,market.sequence,save),improvement=Number(player.overall||0)-need.average,growth=Math.max(0,Number(player.potential||player.overall)-Number(player.overall||0)),breakout=youngBreakoutScore(save,player,seller,buyer,date);
       const upward=buyer.prestige-seller.prestige,affordability=Math.max(-18,12-fee/Math.max(1,budget)*18),destinationFit=18-Math.abs((buyer.prestige-5)-Number(player.overall||0));
       const ageFit=player.age<=23?coach.youthTrust*7:player.age>=30?(1-coach.youthTrust)*4:3;
-      const score=need.score*1.6+improvement*2.2+growth*(.55+coach.youthTrust)+ageFit+upward*.45+affordability*(.65+coach.budgetDiscipline*.55)+destinationFit+(stableScoutingUnit(`${market.season}|${buyerId}|${player.id}`)-.5)*16;
-      return {player,sellerId,seller,buyer,fee,need,score};
+      const score=need.score*1.6+improvement*2.2+growth*(.55+coach.youthTrust)+ageFit+upward*.45+affordability*(.65+coach.budgetDiscipline*.55)+destinationFit+(Number.isFinite(breakout)?breakout*.34:0)+(stableScoutingUnit(`${market.season}|${buyerId}|${player.id}`)-.5)*16;
+      return {player,sellerId,seller,buyer,fee,need,score,poaching:Number.isFinite(breakout)&&breakout>=25,breakout};
     }).sort((a,b)=>b.score-a.score||b.player.potential-a.player.potential||b.player.overall-a.player.overall);
     return candidates[0]||null;
   }
@@ -2267,6 +2350,16 @@
     save.media.unshift({source:"Transfer Desk",title,body,date,type:"transfer"});save.media=save.media.slice(0,100);
   }
 
+  function createUserClubEliteInterest(save,date) {
+    const market=ensureTransferMarket(save),windowKey=transferWindow(date,save.season).key,seller=clubById(save.clubId);if(seller.prestige>=82||market.rumors.some(rumor=>rumor.eliteInterest&&rumor.windowKey===windowKey))return null;
+    const controlled=(save.squad||[]).find(player=>player.id===save.controlledId),pool=save.role==="player"?(controlled?[controlled]:[]):(save.squad||[]),buyers=CLUBS.filter(club=>club.prestige>=82&&club.prestige-seller.prestige>=9&&Number(market.budgets[club.id]||0)>=8);
+    const options=[];for(const player of pool){const role=positionUnit(player.position),sellerGroup=(save.squad||[]).filter(item=>positionUnit(item.position)===role);if(sellerGroup.length<=Number(AI_TRANSFER_MINIMUMS[role]||3))continue;for(const buyer of buyers){const breakout=youngBreakoutScore(save,player,seller,buyer,date),fee=transferFee(player,buyer,seller,market.sequence,save);if(breakout>=25&&fee<=Number(market.budgets[buyer.id]||0)*.88)options.push({player,buyer,breakout,fee});}}
+    const target=options.sort((a,b)=>b.breakout-a.breakout||b.buyer.prestige-a.buyer.prestige)[0];if(!target)return null;
+    const rumor={id:`rumor-${market.season}-${++market.sequence}`,season:save.season,windowKey,createdDate:date,resolveDate:addDays(date,10),status:"active",advisoryOnly:true,eliteInterest:true,playerId:target.player.sourcePlayerId||target.player.id,sourcePlayerId:target.player.id,playerName:target.player.name,position:target.player.position,overall:target.player.overall,potential:target.player.potential,fromId:save.clubId,toId:target.buyer.id,fee:target.fee,confidence:clamp(Math.round(48+target.breakout*.55),52,88),reason:"看中他在小俱乐部展现出的年龄、潜力与比赛表现"};market.rumors.unshift(rumor);
+    addNotification({title:`豪门关注：${target.buyer.name} 正在考察 ${target.player.name}`,type:"transfer",date,detail:save.role==="player"?"你的赛季表现已经进入更高声望俱乐部的引援视野。这不是自动转会，未来决定仍取决于正式报价、俱乐部态度和你的职业选择。":"对方正在准备针对本队年轻核心的引援方案。系统不会替你出售球员，挂牌与最终决定仍由你掌握。",facts:[`${playerRoleLabel(target.player.position)} · ${target.player.age} 岁`,`本季 ${target.player.appearances||0} 场 · 评分 ${(averageRating(target.player)||6.35).toFixed(2)}`,`预估费用：${money(target.fee)}`]});
+    reportTransferStory(save,`${target.buyer.name} 关注 ${target.player.name}`,`${target.buyer.name} 的球探持续考察这名年轻球员，年龄、潜力和本赛季表现是兴趣的主要来源。${seller.name} 对其估值约为 ${money(target.fee)}。`,date,true);return rumor;
+  }
+
   function createAiTransferRumor(save,date) {
     const market=ensureTransferMarket(save),clubCounts=aiTransferRuntimeCache?.save===save?aiTransferRuntimeCache.clubCounts:{};if(!aiTransferRuntimeCache||aiTransferRuntimeCache.save!==save){REAL_PLAYERS.forEach(player=>{const clubId=currentPlayerClubId(save,player);clubCounts[clubId]=(clubCounts[clubId]||0)+1;});clubCounts[save.clubId]=(save.squad||[]).length;}
     const clubs=CLUBS.filter(club=>{
@@ -2277,7 +2370,7 @@
     if(!clubs.length)return null;
     const buyer=weightedPick(clubs,club=>Math.max(1,club.prestige-55)*Math.max(1,Number(market.budgets[club.id]||0)/20)),candidate=buyer&&aiTransferCandidate(save,buyer.id,date);
     if(!candidate||transferRumorExists(market,candidate.player.id,buyer.id))return null;
-    const resolveDays=Math.round(rand(3,8)),confidence=clamp(Math.round(54+candidate.score*.48+(buyer.prestige-candidate.seller.prestige)*.8),32,92),roleReason=candidate.need.shortage?`${transferRoleLabel(candidate.need.role)}人数不足`:`希望提升${transferRoleLabel(candidate.need.role)}的即战力`;
+    const resolveDays=Math.round(rand(3,8)),confidence=clamp(Math.round(54+candidate.score*.48+(buyer.prestige-candidate.seller.prestige)*.8),32,92),roleReason=candidate.poaching?`看中他在小俱乐部展现出的年龄、潜力与比赛表现`:candidate.need.shortage?`${transferRoleLabel(candidate.need.role)}人数不足`:`希望提升${transferRoleLabel(candidate.need.role)}的即战力`;
     const rumor={id:`rumor-${market.season}-${++market.sequence}`,season:save.season,windowKey:transferWindow(date,save.season).key,createdDate:date,resolveDate:addDays(date,resolveDays),status:"active",playerId:candidate.player.id,playerName:candidate.player.name,position:candidate.player.position,overall:candidate.player.overall,potential:candidate.player.potential,fromId:candidate.sellerId,toId:buyer.id,fee:candidate.fee,confidence,reason:roleReason};
     market.rumors.unshift(rumor);
     const userInvolved=rumor.fromId===save.clubId||rumor.toId===save.clubId,important=userInvolved||rumor.fee>=55||rumor.overall>=85;
@@ -2347,7 +2440,7 @@
     while(market.nextTickDate<=targetDate){
       const tickDate=market.nextTickDate,windowInfo=transferWindow(tickDate,save.season);
       market.rumors.filter(rumor=>rumor.status==="active"&&rumor.resolveDate<=tickDate).forEach(rumor=>{if(rumor.advisoryOnly)rumor.status="expired";else completeTransfer(save,rumor,tickDate);});
-      if(windowInfo.open){const daysLeft=daysBetween(tickDate,windowInfo.end),attempts=daysLeft<=7?3:daysLeft<=21?2:1;aiTransferRuntimeCache=createAiTransferRuntimeCache(save,tickDate);try{for(let attempt=0;attempt<attempts;attempt++){if(save.role==="player")createAiSurplusSaleRumor(save,tickDate,save.clubId);createAiSurplusSaleRumor(save,tickDate);if(attempt===0||Math.random()<(daysLeft<=7?.78:.52))createAiTransferRumor(save,tickDate);}createCoachTransferReport(save,tickDate);}finally{aiTransferRuntimeCache=null;}}
+      if(windowInfo.open){const daysLeft=daysBetween(tickDate,windowInfo.end),attempts=daysLeft<=7?3:daysLeft<=21?2:1;aiTransferRuntimeCache=createAiTransferRuntimeCache(save,tickDate);try{createUserClubEliteInterest(save,tickDate);for(let attempt=0;attempt<attempts;attempt++){if(save.role==="player")createAiSurplusSaleRumor(save,tickDate,save.clubId);createAiSurplusSaleRumor(save,tickDate);if(attempt===0||Math.random()<(daysLeft<=7?.78:.52))createAiTransferRumor(save,tickDate);}createCoachTransferReport(save,tickDate);}finally{aiTransferRuntimeCache=null;}}
       market.nextTickDate=addDays(tickDate,transferTickDelay(tickDate,save.season));
     }
     market.rumors.filter(rumor=>rumor.status==="active"&&rumor.resolveDate<=targetDate).forEach(rumor=>{if(rumor.advisoryOnly)rumor.status="expired";else completeTransfer(save,rumor,targetDate);});
@@ -3160,6 +3253,11 @@
       const notification=state.notifications.find(item=>item.id===modal.id);if(!notification)return "";
       return `<div class="modal-backdrop"><div class="modal report-modal" role="dialog" aria-modal="true" aria-labelledby="notification-title"><div class="modal-header"><h2 id="notification-title">${esc(notification.title)}</h2><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body">${renderNotificationDetail(notification)}</div><div class="modal-actions"><button class="btn btn-primary" data-close-modal>完成查看</button></div></div></div>`;
     }
+    if (modal.type === "renewal") {
+      const session=renewalById(modal.id);if(!session)return "";const closed=session.status!=="active",offer=session.offer;
+      const patience=`<div class="patience-bar ${session.clubPatience<=30?"danger":session.clubPatience<=60?"warn":""}"><div><span>${esc(clubById(state.clubId).name)} 耐心</span><strong>${session.clubPatience}%</strong></div><i><span style="width:${session.clubPatience}%"></span></i></div>`;
+      return `<div class="modal-backdrop"><div class="modal negotiation-modal" role="dialog" aria-modal="true"><div class="modal-header"><div><span class="eyebrow">第 ${session.round} 轮 · 球员续约</span><h2>${esc(controlledPlayer().name)}</h2></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="negotiation-patience renewal-patience">${patience}<div class="renewal-deadline"><span>报价截止</span><strong>${formatDate(session.deadlineDate,false)}</strong></div></div><div class="modal-body negotiation-body"><section class="negotiation-summary"><div><span>当前周薪</span><strong>€${Math.round(Number(controlledPlayer().contract?.weeklyWage||0))}K</strong></div><div><span>合同到期</span><strong>${controlledPlayer().contract?.endSeason} 年</strong></div><div><span>本季评分</span><strong>${(averageRating(controlledPlayer())||6.35).toFixed(2)}</strong></div><div><span>谈判状态</span><strong>${closed?esc(session.closedReason||"已经结束"):"等待你的决定"}</strong></div></section>${closed?`<div class="negotiation-closed">${icon(session.status==="completed"?"circle-check":"circle-x")}<strong>${esc(session.closedReason||(session.status==="completed"?"续约已经完成":"谈判已经结束"))}</strong><span>现有合同状态已同步到球员详情。</span></div>`:`<section class="negotiation-form"><h3>俱乐部当前报价</h3><div class="negotiation-fields"><label>周薪<small>千欧元</small><input class="input" id="renew-wage" type="number" min="1" step="1" value="${offer.weeklyWage}"></label><label>签约奖金<small>百万欧元</small><input class="input" id="renew-signing" type="number" min="0" step="0.1" value="${offer.signingBonus}"></label><label>出场津贴<small>千欧元</small><input class="input" id="renew-appearance" type="number" min="0" step="1" value="${offer.appearanceFee}"></label><label>解约金<small>百万欧元</small><input class="input" id="renew-release" type="number" min="1" step="1" value="${offer.releaseClause}"></label><label>队内角色<small>承诺</small><select class="select" id="renew-role">${["核心主力","常规主力","轮换球员","替补球员"].map(role=>`<option ${offer.role===role?"selected":""}>${role}</option>`).join("")}</select></label><label>合同年限<small>年</small><input class="input" id="renew-years" type="number" min="1" max="5" value="${offer.years}"></label></div></section>`}<section class="negotiation-history"><h3>谈判记录</h3>${session.history.slice().reverse().map(item=>`<article><span>第 ${item.round} 轮</span><div><strong>${esc(item.speaker)}</strong><p>${esc(item.text)}</p></div></article>`).join("")}</section></div><div class="modal-actions">${closed?`<button class="btn btn-primary" data-close-modal>返回</button>`:`<button class="btn btn-danger" id="reject-renewal">拒绝续约</button><button class="btn" data-close-modal>稍后决定</button><button class="btn" id="counter-renewal">提交还价</button><button class="btn btn-primary" id="accept-renewal">接受报价</button>`}</div></div></div>`;
+    }
     if (modal.type === "negotiation") {
       const session=negotiationById(modal.id);if(!session)return "";const p=session.playerSnapshot,clubStage=session.stage==="club",closed=session.status!=="active";
       const patience=(label,value)=>`<div class="patience-bar ${value<=30?"danger":value<=60?"warn":""}"><div><span>${label}</span><strong>${value}%</strong></div><i><span style="width:${value}%"></span></i></div>`;
@@ -3230,11 +3328,15 @@
     document.querySelectorAll("[data-major-league]").forEach(button=>button.addEventListener("click",()=>{state.majorLeagueId=button.dataset.majorLeague;saveState();render();}));
     document.querySelectorAll("[data-transfer]").forEach(b=>b.addEventListener("click",()=>{const player=transferRecommendationRegistry[Number(b.dataset.transfer)];if(!player)return;modal={type:"transfer",player};render();}));
     document.querySelectorAll("[data-open-negotiation]").forEach(button=>button.addEventListener("click",()=>{modal={type:"negotiation",id:button.dataset.openNegotiation};render();}));
+    document.querySelectorAll("[data-open-renewal]").forEach(button=>button.addEventListener("click",()=>{modal={type:"renewal",id:button.dataset.openRenewal};render();}));
     document.querySelectorAll("[data-list-player]").forEach(button=>button.addEventListener("click",()=>toggleTransferList(button.dataset.listPlayer)));
     document.querySelectorAll("[data-close-modal]").forEach(b=>b.addEventListener("click",()=>{modal=null;render();}));
     document.getElementById("confirm-transfer")?.addEventListener("click",()=>transferActionWithLoading("start"));
     document.getElementById("submit-negotiation")?.addEventListener("click",()=>transferActionWithLoading("submit"));
     document.getElementById("withdraw-negotiation")?.addEventListener("click",()=>withdrawNegotiation(modal?.id));
+    document.getElementById("accept-renewal")?.addEventListener("click",()=>acceptPlayerRenewal(modal?.id));
+    document.getElementById("counter-renewal")?.addEventListener("click",()=>submitPlayerRenewalCounter(modal?.id));
+    document.getElementById("reject-renewal")?.addEventListener("click",()=>rejectPlayerRenewal(modal?.id));
     document.getElementById("request-transfer")?.addEventListener("click",requestTransfer);
     document.getElementById("suggest-signing")?.addEventListener("click",()=>toast("你已向教练组提交引援建议"));
     document.getElementById("retire")?.addEventListener("click",()=>{modal={type:"retire"};render();});
