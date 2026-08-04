@@ -22,7 +22,7 @@ assert.ok(api.seasonBroadcastRevenue(club,participants,participants)>=118,"every
 assert.ok(api.seasonBroadcastRevenue(club,1,participants)>api.seasonBroadcastRevenue(club,participants,participants),"a higher league finish must increase broadcast prize money");
 
 const squad=api.createSquad(club,null);squad.forEach(player=>api.ensurePlayerContract(player,2026));
-const save={version:31,role:"coach",person:"Finance Test",clubId:club.id,controlledId:null,squad,season:2026,date:"2026-08-31",played:0,funds:Number(club.budget)||50,media:[],notifications:[],transferHistory:[],transferRequestsLog:[],transferNegotiations:[],schedule:[],majorLeagueWorld:{leagues:{}},leaguePosition:1,transferMarket:api.createTransferMarket(2026),worldMarketValues:{},marketValuation:{lastQuarterKey:"2026-Q3",lastUpdatedDate:"2026-07-01"}};
+const save={version:32,role:"coach",person:"Finance Test",clubId:club.id,controlledId:null,squad,season:2026,date:"2026-08-31",played:0,funds:Number(club.budget)||50,media:[],notifications:[],transferHistory:[],transferRequestsLog:[],transferNegotiations:[],schedule:[],majorLeagueWorld:{leagues:{}},leaguePosition:1,transferMarket:api.createTransferMarket(2026),worldMarketValues:{},marketValuation:{lastQuarterKey:"2026-Q3",lastUpdatedDate:"2026-07-01"}};
 api.setTestState(save);const finance=api.ensureClubFinances(save);finance.lastOperatingMonth="2026-08";
 const fundsBefore=save.funds,aiClub=api.CLUBS.find(item=>item.id!==club.id),aiBefore=save.transferMarket.budgets[aiClub.id];
 const monthlyEvent=api.runMonthlyClubFinances(save,"2026-09-01");

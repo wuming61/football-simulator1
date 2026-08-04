@@ -155,6 +155,55 @@
     return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\b(fc|cf|as|ac|sv|olympique)\b/g, "").replace(/[^\p{L}\p{N}]/gu, "");
   }
 
+  const POSITION_LABELS={GK:"门将",CB:"中后卫",RB:"右后卫",LB:"左后卫",RWB:"右边翼卫",LWB:"左边翼卫",DM:"后腰",CM:"中前卫",RM:"右边前卫",LM:"左边前卫",AM:"前腰",RW:"右边锋",LW:"左边锋",ST:"中锋",CF:"影锋"};
+  const POSITION_ORDER=["GK","RB","CB","LB","RWB","LWB","DM","CM","RM","LM","AM","RW","LW","CF","ST"];
+  const LEGACY_POSITION_GROUPS={DF:["RB","CB","CB","LB","RWB","LWB","CB","RB","LB","CB"],FB:["RB","LB","RWB","LWB"],WG:["RW","LW","RM","LM"],MF:["DM","CM","RM","LM","AM"],CB:["CB","CB","RB","LB","RWB","LWB"],CM:["DM","CM","CM","AM","RM","LM"],ST:["ST","CF","ST","CF"]};
+
+  function sourcePositionPattern(group) {
+    if(group==="DF")return LEGACY_POSITION_GROUPS.DF;if(group==="CM")return LEGACY_POSITION_GROUPS.CM;if(group==="ST")return ["ST","RW","LW","CF","ST","RW","LW","CF"];
+    return [group||"CM"];
+  }
+  function detailedSourcePosition(sourcePlayer,index,players=[]) {
+    const group=sourcePlayer?.positionGroup||sourcePlayer?.position||"CM",number=Number(sourcePlayer?.number),sameGroup=players.filter(player=>(player.positionGroup||player.position)===group),ordinal=Math.max(0,sameGroup.indexOf(sourcePlayer)>=0?sameGroup.indexOf(sourcePlayer):index);
+    if(group==="GK")return "GK";
+    if(group==="DF"){
+      if(number===2)return ordinal%2?"RWB":"RB";if(number===3)return ordinal%2?"LWB":"LB";if([4,5,6].includes(number))return "CB";
+    }
+    if(group==="CM"){
+      if(number===6)return "DM";if(number===8)return "CM";if(number===10)return "AM";if(number===7)return "RM";if(number===11)return "LM";
+    }
+    if(group==="ST"){
+      if(number===9)return "ST";if(number===10)return "CF";if(number===7)return "RW";if(number===11)return "LW";
+    }
+    const pattern=sourcePositionPattern(group);return pattern[ordinal%pattern.length];
+  }
+  function migrateDetailedPositions(players=[],clubId=null) {
+    const sourceTeam=clubId?DQD_TEAM_INDEX.get(clubId):null;
+    players.forEach((player,index)=>{
+      const legacy=LEGACY_POSITION_GROUPS[player.position];
+      if(["DF","FB","WG","MF"].includes(player.position)&&legacy){player.position=legacy[index%legacy.length];return;}
+      if(!sourceTeam||player.dataStatus!=="dongqiudi-2026-07-31")return;
+      const sourceIndex=sourceTeam.players.findIndex(source=>source.number===player.number&&comparableClubName(source.name)===comparableClubName(player.name));
+      if(sourceIndex<0)return;
+      player.position=detailedSourcePosition(sourceTeam.players[sourceIndex],sourceIndex,sourceTeam.players);
+    });
+    return players;
+  }
+
+  const SOURCE_ATTRIBUTE_OFFSETS={
+    GK:{pace:-14,shooting:-25,passing:-5,dribbling:-18,defending:-8,physical:1},CB:{pace:-3,shooting:-16,passing:-3,dribbling:-8,defending:7,physical:5},
+    RB:{pace:6,shooting:-9,passing:2,dribbling:3,defending:5,physical:2},LB:{pace:6,shooting:-9,passing:2,dribbling:3,defending:5,physical:2},
+    RWB:{pace:8,shooting:-5,passing:4,dribbling:6,defending:3,physical:3},LWB:{pace:8,shooting:-5,passing:4,dribbling:6,defending:3,physical:3},
+    DM:{pace:-2,shooting:-7,passing:5,dribbling:-2,defending:7,physical:4},CM:{pace:2,shooting:-2,passing:8,dribbling:3,defending:2,physical:2},
+    RM:{pace:7,shooting:0,passing:6,dribbling:7,defending:-1,physical:2},LM:{pace:7,shooting:0,passing:6,dribbling:7,defending:-1,physical:2},
+    AM:{pace:5,shooting:5,passing:9,dribbling:9,defending:-9,physical:-1},RW:{pace:9,shooting:7,passing:4,dribbling:11,defending:-13,physical:0},LW:{pace:9,shooting:7,passing:4,dribbling:11,defending:-13,physical:0},
+    ST:{pace:5,shooting:12,passing:-4,dribbling:4,defending:-16,physical:6},CF:{pace:5,shooting:8,passing:5,dribbling:7,defending:-14,physical:3}
+  };
+  function sourcePlayerAttributes(position,overall) {
+    const offsets=SOURCE_ATTRIBUTE_OFFSETS[position]||SOURCE_ATTRIBUTE_OFFSETS.CM,value=key=>clamp(overall+Number(offsets[key]||0),key==="defending"?25:35,96);
+    return {pace:value("pace"),shooting:value("shooting"),passing:value("passing"),dribbling:value("dribbling"),defending:value("defending"),physical:value("physical")};
+  }
+
   function applyDongqiudiData() {
     if (!DQD_DATA.teams.length) return;
     const clubs = DQD_DATA.teams.map(team => {
@@ -180,10 +229,10 @@
     const allPlayers=DQD_DATA.teams.flatMap(team => {
       const club=clubs.find(item=>item.id===`dqd-${team.id}`);
       return team.players.map((sourcePlayer,index)=>{
-        const position=sourcePlayer.positionGroup==="DF"?"CB":sourcePlayer.positionGroup;
+        const position=detailedSourcePosition(sourcePlayer,index,team.players);
         const overall=estimatedRating(sourcePlayer,club);
         const potential=clamp(overall+(sourcePlayer.age<=20?8:sourcePlayer.age<=23?5:sourcePlayer.age<=26?2:0),overall,95);
-        const base={id:`dqd-real-${team.id}-${index}`,name:sourcePlayer.name,dqdName:sourcePlayer.name,club:club.id,position,age:sourcePlayer.age||24,overall,potential,value:sourcePlayer.marketValueM??Math.max(1,overall-64),wage:Math.round(overall*club.prestige*.014),nationality:sourcePlayer.nationality,pace:clamp(overall+(position==="ST"?4:0),45,96),shooting:clamp(overall+(position==="ST"?3:-5),40,96),passing:clamp(overall+(position==="CM"?3:-2),40,96),dribbling:clamp(overall+(position==="ST"||position==="CM"?2:-3),40,96),defending:clamp(overall+(position==="CB"?4:-18),30,96),physical:clamp(overall+(position==="CB"?3:0),40,96),dataStatus:"dongqiudi-2026-07-31",ratingSource:"game-estimate-v0"};
+        const base={id:`dqd-real-${team.id}-${index}`,name:sourcePlayer.name,dqdName:sourcePlayer.name,club:club.id,position,age:sourcePlayer.age||24,overall,potential,value:sourcePlayer.marketValueM??Math.max(1,overall-64),wage:Math.round(overall*club.prestige*.014),nationality:sourcePlayer.nationality,...sourcePlayerAttributes(position,overall),dataStatus:"dongqiudi-2026-07-31",ratingSource:"game-estimate-v1"};
         const curated=featured.find(player=>player.club===club.id&&comparableClubName(player.dqdName||player.name)===comparableClubName(sourcePlayer.name));
         return curated?{...base,...curated,dqdName:sourcePlayer.name,club:club.id,nationality:sourcePlayer.nationality}:base;
       });
@@ -216,7 +265,7 @@
 
   const FIRST = ["Alex","Mateo","Luca","Noah","Daniel","João","Theo","Elias","Samuel","Nico","Leo","Tom","Milan","Iker","Hugo","Ben","Adam","Oscar","Julian","Rafael","Marco","Felix","David","Yanis"];
   const LAST = ["Martin","Silva","Costa","Meyer","Rossi","Bernard","Wilson","Santos","Garcia","Novak","Diallo","Murphy","Keller","Lopez","Marin","Andersson","Ricci","Bauer","Fernandes","Moreau","Taylor","Pereira","Schmidt","Romero"];
-  const POSITIONS = ["GK","RB","CB","CB","LB","DM","CM","CM","AM","RW","LW","ST","CB","CM","ST","GK","FB","WG","ST","DM","CB","AM"];
+  const POSITIONS = ["GK","RB","CB","CB","LB","DM","CM","CM","AM","RW","LW","ST","GK","RWB","CB","LWB","DM","RM","LM","CF","ST","CB","AM","CM"];
   const YOUTH_NATION_FOUNDATION={英格兰:91,西班牙:94,德国:91,意大利:89,法国:95,葡萄牙:91,荷兰:92,比利时:88,阿根廷:94,巴西:96,乌拉圭:88,克罗地亚:87,塞尔维亚:84,丹麦:84,挪威:82,瑞典:82,波兰:81,摩洛哥:85,塞内加尔:82,尼日利亚:84,科特迪瓦:83,日本:84,韩国:79,美国:81,墨西哥:82,哥伦比亚:87,厄瓜多尔:83,奥地利:82,瑞士:83,土耳其:82,苏格兰:80,爱尔兰:76,中国:68};
   const YOUTH_NAMES={
     英格兰:[["Oliver","George","Harry","Noah","Jack","Charlie"],["Smith","Taylor","Wilson","Walker","Bennett","Palmer"]],西班牙:[["Hugo","Mateo","Alejandro","Pablo","Iker","Nico"],["Garcia","Martinez","Lopez","Sanchez","Navarro","Ortega"]],德国:[["Noah","Leon","Finn","Jonas","Felix","Lukas"],["Meyer","Schmidt","Bauer","Keller","Wagner","Hoffmann"]],意大利:[["Luca","Matteo","Alessandro","Marco","Tommaso","Elia"],["Rossi","Ricci","Romano","Conti","Moretti","Gallo"]],法国:[["Hugo","Theo","Lucas","Enzo","Mathis","Yanis"],["Martin","Bernard","Dubois","Moreau","Diallo","Laurent"]],葡萄牙:[["Joao","Tiago","Diogo","Rafael","Goncalo","Duarte"],["Silva","Costa","Pereira","Fernandes","Santos","Carvalho"]],荷兰:[["Daan","Sem","Luuk","Mees","Jesse","Finn"],["de Jong","van Dijk","Bakker","Smit","Visser","Bos"]],比利时:[["Arthur","Louis","Jules","Victor","Milan","Mathis"],["Peeters","Janssens","Maes","Willems","Jacobs","Dubois"]],阿根廷:[["Mateo","Thiago","Santino","Lautaro","Julian","Tomas"],["Romero","Fernandez","Alvarez","Acosta","Medina","Rojas"]],巴西:[["Gabriel","Matheus","Rafael","Lucas","Joao","Vinicius"],["Silva","Santos","Oliveira","Costa","Souza","Pereira"]],克罗地亚:[["Luka","Ivan","Marko","Mateo","Ante","Dino"],["Kovacic","Peric","Maric","Juric","Novak","Basic"]],摩洛哥:[["Youssef","Adam","Ilyas","Amine","Rayan","Mehdi"],["El Amrani","Benali","Alaoui","Bennani","Idrissi","Tahiri"]],日本:[["Haruto","Yuto","Sota","Ren","Riku","Kaito"],["Sato","Suzuki","Takahashi","Tanaka","Ito","Watanabe"]],韩国:[["Min-jun","Ji-ho","Seo-jun","Hyun-woo","Jun-ho","Tae-yang"],["Kim","Lee","Park","Choi","Jung","Kang"]]
@@ -349,11 +398,11 @@
     const team=badgeTeam(value),label=team.name||"球队";
     return `<span class="club-badge ${esc(className)}" title="${esc(label)}"><span class="club-badge-fallback" aria-hidden="true">${esc(team.code||"FC")}</span>${team.id?`<img src="assets/badges/${team.id}.png" alt="${esc(label)}队徽" loading="lazy" onerror="this.remove()">`:""}</span>`;
   }
-  function playerRoleLabel(pos) { return ({GK:"门将",RB:"右后卫",LB:"左后卫",FB:"边后卫",DF:"后卫",CB:"中后卫",DM:"后腰",CM:"中场",AM:"前腰",RW:"右边锋",LW:"左边锋",WG:"边锋",ST:"前锋"})[pos] || pos; }
-  function positionSortRank(pos) { return ({GK:0,RB:10,CB:11,DF:12,FB:13,LB:14,DM:20,CM:21,AM:22,RW:30,WG:31,LW:32,ST:33})[pos]??99; }
+  function playerRoleLabel(pos) { return POSITION_LABELS[pos]||({FB:"边后卫",DF:"后卫",WG:"边锋",MF:"中场"})[pos]||pos; }
+  function positionSortRank(pos) { const index=POSITION_ORDER.indexOf(pos);return index>=0?index:99; }
   function averageRating(player) { return player?.appearances ? Number(player.ratingTotal||0)/player.appearances : 0; }
 
-  const MARKET_VALUE_POSITION_FACTORS={GK:.82,CB:.9,DF:.9,RB:.92,LB:.92,FB:.92,DM:.95,CM:1,AM:1.06,RW:1.09,LW:1.09,WG:1.09,ST:1.11};
+  const MARKET_VALUE_POSITION_FACTORS={GK:.82,CB:.9,RB:.92,LB:.92,RWB:.96,LWB:.96,DM:.95,CM:1,RM:1.02,LM:1.02,AM:1.06,RW:1.09,LW:1.09,CF:1.09,ST:1.11};
   function marketQuarterKey(date=START_DATE) {const parsed=new Date(`${date}T12:00:00`),quarter=Math.floor(parsed.getMonth()/3)+1;return `${parsed.getFullYear()}-Q${quarter}`;}
   function isMarketValueReviewDate(date) {return ["01-01","04-01","07-01","10-01"].includes(String(date||"").slice(5));}
   function managedSquadPlayer(player,save=state) {return (save?.squad||[]).some(item=>item===player||item.id===player?.id||item.sourcePlayerId===player?.id||player?.sourcePlayerId===item.id);}
@@ -372,7 +421,7 @@
     const clubId=managedSquadPlayer(player,save)?save?.clubId:(save?.transferMarket?.clubOverrides?.[player?.id]||player?.clubId||player?.club),club=CLUBS.find(item=>item.id===clubId),prestigeFactor=club?clamp(.9+(Number(club.prestige||75)-65)*.004,.9,1.09):1;
     const appearances=Math.max(0,Number(player?.appearances||0)),rating=averageRating(player),playedClubMatches=Math.max(appearances,(save?.schedule||[]).filter(fixture=>fixture.status==="played"&&!fixture.international).length,Number(save?.played||0)),performanceTracked=managedSquadPlayer(player,save)||appearances>0;
     const performanceFactor=appearances>=3&&rating?marketValueRatingFactor(rating):1,attendanceFactor=performanceTracked&&playedClubMatches>=5?clamp(.86+(appearances/playedClubMatches)*.22,.88,1.08):1;
-    const expectedContribution=({GK:.015,CB:.06,DF:.06,RB:.1,LB:.1,FB:.1,DM:.1,CM:.22,AM:.36,RW:.4,LW:.4,WG:.4,ST:.5})[player?.position]||.22,contributionPerGame=appearances?(Number(player?.goals||0)+Number(player?.assists||0)*.85)/appearances:0,contributionFactor=appearances>=3?1+clamp((contributionPerGame/expectedContribution-1)*.055,0,.14):1;
+    const expectedContribution=({GK:.015,CB:.06,RB:.1,LB:.1,RWB:.16,LWB:.16,DM:.1,CM:.22,RM:.28,LM:.28,AM:.36,RW:.4,LW:.4,CF:.48,ST:.5})[player?.position]||.22,contributionPerGame=appearances?(Number(player?.goals||0)+Number(player?.assists||0)*.85)/appearances:0,contributionFactor=appearances>=3?1+clamp((contributionPerGame/expectedContribution-1)*.055,0,.14):1;
     const currentInjury=Number(player?.injured||0),injuryFactor=currentInjury>=30?.92:currentInjury>=14?.96:1,seasonInjuryDays=Number(player?.development?.injuryDays||0),availabilityFactor=seasonInjuryDays>=80?.95:seasonInjuryDays>=40?.98:1;
     const raw=Math.pow(1.17,ca-60)*marketValueAgeFactor(age)*potentialFactor*positionFactor*prestigeFactor*performanceFactor*attendanceFactor*contributionFactor*injuryFactor*availabilityFactor;
     const bounded=clamp(raw,.05,300);return Number(bounded.toFixed(bounded>=10?1:2));
@@ -457,13 +506,13 @@
         const youthGrowth = sourcePlayer.age <= 20 ? 8 : sourcePlayer.age <= 23 ? 5 : sourcePlayer.age <= 26 ? 2 : 0;
         return {
           id:`dqd-player-${sourceTeam.id}-${index}`, name:sourcePlayer.name, number:sourcePlayer.number,
-          position:sourcePlayer.positionGroup === "DF" ? "CB" : sourcePlayer.positionGroup,
+          position:detailedSourcePosition(sourcePlayer,index,sourceTeam.players),
           nationality:sourcePlayer.nationality, age:sourcePlayer.age || 24, overall,
           potential:clamp(overall + youthGrowth, overall, 95), value:sourcePlayer.marketValueM ?? Math.max(1, overall - 64),
-          sourceValueLabel:sourcePlayer.marketValueLabel, wage:Math.round(overall * club.prestige * .014),
+          sourceValueLabel:sourcePlayer.marketValueLabel, wage:Math.round(overall * club.prestige * .014),...sourcePlayerAttributes(detailedSourcePosition(sourcePlayer,index,sourceTeam.players),overall),
           fitness:Math.round(rand(84,100)), morale:Math.round(rand(68,95)), form:0, lastRating:null,
           ratingTotal:0, appearances:0, goals:0, assists:0, injured:0, injury:null,
-          dataStatus:"dongqiudi-2026-07-31", ratingSource:"game-estimate-v0"
+          dataStatus:"dongqiudi-2026-07-31", ratingSource:"game-estimate-v1"
         };
       });
       if (controlled && controlled.club === club.id) {
@@ -474,7 +523,7 @@
         const controlledRecord = { ...base, ...controlled, id:"controlled", fitness:96, morale:88, form:0, lastRating:null, ratingTotal:0, appearances:0, goals:0, assists:0, injured:0, injury:null, consecutiveStarts:0, lastMatchMinutes:0, lastMatchDate:null };
         if (existing >= 0) squad[existing] = controlledRecord; else squad.push(controlledRecord);
       }
-      return squad.sort((a,b) => POSITIONS.indexOf(a.position)-POSITIONS.indexOf(b.position));
+      return squad.sort((a,b) => positionSortRank(a.position)-positionSortRank(b.position));
     }
     const squad = [];
     for (let i=0; i<22; i++) {
@@ -493,7 +542,7 @@
       const existing = squad.findIndex(p => p.position === controlled.position);
       squad[existing] = { ...controlled, id:"controlled", fitness:96, morale:88, form:0, lastRating:null, ratingTotal:0, appearances:0, goals:0, assists:0, injured:0, injury:null, consecutiveStarts:0, lastMatchMinutes:0, lastMatchDate:null };
     }
-    return squad.sort((a,b) => POSITIONS.indexOf(a.position)-POSITIONS.indexOf(b.position));
+    return squad.sort((a,b) => positionSortRank(a.position)-positionSortRank(b.position));
   }
 
   function ensurePlayerContract(player,season=2026) {
@@ -557,12 +606,12 @@
   }
 
   function youthPosition(key) {
-    const positions=["GK","RB","CB","LB","DM","CM","AM","RW","LW","ST"],weights=[.09,.08,.16,.08,.1,.16,.08,.08,.07,.1],unit=stableScoutingUnit(`${key}|position`);let cursor=unit;for(let i=0;i<positions.length;i++){cursor-=weights[i];if(cursor<=0)return positions[i];}return "ST";
+    const positions=["GK","RB","CB","LB","RWB","LWB","DM","CM","RM","LM","AM","RW","LW","ST","CF"],weights=[.09,.06,.15,.06,.035,.035,.09,.14,.045,.045,.07,.06,.06,.09,.055],unit=stableScoutingUnit(`${key}|position`);let cursor=unit;for(let i=0;i<positions.length;i++){cursor-=weights[i];if(cursor<=0)return positions[i];}return "CF";
   }
 
   function youthDetailedAttributes(position,overall,key) {
     const unit=positionUnit(position),variation=name=>Math.round((stableScoutingUnit(`${key}|${name}`)-.5)*8),value=(name,offset)=>clamp(Math.round(overall+offset+variation(name)),30,94);
-    return {pace:value("pace",position==="GK"?-13:["RW","LW","WG","RB","LB"].includes(position)?7:1),shooting:value("shooting",unit==="attack"?7:unit==="midfield"?-1:-13),passing:value("passing",unit==="midfield"?7:position==="GK"?-7:0),dribbling:value("dribbling",unit==="attack"?5:unit==="midfield"?3:-8),defending:value("defending",unit==="defence"?8:position==="DM"?7:position==="GK"?-5:-15),physical:value("physical",unit==="defence"?5:0),goalkeeping:value("goalkeeping",position==="GK"?10:-25)};
+    return {pace:value("pace",position==="GK"?-13:["RW","LW","RM","LM","RWB","LWB","RB","LB"].includes(position)?7:1),shooting:value("shooting",["ST","CF","RW","LW","AM"].includes(position)?7:unit==="midfield"?-1:-13),passing:value("passing",unit==="midfield"||["RWB","LWB","CF"].includes(position)?7:position==="GK"?-7:0),dribbling:value("dribbling",unit==="attack"||["RM","LM","RWB","LWB"].includes(position)?5:unit==="midfield"?3:-8),defending:value("defending",unit==="defence"?8:position==="DM"?7:position==="GK"?-5:-15),physical:value("physical",unit==="defence"?5:0),goalkeeping:value("goalkeeping",position==="GK"?10:-25)};
   }
 
   function createYouthProspect(save,club,intakeYear,index,options={}) {
@@ -1071,7 +1120,7 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:31, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:32, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
@@ -1120,6 +1169,7 @@
     saved.competitionProgress.international ||= {};
     saved.competitionProgress.cups ||= {};
     saved.squad ||= [];
+    if(previousVersion<32)migrateDetailedPositions(saved.squad,saved.clubId);
     saved.squad.forEach(player => {
       player.lastRating ??= Number(player.form) || null;
       player.ratingTotal ??= player.appearances ? Number(player.form || 6) * player.appearances : 0;
@@ -1203,7 +1253,7 @@
     ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
     ensureMarketValuation(saved);
     ensureClubFinances(saved);
-    saved.version=31;
+    saved.version=32;
     return saved;
   }
   function saveState() {
@@ -1240,7 +1290,7 @@
   }
 
   function createPlayerObjectives(player) {
-    const attacker=["ST","CF","RW","LW","WG","AM"].includes(player?.position),creator=["CM","MF","AM","RW","LW","WG"].includes(player?.position);
+    const attacker=["ST","CF","RW","LW","AM"].includes(player?.position),creator=["CM","RM","LM","AM","RW","LW","CF"].includes(player?.position);
     return [
       {id:"appearances",label:"稳定进入比赛名单",target:player?.overall>=84?28:20,unit:"场"},
       {id:"rating",label:"保持赛季平均评分",target:6.8,unit:"评分"},
@@ -1287,7 +1337,7 @@
   }
 
   function positionalResponseBoosts(player,choice) {
-    const unit=positionUnit(player.position),primary=player.position==="GK"?"goalkeeping":unit==="defence"?"defending":unit==="midfield"?"passing":["RW","LW","WG"].includes(player.position)?"dribbling":"shooting";
+    const unit=positionUnit(player.position),primary=player.position==="GK"?"goalkeeping":unit==="defence"?"defending":unit==="midfield"?"passing":["RW","LW","CF"].includes(player.position)?"dribbling":"shooting";
     const profiles={
       review:{passing:3,defending:2},extra:{[primary]:4,physical:2},coach:{passing:2,defending:2},support:{passing:2,dribbling:2,shooting:2},media:{shooting:2,physical:1}
     };
@@ -1698,7 +1748,7 @@
           ${setup.origin === "real" ? renderSetupBrowser(true) : `
             <div class="grid grid-2"><div class="field"><label for="custom-name">姓名</label><input class="input" id="custom-name" name="customName" maxlength="30" value="${esc(setup.customName)}" placeholder="输入角色姓名" required></div>
             ${setup.role === "player" ? `<div class="field"><label for="custom-age">起始年龄</label><input class="input" id="custom-age" name="customAge" type="number" min="16" max="40" value="${setup.customAge}"></div>` : `<div class="field"><label for="custom-age">起始年龄</label><input class="input" id="custom-age" name="customAge" type="number" min="25" max="75" value="${setup.customAge}"></div>`}</div>
-            ${setup.role === "player" ? `<div class="field"><label for="custom-position">场上位置</label><select class="select" id="custom-position" name="customPosition">${["GK","CB","FB","DM","CM","AM","WG","ST"].map(p=>`<option ${setup.customPosition===p?"selected":""}>${p}</option>`).join("")}</select></div>`:""}
+            ${setup.role === "player" ? `<div class="field"><label for="custom-position">场上位置</label><select class="select" id="custom-position" name="customPosition">${POSITION_ORDER.map(p=>`<option value="${p}" ${setup.customPosition===p?"selected":""}>${p} · ${playerRoleLabel(p)}</option>`).join("")}</select></div>`:""}
             ${renderSetupBrowser(false)}`}
           <div class="data-note"><strong>数据快照：</strong>已导入懂球帝 2026-07-31 公开页面中的 ${DQD_DATA.meta.teamCount} 支球队和 ${DQD_DATA.meta.playerCount} 名球员，覆盖五大联赛一、二级。球员能力与潜力为游戏模型估算，不是懂球帝评分。</div>
           <div class="setup-actions"><button class="btn btn-primary" type="submit">${icon("play")}开始生涯</button><button class="btn" type="button" id="cancel-new-career">返回主页面</button></div>
@@ -1808,7 +1858,7 @@
   const SQUAD_SORT_OPTIONS=[["position","位置"],["name","姓名"],["age","年龄"],["overall","当前能力"],["potential","潜力"],["appearances","出场"],["goals","进球"],["assists","助攻"],["average","场均评分"],["fitness","体能"],["value","身价"]];
   function squadSortValue(player,key) {
     if(key==="average")return averageRating(player);
-    if(key==="position")return ({GK:0,RB:1,LB:1,FB:1,DF:1,CB:1,DM:2,CM:2,AM:2,RW:3,LW:3,WG:3,ST:3})[player.position]??4;
+    if(key==="position")return positionSortRank(player.position);
     if(key==="name")return player.name||"";
     return Number(player[key]||0);
   }
@@ -1924,21 +1974,14 @@
     </div>`;
   }
 
-  const TRANSFER_ROLE_TARGETS={GK:2,CB:5,FB:3,DM:2,CM:4,AM:2,WG:3,ST:3};
+  const TRANSFER_ROLE_TARGETS={GK:2,CB:4,RB:1,LB:1,RWB:1,LWB:1,DM:2,CM:3,RM:1,LM:1,AM:2,RW:2,LW:2,ST:2,CF:1};
   const AI_TRANSFER_TARGETS={goalkeeper:2,defence:7,midfield:7,attack:5};
   const AI_TRANSFER_MINIMUMS={goalkeeper:2,defence:5,midfield:5,attack:3};
   const AI_SQUAD_LIMITS={ideal:27,soft:29,hard:32};
   let aiTransferRuntimeCache=null;
 
   function transferRole(position) {
-    if(position==="GK")return "GK";
-    if(["CB","DF"].includes(position))return "CB";
-    if(["RB","LB","FB"].includes(position))return "FB";
-    if(position==="DM")return "DM";
-    if(["CM","MF"].includes(position))return "CM";
-    if(position==="AM")return "AM";
-    if(["RW","LW","WG"].includes(position))return "WG";
-    return "ST";
+    return POSITION_LABELS[position]?position:({DF:"CB",FB:"RB",MF:"CM",WG:"RW"})[position]||"ST";
   }
 
   function stableScoutingUnit(value) {
@@ -2554,13 +2597,22 @@
     home.forEach((point,i)=>{const player=matchPlayer(homeTeam,homeTeam.lineupIds[i]);dots.push(`<span class="player-dot home" title="${esc(player?.name||"")}" style="left:${point[0]}%;top:${point[1]}%">${player?.number||i+1}</span>`);});
     away.forEach((point,i)=>{const player=matchPlayer(awayTeam,awayTeam.lineupIds[i]);dots.push(`<span class="player-dot" title="${esc(player?.name||"")}" style="left:${point[0]}%;top:${point[1]}%">${player?.number||i+1}</span>`);}); return dots.join("");
   }
-  function visualFormationPoints(side) {
-    const base=[[6,50],[22,16],[21,38],[21,62],[22,84],[43,22],[42,50],[43,78],[66,22],[71,50],[66,78]];
+  function visualFormationPoints(m,side) {
+    const team=matchTeamData(m,side),players=team.lineupIds.map(id=>matchPlayer(team,id)).filter(Boolean),positionTotals={},positionIndexes={};
+    players.forEach(player=>{positionTotals[player.position]=(positionTotals[player.position]||0)+1;});
+    const lanes={RB:16,LB:84,RWB:12,LWB:88,RM:18,LM:82,RW:18,LW:82},lines={GK:6,CB:22,RB:24,LB:24,RWB:38,LWB:38,DM:40,CM:48,RM:53,LM:53,AM:62,RW:69,LW:69,CF:66,ST:74};
+    const spread=(position,index,total)=>{
+      if(lanes[position]!=null)return lanes[position];
+      if(total<=1)return 50;
+      const width=position==="CB"?50:position==="ST"?28:position==="CM"?42:34;
+      return 50-width/2+width*(index/(total-1));
+    };
+    const base=players.map(player=>{const index=positionIndexes[player.position]||0,total=positionTotals[player.position]||1;positionIndexes[player.position]=index+1;return [lines[player.position]??55,spread(player.position,index,total)];});
     return side==="home"?base:base.map(([x,y])=>[100-x,y]);
   }
   function matchVisualPositions(m,side,tick=performance.now()/900) {
     const homeTeam=m.fixture.home?"ours":"opponent",teamKey=side==="home"?homeTeam:(homeTeam==="ours"?"opponent":"ours"),action=m.visualAction||{},attacking=action.team?teamKey===action.team:(teamKey==="ours"?m.possession>=50:m.possession<50),direction=side==="home"?1:-1,push=({build:5,attack:11,shot:17,goal:19,save:14,defend:2})[action.kind]||7;
-    return visualFormationPoints(side).map(([x,y],index)=>({x:clamp(x+direction*(attacking?push:-Math.max(2,push*.32))+Math.sin(tick+index*1.7)*2.4,4,96),y:clamp(y+Math.cos(tick*.82+index*1.31)*3.7,5,95)}));
+    return visualFormationPoints(m,side).map(([x,y],index)=>({x:clamp(x+direction*(attacking?push:-Math.max(2,push*.32))+Math.sin(tick+index*1.7)*2.4,4,96),y:clamp(y+Math.cos(tick*.82+index*1.31)*3.7,5,95)}));
   }
   function setMatchVisualAction(m,team,kind,label) { m.visualAction={team,kind,label,startedAt:Date.now()}; }
   function paintPitch(ctx,width,height) {
@@ -2597,10 +2649,10 @@
 
   function playerDecisionGroup(position) {
     if(position==="GK")return "goalkeeper";
-    if(["CB","DF","FB","RB","LB"].includes(position))return "defender";
+    if(["CB","DF","RB","LB","RWB","LWB"].includes(position))return "defender";
     if(position==="DM")return "holding";
-    if(position==="CM")return "midfielder";
-    if(["AM","WG","RW","LW"].includes(position))return "creator";
+    if(["CM","RM","LM"].includes(position))return "midfielder";
+    if(["AM","RW","LW","CF"].includes(position))return "creator";
     return "forward";
   }
 
@@ -2891,12 +2943,15 @@
     const boosts={
       CB:{finishing:-15,passing:-3,dribbling:-8,tackling:10,positioning:9,offTheBall:-7,pace:-3,strength:7},
       DF:{finishing:-15,passing:-3,dribbling:-8,tackling:10,positioning:9,offTheBall:-7,pace:-3,strength:7},
-      RB:{finishing:-8,passing:2,dribbling:2,tackling:5,positioning:4,pace:5,stamina:8},LB:{finishing:-8,passing:2,dribbling:2,tackling:5,positioning:4,pace:5,stamina:8},FB:{finishing:-8,passing:2,dribbling:2,tackling:5,positioning:4,pace:5,stamina:8},
+      RB:{finishing:-8,passing:2,dribbling:2,tackling:5,positioning:4,pace:5,stamina:8},LB:{finishing:-8,passing:2,dribbling:2,tackling:5,positioning:4,pace:5,stamina:8},
+      RWB:{finishing:-5,passing:4,dribbling:5,tackling:3,positioning:2,offTheBall:4,pace:7,stamina:10},LWB:{finishing:-5,passing:4,dribbling:5,tackling:3,positioning:2,offTheBall:4,pace:7,stamina:10},
       DM:{finishing:-7,passing:4,dribbling:-2,tackling:8,positioning:8,vision:3,workRate:7,strength:3},
       CM:{finishing:-2,passing:7,dribbling:2,tackling:2,positioning:2,vision:6,workRate:6,stamina:5},
+      RM:{finishing:0,passing:5,dribbling:6,tackling:-2,positioning:0,vision:5,offTheBall:5,pace:6,stamina:7},LM:{finishing:0,passing:5,dribbling:6,tackling:-2,positioning:0,vision:5,offTheBall:5,pace:6,stamina:7},
       AM:{finishing:4,passing:7,dribbling:7,tackling:-10,positioning:-3,vision:9,offTheBall:5,agility:4},
-      RW:{finishing:5,passing:3,dribbling:9,tackling:-12,vision:3,offTheBall:7,pace:8,agility:6},LW:{finishing:5,passing:3,dribbling:9,tackling:-12,vision:3,offTheBall:7,pace:8,agility:6},WG:{finishing:5,passing:3,dribbling:9,tackling:-12,vision:3,offTheBall:7,pace:8,agility:6},
-      ST:{finishing:11,passing:-4,dribbling:3,tackling:-15,positioning:-5,composure:6,offTheBall:10,pace:4,strength:5}
+      RW:{finishing:5,passing:3,dribbling:9,tackling:-12,vision:3,offTheBall:7,pace:8,agility:6},LW:{finishing:5,passing:3,dribbling:9,tackling:-12,vision:3,offTheBall:7,pace:8,agility:6},
+      ST:{finishing:11,passing:-4,dribbling:3,tackling:-15,positioning:-5,composure:6,offTheBall:10,pace:4,strength:5},
+      CF:{finishing:7,passing:5,dribbling:7,tackling:-14,positioning:-4,vision:7,composure:7,offTheBall:8,pace:4,strength:1}
     }[position]||{};
     const a=(label,key,sourceKey=null)=>[label,key,boosts[key]||0,sourceKey];
     return [
@@ -2921,8 +2976,10 @@
   }
 
   const DEVELOPMENT_ATTRIBUTE_PRIORITIES={
-    GK:["physical","passing","pace"],CB:["defending","physical","passing"],DF:["defending","physical","passing"],RB:["pace","defending","physical"],LB:["pace","defending","physical"],FB:["pace","defending","physical"],
-    DM:["defending","passing","physical"],CM:["passing","physical","dribbling"],AM:["passing","dribbling","shooting"],RW:["pace","dribbling","shooting"],LW:["pace","dribbling","shooting"],WG:["pace","dribbling","shooting"],ST:["shooting","physical","pace"]
+    GK:["physical","passing","pace"],CB:["defending","physical","passing"],RB:["pace","defending","physical"],LB:["pace","defending","physical"],
+    RWB:["pace","physical","passing"],LWB:["pace","physical","passing"],DM:["defending","passing","physical"],CM:["passing","physical","dribbling"],
+    RM:["passing","pace","physical"],LM:["passing","pace","physical"],AM:["passing","dribbling","shooting"],RW:["pace","dribbling","shooting"],LW:["pace","dribbling","shooting"],
+    ST:["shooting","physical","pace"],CF:["shooting","passing","dribbling"]
   };
   function inSeasonGrowthCap(player) {return player.age<=19?4:player.age<=21?3:player.age<=24?2:player.age<=30?1:0;}
   function adjustPlayerCoreAttributes(player,change,development=ensurePlayerDevelopment(player)) {
@@ -2947,13 +3004,16 @@
   function playerTraits(player) {
     const pools={
       GK:["喜欢手抛球发动反击","倾向短传出球","出击控制传中","指挥防线站位","一对一保持站立"],
-      CB:["从后场组织进攻","贴身盯防对手","倒地铲球较少","长传转移","定位球前插争顶"],DF:["从后场组织进攻","贴身盯防对手","倒地铲球较少","长传转移","定位球前插争顶"],
-      RB:["沿边路套上","提前传中","内收参与组织","积极回追","尝试抢断"],LB:["沿边路套上","提前传中","内收参与组织","积极回追","尝试抢断"],FB:["沿边路套上","提前传中","内收参与组织","积极回追","尝试抢断"],
+      CB:["从后场组织进攻","贴身盯防对手","倒地铲球较少","长传转移","定位球前插争顶"],
+      RB:["沿右路套上","提前传中","内收参与组织","积极回追","尝试抢断"],LB:["沿左路套上","提前传中","内收参与组织","积极回追","尝试抢断"],
+      RWB:["全程保持边路宽度","频繁下底传中","前插进入进攻三区","高强度往返","丢球后立即回追"],LWB:["全程保持边路宽度","频繁下底传中","前插进入进攻三区","高强度往返","丢球后立即回追"],
       DM:["回撤接球","控制比赛节奏","简单短传","保护防线身前","尝试长距离转移"],
       CM:["控制比赛节奏","前插进入禁区","尝试直塞球","大范围转移","积极压迫"],
+      RM:["右路接应串联","提前传中","协助边后卫防守","斜向前插","大范围转移"],LM:["左路接应串联","提前传中","协助边后卫防守","斜向前插","大范围转移"],
       AM:["在空当接球","尝试直塞球","带球突破","禁区外射门","与队友撞墙配合"],
-      RW:["从边路内切","带球突破","利用速度过人","尝试倒三角传球","攻击后点"],LW:["从边路内切","带球突破","利用速度过人","尝试倒三角传球","攻击后点"],WG:["从边路内切","带球突破","利用速度过人","尝试倒三角传球","攻击后点"],
-      ST:["反越位前插","背身拿球","第一时间射门","攻击近门柱","回撤串联进攻"]
+      RW:["从右路内切","带球突破","利用速度过人","尝试倒三角传球","攻击后点"],LW:["从左路内切","带球突破","利用速度过人","尝试倒三角传球","攻击后点"],
+      ST:["反越位前插","背身拿球","第一时间射门","攻击近门柱","牵制中后卫"],
+      CF:["回撤到中场接球","游弋于防线之间","与中锋撞墙配合","后插上进入禁区","尝试直塞球"]
     };
     const pool=pools[player.position]||pools.CM,start=Math.floor(stableScoutingUnit(`${player.id||player.name}|traits`)*pool.length);
     return [pool[start],pool[(start+2)%pool.length],pool[(start+4)%pool.length]];
@@ -3302,18 +3362,38 @@
 
   function positionUnit(position) {
     if(position==="GK")return "goalkeeper";
-    if(["RB","LB","FB","DF","CB"].includes(position))return "defence";
-    if(["DM","CM","AM"].includes(position))return "midfield";
+    if(["RB","LB","RWB","LWB","DF","CB"].includes(position))return "defence";
+    if(["DM","CM","RM","LM","AM","MF"].includes(position))return "midfield";
     return "attack";
   }
 
   const AI_FORMATIONS=[
-    {name:"4-3-3",requirements:{goalkeeper:1,defence:4,midfield:3,attack:3}},
-    {name:"4-4-2",requirements:{goalkeeper:1,defence:4,midfield:4,attack:2}},
-    {name:"3-5-2",requirements:{goalkeeper:1,defence:3,midfield:5,attack:2}},
-    {name:"3-4-3",requirements:{goalkeeper:1,defence:3,midfield:4,attack:3}},
-    {name:"5-3-2",requirements:{goalkeeper:1,defence:5,midfield:3,attack:2}}
+    {name:"4-3-3",slots:["GK","RB","CB","CB","LB","DM","CM","CM","RW","ST","LW"]},
+    {name:"4-4-2",slots:["GK","RB","CB","CB","LB","RM","CM","CM","LM","ST","ST"]},
+    {name:"3-5-2",slots:["GK","CB","CB","CB","RWB","DM","CM","CM","LWB","ST","CF"]},
+    {name:"3-4-3",slots:["GK","CB","CB","CB","RWB","CM","CM","LWB","RW","ST","LW"]},
+    {name:"5-3-2",slots:["GK","RWB","CB","CB","CB","LWB","DM","CM","AM","ST","CF"]}
   ];
+  const POSITION_SLOT_ALTERNATIVES={
+    GK:{GK:14},CB:{CB:14,DM:5,RB:3,LB:3},RB:{RB:14,RWB:11,CB:5,RM:3},LB:{LB:14,LWB:11,CB:5,LM:3},RWB:{RWB:14,RB:11,RM:8,RW:4},LWB:{LWB:14,LB:11,LM:8,LW:4},
+    DM:{DM:14,CM:9,CB:6},CM:{CM:14,DM:9,AM:8,RM:7,LM:7},RM:{RM:14,RW:10,RWB:8,CM:6},LM:{LM:14,LW:10,LWB:8,CM:6},AM:{AM:14,CF:10,CM:8,RW:6,LW:6},
+    RW:{RW:14,RM:10,CF:7,AM:6,ST:4},LW:{LW:14,LM:10,CF:7,AM:6,ST:4},ST:{ST:14,CF:11,RW:4,LW:4},CF:{CF:14,ST:11,AM:10,RW:7,LW:7}
+  };
+  const POSITION_FIT_SELECTION_WEIGHT=6;
+  function positionSlotFit(position,slot) {return POSITION_SLOT_ALTERNATIVES[slot]?.[position]??-18;}
+  function assignFormationSlots(sortedPlayers,formation,scorePlayer) {
+    const remaining=[...sortedPlayers],pending=formation.slots.map((slot,index)=>({slot,index})),assigned=new Array(formation.slots.length);let valid=true;
+    while(pending.length){
+      const slotChoice=pending.map(entry=>{
+        const options=remaining.map(player=>({player,fit:positionSlotFit(player.position,entry.slot)})).filter(item=>item.fit>-10);
+        return {...entry,options,natural:options.filter(item=>item.fit>=11).length};
+      }).sort((a,b)=>a.natural-b.natural||a.options.length-b.options.length||b.slot.length-a.slot.length||a.index-b.index)[0];
+      if(!slotChoice?.options.length){valid=false;break;}
+      const choice=slotChoice.options.sort((a,b)=>(scorePlayer(b.player)+b.fit*POSITION_FIT_SELECTION_WEIGHT)-(scorePlayer(a.player)+a.fit*POSITION_FIT_SELECTION_WEIGHT))[0];
+      assigned[slotChoice.index]={player:choice.player,slot:slotChoice.slot,fit:choice.fit};remaining.splice(remaining.indexOf(choice.player),1);pending.splice(pending.findIndex(entry=>entry.index===slotChoice.index),1);
+    }
+    const completed=assigned.filter(Boolean);return {players:completed.map(item=>item.player),assignments:completed,valid:valid&&completed.length===formation.slots.length,fitScore:completed.reduce((sum,item)=>sum+item.fit,0)};
+  }
   function aiLineupScore(player,profile=null,dense=false) {
     const coach=profile||coachDecisionProfile("AI"),fitnessWeight=dense?.22:.13,formWeight=.1,abilityWeight=1-fitnessWeight-formWeight;
     const youthBonus=player.age<=22?coach.youthTrust*1.8:0,experienceBonus=player.age>=29?(1-coach.risk)*.8:0;
@@ -3371,18 +3451,14 @@
   function chooseFormationPlayers(sortedPlayers,controlledId=null,identity="AI",options={}) {
     const profile=options.profile||coachDecisionProfile(identity),dense=Boolean(options.dense),scorePlayer=options.scorePlayer||((player)=>aiLineupScore(player,profile,dense));
     const candidates=AI_FORMATIONS.map((formation,index)=>{
-      const players=[];let valid=true;
-      Object.entries(formation.requirements).forEach(([unit,count])=>{
-        const group=sortedPlayers.filter(player=>positionUnit(player.position)===unit).sort((a,b)=>scorePlayer(b)-scorePlayer(a)).slice(0,count);
-        if(group.length<count)valid=false;players.push(...group);
-      });
+      const assignment=assignFormationSlots(sortedPlayers,formation,scorePlayer),players=assignment.players,valid=assignment.valid;
       const balancePenalty=players.filter(player=>(player.fitness||100)<66).length*(2.8-profile.rotation);
-      return {name:formation.name,players,score:valid?players.reduce((sum,player)=>sum+scorePlayer(player),0)+coachFormationBias(identity,index,profile)-balancePenalty:-Infinity};
+      return {name:formation.name,players,assignments:assignment.assignments,score:valid?players.reduce((sum,player)=>sum+scorePlayer(player),0)+assignment.fitScore*1.35+coachFormationBias(identity,index,profile)-balancePenalty:-Infinity};
     }).sort((a,b)=>b.score-a.score);
     const choice=candidates[0],selected=[...(Number.isFinite(choice?.score)?choice.players:[])];
     sortedPlayers.filter(player=>player.position!=="GK"&&!selected.includes(player)).forEach(player=>{if(selected.length<11)selected.push(player);});
     sortedPlayers.filter(player=>!selected.includes(player)).forEach(player=>{if(selected.length<11)selected.push(player);});
-    return {players:selected.slice(0,11),name:choice?.name||"灵活阵型"};
+    return {players:selected.slice(0,11),name:choice?.name||"灵活阵型",assignments:choice?.assignments||[]};
   }
 
   function selectFormationPlayers(sortedPlayers,controlledId=null,identity="AI") { return chooseFormationPlayers(sortedPlayers,controlledId,identity).players; }
@@ -3421,7 +3497,7 @@
   }
 
   function buildNationalMatchSquad(nation,fixture,controlled=null,idPrefix="national") {
-    const quotas={goalkeeper:3,defence:8,midfield:7,attack:5},generatedPositions={goalkeeper:["GK","GK","GK"],defence:["RB","CB","CB","CB","CB","LB","FB","DF"],midfield:["DM","DM","CM","CM","CM","AM","AM"],attack:["RW","LW","WG","ST","ST"]};
+    const quotas={goalkeeper:3,defence:8,midfield:7,attack:5},generatedPositions={goalkeeper:["GK","GK","GK"],defence:["RB","CB","CB","CB","LB","RWB","LWB","CB"],midfield:["DM","DM","CM","CM","RM","LM","AM"],attack:["RW","LW","ST","ST","CF"]};
     const candidates=REAL_PLAYERS.filter(item=>primaryNationality(item)===nation&&(!controlled||comparableClubName(item.name)!==comparableClubName(controlled.name))).sort((a,b)=>b.overall-a.overall||a.age-b.age),squad=controlled?[controlled]:[];
     Object.keys(quotas).forEach(unit=>{
       const needed=quotas[unit]-squad.filter(item=>positionUnit(item.position)===unit).length;
@@ -3620,15 +3696,15 @@
   function matchPlayerEnergy(player,m,teamKey) {
     const entered=m.substitutions.find(item=>item.team===teamKey&&item.inId===player.id)?.minute??0,minutes=Math.max(0,m.minute-entered);
     const controlled=teamKey==="ours"&&state.role==="player"&&player.id===state.controlledId,plan=controlled?PLAYER_MATCH_PLANS[m.controlledMatchPlan||"balanced"]:null;
-    const roleDrain=(player.position==="GK"?.035:["RB","LB","FB","RW","LW","WG","CM","MF"].includes(player.position)?.145:.105)*Number(plan?.fatigue||1);
+    const roleDrain=(player.position==="GK"?.035:["RWB","LWB","RM","LM"].includes(player.position)?.158:["RB","LB","RW","LW","CM"].includes(player.position)?.145:.105)*Number(plan?.fatigue||1);
     return clamp(Number(player.fitness||88)-minutes*roleDrain,32,100);
   }
 
   function aiSubstitutionRoleFit(inPlayer,outPlayer,mode) {
-    const incomingUnit=positionUnit(inPlayer.position),samePosition=inPlayer.position===outPlayer.position,sameUnit=incomingUnit===positionUnit(outPlayer.position);
-    if(mode==="attack")return (samePosition?8:sameUnit?4:0)+(incomingUnit==="attack"?14:incomingUnit==="midfield"?7:-8);
-    if(mode==="protect")return (samePosition?8:sameUnit?4:0)+(incomingUnit==="defence"?14:incomingUnit==="midfield"?6:-8);
-    return samePosition?13:sameUnit?7:-15;
+    const incomingUnit=positionUnit(inPlayer.position),samePosition=inPlayer.position===outPlayer.position,sameUnit=incomingUnit===positionUnit(outPlayer.position),slotFit=positionSlotFit(inPlayer.position,outPlayer.position),base=samePosition?15:slotFit>0?slotFit:sameUnit?4:-15;
+    if(mode==="attack")return base+(incomingUnit==="attack"?12:incomingUnit==="midfield"?5:-5);
+    if(mode==="protect")return base+(incomingUnit==="defence"?12:incomingUnit==="midfield"?5:-5);
+    return base;
   }
 
   function chooseAiSubstitution(m,teamKey,context={}) {
@@ -3740,9 +3816,11 @@
   }
 
   function defensiveRoleWeight(position) {
-    if(["CB","DF"].includes(position))return 6;
-    if(["RB","LB","FB","DM"].includes(position))return 4.5;
-    if(["CM","MF"].includes(position))return 2.4;
+    if(position==="CB")return 6;
+    if(["RB","LB","DM"].includes(position))return 4.5;
+    if(["RWB","LWB"].includes(position))return 3.8;
+    if(position==="CM")return 2.6;
+    if(["RM","LM"].includes(position))return 2.4;
     if(position==="GK")return .35;
     return 1;
   }
@@ -3753,12 +3831,12 @@
 
   function matchAttribute(player,key) {
     const modifiers={
-      pace:{GK:-18,CB:-3,DF:-3,RB:6,LB:6,FB:6,DM:-2,CM:2,MF:2,AM:5,RW:9,LW:9,WG:9,ST:5,CF:5},
-      shooting:{GK:-28,CB:-16,DF:-16,RB:-9,LB:-9,FB:-9,DM:-7,CM:-2,MF:-2,AM:5,RW:7,LW:7,WG:7,ST:12,CF:12},
-      passing:{GK:-2,CB:-3,DF:-3,RB:2,LB:2,FB:2,DM:5,CM:8,MF:8,AM:9,RW:4,LW:4,WG:4,ST:-4,CF:-3},
-      dribbling:{GK:-22,CB:-9,DF:-9,RB:3,LB:3,FB:3,DM:-2,CM:3,MF:3,AM:9,RW:11,LW:11,WG:11,ST:4,CF:5},
-      defending:{GK:-12,CB:11,DF:11,RB:7,LB:7,FB:7,DM:9,CM:3,MF:3,AM:-9,RW:-13,LW:-13,WG:-13,ST:-16,CF:-15},
-      physical:{GK:1,CB:8,DF:8,RB:3,LB:3,FB:3,DM:5,CM:3,MF:3,AM:-1,RW:0,LW:0,WG:0,ST:6,CF:5},
+      pace:{GK:-18,CB:-3,RB:6,LB:6,RWB:8,LWB:8,DM:-2,CM:2,RM:7,LM:7,AM:5,RW:9,LW:9,ST:5,CF:5},
+      shooting:{GK:-28,CB:-16,RB:-9,LB:-9,RWB:-5,LWB:-5,DM:-7,CM:-2,RM:0,LM:0,AM:5,RW:7,LW:7,ST:12,CF:8},
+      passing:{GK:-2,CB:-3,RB:2,LB:2,RWB:4,LWB:4,DM:5,CM:8,RM:6,LM:6,AM:9,RW:4,LW:4,ST:-4,CF:5},
+      dribbling:{GK:-22,CB:-9,RB:3,LB:3,RWB:6,LWB:6,DM:-2,CM:3,RM:7,LM:7,AM:9,RW:11,LW:11,ST:4,CF:7},
+      defending:{GK:-12,CB:11,RB:7,LB:7,RWB:4,LWB:4,DM:9,CM:3,RM:-1,LM:-1,AM:-9,RW:-13,LW:-13,ST:-16,CF:-14},
+      physical:{GK:1,CB:8,RB:3,LB:3,RWB:4,LWB:4,DM:5,CM:3,RM:2,LM:2,AM:-1,RW:0,LW:0,ST:6,CF:3},
       goalkeeping:{GK:8}
     };
     const directKey=key==="goalkeeping"?null:key,direct=directKey?Number(player[directKey]):NaN;
@@ -3841,7 +3919,7 @@
       const ids=[...new Set([...(initial||[]),...m.substitutions.filter(item=>item.team===team).map(item=>item.inId)])];
       ids.forEach(id=>{
         const player=players.find(item=>item.id===id),minutes=sideMinutesPlayed(m,id,opponent);if(!player||minutes<60)return;
-        const bonus=player.position==="GK" ? .35 : ["CB","DF","RB","LB","FB"].includes(player.position) ? .28 : player.position==="DM" ? .2 : ["CM","MF"].includes(player.position) ? .08 : 0;
+        const bonus=player.position==="GK" ? .35 : player.position==="CB" ? .28 : ["RB","LB"].includes(player.position) ? .25 : ["RWB","LWB"].includes(player.position) ? .17 : player.position==="DM" ? .2 : player.position==="CM" ? .08 : 0;
         if(!bonus)return;const event=ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,id);event.cleanSheets=1;recordDefensiveAction(m,opponent,player,"cleanSheet",true,bonus);
       });
     };
@@ -3852,10 +3930,12 @@
 
   function contributionProfile(position) {
     if(position==="GK")return [{stat:"progressivePasses",weight:4,reward:.055,skill:"passing"},{stat:"recoveries",weight:1,reward:.045,skill:"overall"}];
-    if(["CB","DF","RB","LB","FB"].includes(position))return [{stat:"recoveries",weight:4,reward:.055,skill:"defending"},{stat:"progressivePasses",weight:3,reward:.045,skill:"passing"},{stat:"pressuresWon",weight:2,reward:.045,skill:"physical"}];
+    if(["CB","RB","LB"].includes(position))return [{stat:"recoveries",weight:4,reward:.055,skill:"defending"},{stat:"progressivePasses",weight:3,reward:.045,skill:"passing"},{stat:"pressuresWon",weight:2,reward:.045,skill:"physical"}];
+    if(["RWB","LWB"].includes(position))return [{stat:"progressivePasses",weight:3,reward:.05,skill:"passing"},{stat:"successfulDribbles",weight:3,reward:.06,skill:"dribbling"},{stat:"keyPasses",weight:2,reward:.08,skill:"passing"},{stat:"recoveries",weight:2,reward:.05,skill:"defending"}];
     if(position==="DM")return [{stat:"recoveries",weight:4,reward:.06,skill:"defending"},{stat:"progressivePasses",weight:4,reward:.05,skill:"passing"},{stat:"keyPasses",weight:1,reward:.075,skill:"passing"}];
-    if(["CM","MF"].includes(position))return [{stat:"progressivePasses",weight:4,reward:.055,skill:"passing"},{stat:"keyPasses",weight:3,reward:.08,skill:"passing"},{stat:"chancesCreated",weight:2,reward:.1,skill:"passing"},{stat:"recoveries",weight:2,reward:.05,skill:"defending"}];
-    if(["AM","RW","LW","WG"].includes(position))return [{stat:"successfulDribbles",weight:4,reward:.065,skill:"dribbling"},{stat:"keyPasses",weight:3,reward:.08,skill:"passing"},{stat:"chancesCreated",weight:3,reward:.1,skill:"passing"},{stat:"pressuresWon",weight:1,reward:.045,skill:"physical"}];
+    if(position==="CM")return [{stat:"progressivePasses",weight:4,reward:.055,skill:"passing"},{stat:"keyPasses",weight:3,reward:.08,skill:"passing"},{stat:"chancesCreated",weight:2,reward:.1,skill:"passing"},{stat:"recoveries",weight:2,reward:.05,skill:"defending"}];
+    if(["RM","LM"].includes(position))return [{stat:"progressivePasses",weight:3,reward:.05,skill:"passing"},{stat:"successfulDribbles",weight:3,reward:.06,skill:"dribbling"},{stat:"keyPasses",weight:3,reward:.08,skill:"passing"},{stat:"pressuresWon",weight:2,reward:.045,skill:"physical"}];
+    if(["AM","RW","LW","CF"].includes(position))return [{stat:"successfulDribbles",weight:4,reward:.065,skill:"dribbling"},{stat:"keyPasses",weight:3,reward:.08,skill:"passing"},{stat:"chancesCreated",weight:3,reward:.1,skill:"passing"},{stat:"pressuresWon",weight:1,reward:.045,skill:"physical"}];
     return [{stat:"pressuresWon",weight:3,reward:.05,skill:"physical"},{stat:"chancesCreated",weight:2,reward:.09,skill:"passing"},{stat:"successfulDribbles",weight:2,reward:.06,skill:"dribbling"},{stat:"keyPasses",weight:1,reward:.075,skill:"passing"}];
   }
 
@@ -3882,13 +3962,13 @@
     const active=ids.map(id=>players.find(player=>player.id===id)).filter(Boolean);if(!active.length)return;
     const possession=opponent?100-m.possession:m.possession,teamKey=opponent?"opponent":"ours",minutesFactor=clamp(.75+(possession-50)*.012,.48,1.35);
     active.forEach(player=>{
-      const event=ensureMatchEvent(events,player.id),passing=effectiveMatchAttribute(player,"passing",m,teamKey),roleVolume=player.position==="GK"?1.15:["CB","DF","DM","CM","MF"].includes(player.position)?2.35:["RB","LB","FB","AM"].includes(player.position)?1.8:1.25,attempted=Math.max(1,Math.round(roleVolume*minutesFactor+rand(0,1.6))),accuracy=clamp(.69+(passing-60)*.0048+(possession-50)*.0015,player.position==="GK"?.62:.68,.96),completed=Array.from({length:attempted}).filter(()=>Math.random()<accuracy).length;
+      const event=ensureMatchEvent(events,player.id),passing=effectiveMatchAttribute(player,"passing",m,teamKey),roleVolume=({GK:1.15,CB:2.35,RB:1.85,LB:1.85,RWB:1.72,LWB:1.72,DM:2.45,CM:2.55,RM:1.9,LM:1.9,AM:1.8,RW:1.32,LW:1.32,CF:1.65,ST:1.18})[player.position]||1.5,attempted=Math.max(1,Math.round(roleVolume*minutesFactor+rand(0,1.6))),accuracy=clamp(.69+(passing-60)*.0048+(possession-50)*.0015,player.position==="GK"?.62:.68,.96),completed=Array.from({length:attempted}).filter(()=>Math.random()<accuracy).length;
       event.passes+=attempted;event.accuratePasses+=completed;event.possessionLost+=attempted-completed;
     });
     const attempts=1+(Math.random()<.72?1:0)+(Math.random()<.16?1:0);
     for(let index=0;index<attempts;index++){
       const player=weightedPick(active,item=>{
-        const event=ensureMatchEvent(events,item.id),profile=contributionProfile(item.position),quality=profile.reduce((sum,action)=>sum+matchAttribute(item,action.skill),0)/profile.length,roleBoost=["CM","MF","AM","RW","LW","WG","ST","CF"].includes(item.position)?1.14:1,controlledBoost=!opponent&&state.role==="player"&&item.id===state.controlledId?controlledPlayerInvolvementBoost(m,true):1;
+      const event=ensureMatchEvent(events,item.id),profile=contributionProfile(item.position),quality=profile.reduce((sum,action)=>sum+matchAttribute(item,action.skill),0)/profile.length,roleBoost=["CM","RM","LM","AM","RW","LW","ST","CF"].includes(item.position)?1.14:1,controlledBoost=!opponent&&state.role==="player"&&item.id===state.controlledId?controlledPlayerInvolvementBoost(m,true):1;
         return controlledBoost*roleBoost*Math.pow(clamp(quality/70,.55,1.45),2)*(1+Math.min(.35,Number(event.impactRating||0)*.25));
       });
       if(!player)continue;
@@ -3913,15 +3993,15 @@
   }
 
   function attackRoleWeight(position,creator=false) {
-    if(creator)return ({GK:.05,CB:.25,DF:.25,RB:.85,LB:.85,FB:.85,DM:.75,CM:1.3,MF:1.3,AM:2.15,RW:2.75,LW:2.75,WG:2.75,ST:1.9,CF:2.2})[position]||1;
-    return ({GK:.02,CB:.22,DF:.22,RB:.5,LB:.5,FB:.5,DM:.55,CM:.8,MF:.8,AM:1.55,RW:2.05,LW:2.05,WG:2.05,ST:3.1,CF:2.8})[position]||1;
+    if(creator)return ({GK:.05,CB:.25,RB:.7,LB:.7,RWB:1.15,LWB:1.15,DM:.75,CM:1.3,RM:1.75,LM:1.75,AM:2.15,RW:2.75,LW:2.75,ST:1.9,CF:2.2})[position]||1;
+    return ({GK:.02,CB:.22,RB:.45,LB:.45,RWB:.65,LWB:.65,DM:.55,CM:.8,RM:1.05,LM:1.05,AM:1.55,RW:2.05,LW:2.05,ST:3.1,CF:2.8})[position]||1;
   }
 
   function assistPartnershipWeight(providerPosition,scorerPosition) {
-    if(["ST","CF"].includes(scorerPosition))return ["RW","LW","WG"].includes(providerPosition)?1.2:["AM"].includes(providerPosition)?1.1:["ST","CF"].includes(providerPosition)?.86:1;
-    if(["RW","LW","WG"].includes(scorerPosition))return ["ST","CF"].includes(providerPosition)?1.38:["RB","LB","FB"].includes(providerPosition)?1.12:providerPosition==="AM"?1.06:1;
-    if(scorerPosition==="AM")return ["ST","CF"].includes(providerPosition)?1.22:["RW","LW","WG"].includes(providerPosition)?1.12:1;
-    return ["ST","CF"].includes(providerPosition)?1.12:["RW","LW","WG"].includes(providerPosition)?1.08:1;
+    if(["ST","CF"].includes(scorerPosition))return ["RW","LW"].includes(providerPosition)?1.2:["RM","LM","RWB","LWB"].includes(providerPosition)?1.14:["AM"].includes(providerPosition)?1.1:["ST","CF"].includes(providerPosition)?.86:1;
+    if(["RW","LW"].includes(scorerPosition))return ["ST","CF"].includes(providerPosition)?1.38:["RB","LB","RWB","LWB"].includes(providerPosition)?1.12:providerPosition==="AM"?1.06:1;
+    if(scorerPosition==="AM")return ["ST","CF"].includes(providerPosition)?1.22:["RW","LW"].includes(providerPosition)?1.12:1;
+    return ["ST","CF"].includes(providerPosition)?1.12:["RW","LW","RM","LM"].includes(providerPosition)?1.08:1;
   }
 
   function teamMatchQuality(m,teamKey,mode) {
@@ -3981,7 +4061,7 @@
     const shooterSkill=effectiveMatchAttribute(shooter,"shooting",m,teamKey),creatorSkill=creator?effectiveMatchAttribute(creator,"passing",m,teamKey):attack,pace=effectiveMatchAttribute(shooter,"pace",m,teamKey),defencePressure=defence-70;
     const xg=clamp(rand(.025,.16)+(shooterSkill-70)*.0015+(creatorSkill-70)*.0008+(pace-70)*.0004-defencePressure*.001+strengthEdge*.0014+Math.max(0,dominance)*.006,.015,.48),stats=m.stats[teamKey];stats.shots++;stats.xg=Number((stats.xg+xg).toFixed(2));if(teamKey==="ours")m.shots=stats.shots;
     const targetChance=clamp(.29+(shooterSkill-68)*.0045+xg*.35-(defence-70)*.0012,.2,.6),onTarget=Math.random()<targetChance;recordShot(m,teamKey,shooter,onTarget);recordChanceCreation(m,teamKey,creator,shooter);
-    if(creator&&["AM","RW","LW","WG"].includes(creator.position)&&Math.random()<clamp((effectiveMatchAttribute(creator,"dribbling",m,teamKey)-45)/100,.18,.56)){
+    if(creator&&["AM","RM","LM","RW","LW","CF"].includes(creator.position)&&Math.random()<clamp((effectiveMatchAttribute(creator,"dribbling",m,teamKey)-45)/100,.18,.56)){
       const event=ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,creator.id);event.successfulDribbles++;
     }
     if(!onTarget){if(xg>=.24)ensureMatchEvent(opponent?m.opponentEvents:m.playerEvents,shooter.id).bigChancesMissed++;const corner=Math.random()<clamp(.2+(defence-65)*.003,.18,.38);if(corner)stats.corners++;setMatchVisualAction(m,teamKey,"shot",`${shooter.name} 完成射门`);const missTemplates=corner?[`${shooter.name} 的射门被后卫封堵后出了底线。`,`${creator&&creator!==shooter?`${creator.name} 送出传球，`:""}${shooter.name} 起脚，防守球员伸腿将球挡出。`,`${shooter.name} 在禁区边缘尝试远射，皮球折射出底线。`]:[`${creator&&creator!==shooter?`${creator.name} 送出传球，`:""}${shooter.name} 的射门稍稍偏出。`,`${shooter.name} 在防守压力下起脚，皮球高出横梁。`,`${shooter.name} 抢到落点，但仓促攻门没有压住。`,`${shooter.name} 从肋部内切后低射，皮球擦柱而出。`];m.commentary.push({minute:m.minute,text:missTemplates[Math.floor(rand(0,missTemplates.length))]});return true;}
@@ -4121,7 +4201,7 @@
   const MATCH_ASSIST_RATES={created:.86,unstructured:.68};
 
   function assistCommentaryLead(assister,scorer) {
-    if(!assister)return "";if(["ST","CF"].includes(assister.position))return `${assister.name} 回撤做球送出助攻`;if(["RW","LW","WG"].includes(assister.position))return `${assister.name} 从边路送出传中助攻`;if(["RB","LB","FB"].includes(assister.position))return `${assister.name} 套边后送出助攻`;if(assister.position==="AM")return `${assister.name} 在禁区前沿送出直塞助攻`;return `${assister.name} 送出最后一传`;
+    if(!assister)return "";if(["ST","CF"].includes(assister.position))return `${assister.name} 回撤做球送出助攻`;if(["RW","LW","RM","LM"].includes(assister.position))return `${assister.name} 从边路送出传中助攻`;if(["RB","LB","RWB","LWB"].includes(assister.position))return `${assister.name} 套边后送出助攻`;if(assister.position==="AM")return `${assister.name} 在禁区前沿送出直塞助攻`;return `${assister.name} 送出最后一传`;
   }
 
   function selectGoalAssister(lineup,scorer,selectedAssister=null) {
@@ -4133,20 +4213,20 @@
   function registerOurGoal(m,selectedScorer=null,selectedAssister=null) {
     scoreForUs(m);const lineup=m.lineupIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(Boolean);
     if(!lineup.length)return {name:"本队球员"};
-    const attackers=lineup.filter(player=>["ST","RW","LW","WG","AM","CM"].includes(player.position)),pool=attackers.length?attackers:lineup;
+    const attackers=lineup.filter(player=>["ST","CF","RW","LW","AM","RM","LM","CM"].includes(player.position)),pool=attackers.length?attackers:lineup;
     const scorer=selectedScorer||weightedPick(pool,player=>attackRoleWeight(player.position,false)*Math.pow(matchAttribute(player,"shooting")/70,2.2));
     addPlayerEvent(m,scorer,"goals",1.2);
     const assister=selectGoalAssister(lineup,scorer,selectedAssister);if(assister)addPlayerEvent(m,assister,"assists",.7);m.lastGoalDetail={team:"ours",scorerId:scorer.id,scorerName:scorer.name,assisterId:assister?.id||null,assisterName:assister?.name||null};
-    if(Math.random()<.22){const defenders=m.opponentLineupIds.map(id=>m.opponentPlayers.find(player=>player.id===id)).filter(player=>player&&["GK","CB","DF","FB","RB","LB","DM"].includes(player.position));const mistake=defenders[Math.floor(rand(0,defenders.length))];if(mistake){addOpponentEvent(m,mistake,"mistakes",-1);ensureMatchEvent(m.opponentEvents,mistake.id).errorsLeadingToGoal++;}}
+    if(Math.random()<.22){const defenders=m.opponentLineupIds.map(id=>m.opponentPlayers.find(player=>player.id===id)).filter(player=>player&&["GK","CB","RB","LB","RWB","LWB","DM"].includes(player.position));const mistake=defenders[Math.floor(rand(0,defenders.length))];if(mistake){addOpponentEvent(m,mistake,"mistakes",-1);ensureMatchEvent(m.opponentEvents,mistake.id).errorsLeadingToGoal++;}}
     return scorer;
   }
 
   function registerOpponentGoal(m,selectedScorer=null,selectedAssister=null) {
     scoreForOpponent(m);const lineup=m.opponentLineupIds.map(id=>m.opponentPlayers.find(player=>player.id===id)).filter(Boolean);
     if(!lineup.length)return {name:"对手球员"};
-    const attackers=lineup.filter(player=>["ST","RW","LW","WG","AM","CM"].includes(player.position)),pool=attackers.length?attackers:lineup,scorer=selectedScorer||weightedPick(pool,player=>attackRoleWeight(player.position,false)*Math.pow(matchAttribute(player,"shooting")/70,2.2));addOpponentEvent(m,scorer,"goals",1.2);
+    const attackers=lineup.filter(player=>["ST","CF","RW","LW","AM","RM","LM","CM"].includes(player.position)),pool=attackers.length?attackers:lineup,scorer=selectedScorer||weightedPick(pool,player=>attackRoleWeight(player.position,false)*Math.pow(matchAttribute(player,"shooting")/70,2.2));addOpponentEvent(m,scorer,"goals",1.2);
     const assister=selectGoalAssister(lineup,scorer,selectedAssister);if(assister)addOpponentEvent(m,assister,"assists",.7);m.lastGoalDetail={team:"opponent",scorerId:scorer.id,scorerName:scorer.name,assisterId:assister?.id||null,assisterName:assister?.name||null};
-    if(Math.random()<.2){const defenders=m.lineupIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(player=>player&&["GK","CB","DF","FB","RB","LB","DM"].includes(player.position));const mistake=defenders[Math.floor(rand(0,defenders.length))];if(mistake){addPlayerEvent(m,mistake,"mistakes",-1);ensureMatchEvent(m.playerEvents,mistake.id).errorsLeadingToGoal++;}}
+    if(Math.random()<.2){const defenders=m.lineupIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(player=>player&&["GK","CB","RB","LB","RWB","LWB","DM"].includes(player.position));const mistake=defenders[Math.floor(rand(0,defenders.length))];if(mistake){addPlayerEvent(m,mistake,"mistakes",-1);ensureMatchEvent(m.playerEvents,mistake.id).errorsLeadingToGoal++;}}
     return scorer;
   }
 
@@ -4154,13 +4234,13 @@
     const lineup=m.lineupIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(Boolean);
     if(!lineup.length)return null;
     if(Math.random()>clamp(.18+risk/60,.18,.46))return null;
-    const defenders=lineup.filter(player=>["GK","CB","DF","FB","RB","LB","DM"].includes(player.position)),pool=defenders.length?defenders:lineup;
+    const defenders=lineup.filter(player=>["GK","CB","RB","LB","RWB","LWB","DM"].includes(player.position)),pool=defenders.length?defenders:lineup;
     const player=weightedPick(pool,item=>{const concentration=effectiveMatchAttribute(item,"passing",m,"ours")*.45+effectiveMatchAttribute(item,"defending",m,"ours")*.55,planRisk=state.role==="player"&&item.id===state.controlledId?Math.max(.65,1+Number(PLAYER_MATCH_PLANS[m.controlledMatchPlan||"balanced"]?.risk||0)*.08):1;return planRisk*clamp((105-concentration)/35,.35,1.8);});addPlayerEvent(m,player,"mistakes",-1);return player;
   }
 
   function registerCard(m,teamKey=null) {
     const opponent=teamKey?teamKey==="opponent":Math.random()<.5,lineup=opponent?m.opponentLineupIds.map(id=>m.opponentPlayers.find(player=>player.id===id)).filter(Boolean):m.lineupIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(Boolean);if(!lineup.length)return;
-    const player=weightedPick(lineup,item=>item.position==="GK"?.25:["CB","DF","RB","LB","FB","DM"].includes(item.position)?1.55:1),events=opponent?m.opponentEvents:m.playerEvents,event=events[player.id]||{},addEvent=opponent?addOpponentEvent:addPlayerEvent,stats=m.stats[opponent?"opponent":"ours"];
+    const player=weightedPick(lineup,item=>item.position==="GK"?.25:["CB","RB","LB","DM"].includes(item.position)?1.55:["RWB","LWB","CM","RM","LM"].includes(item.position)?1.25:1),events=opponent?m.opponentEvents:m.playerEvents,event=events[player.id]||{},addEvent=opponent?addOpponentEvent:addPlayerEvent,stats=m.stats[opponent?"opponent":"ours"];
     if(event.red)return;const secondYellow=Boolean(event.yellow)&&Math.random()<.34,red=secondYellow||Math.random()<.035;
     if(red){
       if(secondYellow){addEvent(m,player,"yellow",-.25);stats.yellow++;}
@@ -4211,8 +4291,8 @@
 
   function matchFitnessDrain(player,minutes,tactic) {
     const ranges={
-      GK:[3,6],CB:[11,17],DF:[11,17],RB:[17,24],LB:[17,24],FB:[17,24],
-      DM:[15,21],CM:[18,25],AM:[17,24],RW:[19,27],LW:[19,27],WG:[19,27],ST:[16,23]
+      GK:[3,6],CB:[11,17],RB:[16,23],LB:[16,23],RWB:[20,28],LWB:[20,28],
+      DM:[15,21],CM:[18,25],RM:[19,27],LM:[19,27],AM:[17,24],RW:[19,27],LW:[19,27],ST:[16,23],CF:[17,24]
     };
     const [low,high]=ranges[player.position]||[15,22];
     const tacticFactor=tactic==="press"?1.12:tactic==="defensive"?.92:tactic==="counter"?1.02:1;
@@ -4225,7 +4305,7 @@
     if(!points.length)return "暂无数据";
     const averageX=points.reduce((sum,item)=>sum+item[0],0)/points.length;
     const zoneX=averageX<35?"后场":averageX>65?"前场":"中场";
-    const lane=({RB:"右路",RW:"右路",LB:"左路",LW:"左路"})[player?.position]||(() => {
+    const lane=({RB:"右路",RWB:"右路",RM:"右路",RW:"右路",LB:"左路",LWB:"左路",LM:"左路",LW:"左路"})[player?.position]||(() => {
       const averageY=points.reduce((sum,item)=>sum+item[1],0)/points.length;
       return averageY<34?"左路":averageY>66?"右路":"中路";
     })();
