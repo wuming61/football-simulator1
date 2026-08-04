@@ -17,7 +17,7 @@ source=source.replace(/\n  render\(\);\n\}\)\(\);\s*$/,`
 vm.runInContext(source,context);
 
 const api=context.__test,england=api.CLUBS.filter(club=>club.league==="ENG1"),club=england[0]||api.CLUBS[0],participants=Math.max(20,england.length);
-assert.equal(api.APP_VERSION,"v1.3");
+assert.equal(api.APP_VERSION,"V1.4");
 assert.ok(api.seasonBroadcastRevenue(club,participants,participants)>=118,"every Premier League club must receive at least the £100m-equivalent base distribution");
 assert.ok(api.seasonBroadcastRevenue(club,1,participants)>api.seasonBroadcastRevenue(club,participants,participants),"a higher league finish must increase broadcast prize money");
 
