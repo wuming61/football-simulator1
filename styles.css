@@ -228,8 +228,13 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .profile-mini > div > strong, .profile-mini > div > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-mini > div > span { margin-top: 4px; color: var(--muted); font-size: 12px; }
 
-.main { min-width: 0; }
+.main { min-width: 0; padding-top:68px; }
 .topbar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: var(--sidebar);
+  z-index: 30;
   height: 68px;
   display: flex;
   align-items: center;
@@ -1147,7 +1152,8 @@ body.is-busy button, body.is-busy input, body.is-busy select { pointer-events:no
   :root { --sidebar: 0px; }
   .shell { display:block; }
   .sidebar { display:none; }
-  .topbar { height:60px; padding:0 14px; }
+  .main { padding-top:60px; }
+  .topbar { left:0; height:60px; padding:0 14px; }
   .topbar { gap:8px; }
   .topbar h1 { font-size:17px; }
   .topbar-title p, .club-badge-topbar { display:none; }
