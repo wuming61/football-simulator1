@@ -412,6 +412,13 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
 .patience-mini i span { display:block; height:100%; background:var(--green); }
 
 .league-page { display:grid; gap:14px; }
+.competition-center-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border:1px solid var(--line); background:var(--surface); }
+.competition-center-tabs button { min-height:46px; border:0; border-right:1px solid var(--line); background:transparent; color:var(--muted); font-size:11px; font-weight:700; cursor:pointer; }
+.competition-center-tabs button:last-child { border-right:0; }
+.competition-center-tabs button:hover { color:var(--text); background:rgba(255,255,255,.025); }
+.competition-center-tabs button.active { color:var(--text); background:var(--surface-2); box-shadow:inset 0 -3px var(--green); }
+.world-domestic-live, .world-europe-live { display:grid; gap:14px; }
+.world-domestic-live[hidden], .world-europe-live[hidden] { display:none; }
 .league-banner { min-height:118px; display:grid; grid-template-columns:76px minmax(0,1fr) auto; align-items:center; gap:18px; padding:18px 22px; border:1px solid var(--line); background:#0d1913; }
 .league-banner img { width:68px; height:78px; object-fit:contain; filter:drop-shadow(0 8px 10px rgba(0,0,0,.35)); }
 .league-banner h2 { margin:3px 0 4px; font-size:30px; }
@@ -481,6 +488,41 @@ tbody tr:hover { background: rgba(255,255,255,.025); }
 .league-scorer strong { font-size:11px; }
 .league-scorer small { margin-top:3px; color:var(--muted); font-size:9px; }
 .league-scorer b { min-width:30px; color:var(--green); font-family:"Barlow Condensed",sans-serif; font-size:19px; text-align:right; }
+.europe-center { display:grid; gap:12px; margin-top:4px; padding-top:18px; border-top:1px solid var(--line); }
+.europe-header { min-height:102px; display:grid; grid-template-columns:64px minmax(0,1fr) auto; align-items:center; gap:16px; padding:15px 18px; border:1px solid rgba(114,170,246,.3); background:#101a1e; }
+.europe-header img { width:58px; height:68px; object-fit:contain; filter:drop-shadow(0 8px 10px rgba(0,0,0,.34)); }
+.europe-header h2 { margin:3px 0 4px; font-size:25px; }
+.europe-header p { margin:0; color:var(--muted); font-size:10px; }
+.europe-tabs .league-tab.active { box-shadow:inset 0 -3px var(--blue); }
+.europe-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border:1px solid var(--line); background:var(--surface); }
+.europe-summary span { min-width:0; padding:10px 12px; border-right:1px solid var(--line); color:var(--muted); font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.europe-summary span:last-child { border-right:0; }
+.europe-summary b { color:var(--text); font-size:13px; }
+.europe-layout { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(330px,.75fr); gap:14px; align-items:start; }
+.europe-table { min-width:790px; }
+.position-mark.europe-direct { border-color:var(--green); color:var(--green); }
+.position-mark.europe-playoff { border-color:var(--blue); color:var(--blue); }
+.position-mark.europe-out { border-color:var(--red); color:var(--red); }
+.europe-legend i.europe-direct { background:var(--green); }
+.europe-legend i.europe-playoff { background:var(--blue); }
+.europe-legend i.europe-out { background:var(--red); }
+.europe-fixtures-panel { display:grid; gap:14px; min-width:0; }
+.europe-round-header { align-items:center; }
+.europe-round-header > div { min-width:0; }
+.europe-round-header .select { width:138px; min-width:0; }
+.europe-fixtures { max-height:760px; overflow:auto; scrollbar-width:thin; }
+.europe-fixture { min-height:42px; display:grid; grid-template-columns:minmax(0,1fr) 68px minmax(0,1fr); align-items:center; gap:6px; padding:6px 11px; border-bottom:1px solid rgba(255,255,255,.045); font-size:9px; }
+.europe-fixture:last-child { border-bottom:0; }
+.europe-fixture.user-result { background:rgba(72,200,120,.07); box-shadow:inset 3px 0 var(--green); }
+.europe-fixture .league-result-team { min-width:0; }
+.europe-fixture .league-result-team b, .europe-fixture .club-profile-link { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px; font-weight:500; }
+.europe-fixture > strong { text-align:center; font-size:10px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.europe-fixture > strong.upcoming { color:var(--muted); font-weight:500; }
+.europe-knockout-list { display:grid; }
+.europe-knockout-list > div { display:grid; gap:4px; padding:10px 12px; border-bottom:1px solid var(--line); }
+.europe-knockout-list > div:last-child { border-bottom:0; }
+.europe-knockout-list span { color:var(--muted); font-size:9px; }
+.europe-knockout-list strong { font-size:10px; }
 .league-extension { margin-top:2px; }
 .league-extension summary { min-height:52px; display:flex; align-items:center; gap:10px; padding:12px 16px; cursor:pointer; list-style:none; }
 .league-extension summary::-webkit-details-marker { display:none; }
@@ -1200,12 +1242,24 @@ body.is-busy button, body.is-busy input, body.is-busy select { pointer-events:no
   .squad-sort-controls .select { min-width:0; flex:1; }
   .squad-sort-controls .btn { flex:0 0 40px; }
   .page-heading h2 { font-size:29px; }
+  .competition-center-tabs button { min-height:43px; font-size:10px; }
   .league-banner { grid-template-columns:54px minmax(0,1fr); gap:12px; min-height:96px; padding:14px; }
   .league-banner img { width:48px; height:60px; }
   .league-banner h2 { font-size:23px; }
   .league-live { grid-column:1/-1; justify-content:flex-end; margin-top:-9px; }
   .league-tab { min-width:92px; min-height:48px; }
   .league-sidebar { grid-template-columns:1fr; }
+  .europe-header { grid-template-columns:48px minmax(0,1fr); gap:11px; min-height:90px; padding:12px; }
+  .europe-header img { width:44px; height:54px; }
+  .europe-header h2 { font-size:20px; }
+  .europe-header .league-live { grid-column:1/-1; }
+  .europe-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .europe-summary span:nth-child(2) { border-right:0; }
+  .europe-summary span:nth-child(-n+2) { border-bottom:1px solid var(--line); }
+  .europe-layout { grid-template-columns:1fr; }
+  .europe-fixtures { max-height:none; }
+  .europe-round-header { align-items:flex-start; gap:8px; }
+  .europe-round-header .select { width:124px; }
   .report-events.substitution-events > div { grid-template-columns:34px 40px minmax(0,1fr); }
   .report-events.substitution-events .sub-off { grid-column:3; }
   .report-events.substitution-events small { grid-column:3; }

@@ -1118,6 +1118,92 @@
     (save.schedule||[]).filter(fixture=>fixture.status==="played"&&fixture.competition===leagueShort&&fixture.score).sort((a,b)=>a.date.localeCompare(b.date)).forEach(fixture=>recordUserLeagueRound(save,fixture));
   }
 
+  function europeanWorldClubPool() {
+    const externalStrength={Benfica:86,Ajax:83,Celtic:79,PSV:85,"Sporting CP":85,Galatasaray:82,"Club Brugge":78,Olympiacos:77,Feyenoord:84,Porto:84,"Fenerbahçe":81,Rangers:78,Anderlecht:76,"Slavia Praha":76,PAOK:75,"Rapid Wien":73,Fiorentina:83,"Real Betis":82,"Viktoria Plzeň":74,Ludogorets:71},entries=new Map();
+    CLUBS.filter(club=>leagueOf(club)?.tier===1).forEach(club=>entries.set(comparableClubName(club.name),{id:club.id,name:club.name,code:club.code,association:club.league,ability:Number(club.prestige||72),external:false}));
+    EUROPEAN_OPPONENTS.forEach(name=>{
+      const local=resolveClub(name);if(local&&leagueOf(local)?.tier===1){entries.set(comparableClubName(local.name),{id:local.id,name:local.name,code:local.code,association:local.league,ability:Number(local.prestige||72),external:false});return;}
+      const key=comparableClubName(name);if(!entries.has(key))entries.set(key,{id:`euro-${key}`,name,code:initials(name),association:`external-${key}`,ability:Number(externalStrength[name]||clamp(72+Math.round(stableScoutingUnit(`euro-strength|${name}`)*12),68,86)),external:true});
+    });
+    return [...entries.values()];
+  }
+
+  function europeanUserLeagueFixtures(save,config) {
+    return (save.schedule||[]).filter(fixture=>fixture.competition===config.name&&fixture.phase==="league").sort((a,b)=>Number(a.stageIndex||0)-Number(b.stageIndex||0));
+  }
+
+  function createEuropeanFields(save) {
+    const pool=europeanWorldClubPool(),byName=new Map(pool.map(club=>[comparableClubName(club.name),club])),userClub=clubById(save.clubId),configs=Object.values(EUROPEAN_COMPETITIONS),reserved=new Map(),requiredByCompetition={};
+    configs.forEach(config=>{
+      const fixtures=europeanUserLeagueFixtures(save,config),required=[];
+      if(fixtures.length){required.push(byName.get(comparableClubName(userClub.name))||{id:userClub.id,name:userClub.name,code:userClub.code,association:userClub.league,ability:Number(userClub.prestige||72),external:false});fixtures.forEach(fixture=>{const key=comparableClubName(fixture.opponent),entry=byName.get(key)||{id:`euro-${key}`,name:fixture.opponent,code:initials(fixture.opponent),association:`external-${key}`,ability:clamp(config.fieldTarget+Math.round((stableScoutingUnit(`fixture-strength|${fixture.opponent}`)-.5)*12),68,92),external:true};byName.set(key,entry);if(!pool.some(item=>item.id===entry.id))pool.push(entry);required.push(entry);});}
+      requiredByCompetition[config.key]=required.filter((club,index,array)=>array.findIndex(item=>item.id===club.id)===index);requiredByCompetition[config.key].forEach(club=>reserved.set(club.id,config.key));
+    });
+    const used=new Set(),fields={};
+    configs.forEach(config=>{
+      const required=requiredByCompetition[config.key],ranked=pool.filter(club=>!used.has(club.id)&&(!reserved.has(club.id)||reserved.get(club.id)===config.key)).sort((a,b)=>{
+        const score=club=>config.key==="ucl"?club.ability+stableScoutingUnit(`${config.key}|${save.season}|${club.id}`)*5:-Math.abs(club.ability-config.fieldTarget)*1.7+club.ability*.22+stableScoutingUnit(`${config.key}|${save.season}|${club.id}`)*7;
+        return score(b)-score(a)||b.ability-a.ability||a.name.localeCompare(b.name);
+      }),selected=[...required];
+      ranked.forEach(club=>{if(selected.length<36&&!selected.some(item=>item.id===club.id))selected.push(club);});
+      if(selected.length<36)pool.filter(club=>!selected.some(item=>item.id===club.id)).sort((a,b)=>b.ability-a.ability).forEach(club=>{if(selected.length<36)selected.push(club);});
+      selected.slice(0,36).forEach(club=>used.add(club.id));fields[config.key]=selected.slice(0,36);
+    });
+    return fields;
+  }
+
+  function europeanPairKey(firstId,secondId) {return [firstId,secondId].sort().join("|");}
+
+  function matchEuropeanRound(clubs,usedPairs,seed,depth=0) {
+    if(!clubs.length)return [];const first=clubs[0],candidates=seededShuffle(clubs.slice(1).filter(candidate=>!usedPairs.has(europeanPairKey(first.id,candidate.id))),`${seed}|${depth}|${first.id}`);
+    for(const second of candidates){const rest=clubs.filter(club=>club!==first&&club!==second),remainingPairs=matchEuropeanRound(rest,usedPairs,seed,depth+1);if(remainingPairs)return [[first,second],...remainingPairs];}
+    return null;
+  }
+
+  function createEuropeanRoundMatches(save,config,clubs,roundIndex,usedPairs) {
+    const userFixture=europeanUserLeagueFixtures(save,config).find(fixture=>Number(fixture.stageIndex||0)===roundIndex),userClub=clubs.find(club=>club.id===save.clubId),opponent=userFixture?clubs.find(club=>comparableClubName(club.name)===comparableClubName(userFixture.opponent)):null,pairs=[];
+    if(userFixture&&userClub&&opponent){pairs.push(userFixture.home?[userClub,opponent]:[opponent,userClub]);usedPairs.add(europeanPairKey(userClub.id,opponent.id));}
+    const forcedIds=new Set(pairs.flat().map(club=>club.id)),remaining=seededShuffle(clubs.filter(club=>!forcedIds.has(club.id)),`europe-round|${config.key}|${save.season}|${roundIndex}`),matched=matchEuropeanRound(remaining,usedPairs,`europe-match|${config.key}|${save.season}|${roundIndex}`)||[];
+    matched.forEach(([first,second])=>{const home=stableScoutingUnit(`europe-home|${config.key}|${save.season}|${roundIndex}|${first.id}|${second.id}`)>=.5?first:second,away=home===first?second:first;pairs.push([home,away]);usedPairs.add(europeanPairKey(first.id,second.id));});
+    return pairs.map(([home,away],matchIndex)=>({id:`${config.key}-${save.season}-world-${roundIndex}-${matchIndex}`,stageIndex:roundIndex,date:userFixture?.date||addDays(`${save.season}-08-08`,config.offsets[roundIndex]),homeId:home.id,awayId:away.id,home:home.name,away:away.name,status:"upcoming",homeGoals:null,awayGoals:null,userFixtureId:userFixture&&(home.id===save.clubId||away.id===save.clubId)?userFixture.id:null}));
+  }
+
+  function createEuropeanWorld(save) {
+    const fields=createEuropeanFields(save),competitions={};
+    Object.values(EUROPEAN_COMPETITIONS).forEach(config=>{
+      const clubs=fields[config.key].map(club=>({...club,p:0,w:0,d:0,l:0,gf:0,ga:0,gd:0,pts:0,form:[]})),usedPairs=new Set(),rounds=[];
+      for(let roundIndex=0;roundIndex<config.matches;roundIndex++){const matches=createEuropeanRoundMatches(save,config,clubs,roundIndex,usedPairs),date=matches[0]?.date||addDays(`${save.season}-08-08`,config.offsets[roundIndex]);rounds.push({index:roundIndex,date,status:"upcoming",matches});}
+      competitions[config.key]={key:config.key,name:config.name,fullName:config.fullName,season:save.season,round:0,clubs,rounds,totalGoals:0};
+    });
+    return {season:save.season,currentDate:`${save.season}-08-01`,competitions};
+  }
+
+  function europeanStandings(competition) {
+    return [...(competition?.clubs||[])].sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name,"zh-CN"));
+  }
+
+  function applyEuropeanLeagueMatch(competition,match,options={}) {
+    const home=competition.clubs.find(club=>club.id===match.homeId),away=competition.clubs.find(club=>club.id===match.awayId);if(!home||!away)return null;
+    const gap=Number(home.ability||72)-Number(away.ability||72),homeGoals=options.homeGoals??poisson(clamp(1.36*Math.exp(gap/23)+.15,.15,5.2)),awayGoals=options.awayGoals??poisson(clamp(1.08*Math.exp(-gap/23),.12,4.7));home.p++;away.p++;home.gf+=homeGoals;home.ga+=awayGoals;away.gf+=awayGoals;away.ga+=homeGoals;let homeForm="D",awayForm="D";
+    if(homeGoals>awayGoals){home.w++;away.l++;home.pts+=3;homeForm="W";awayForm="L";}else if(homeGoals<awayGoals){away.w++;home.l++;away.pts+=3;homeForm="L";awayForm="W";}else{home.d++;away.d++;home.pts++;away.pts++;}
+    home.gd=home.gf-home.ga;away.gd=away.gf-away.ga;home.form=[homeForm,...home.form].slice(0,5);away.form=[awayForm,...away.form].slice(0,5);match.status="played";match.homeGoals=homeGoals;match.awayGoals=awayGoals;competition.totalGoals+=homeGoals+awayGoals;return match;
+  }
+
+  function simulateEuropeanCompetitionRound(save,competition,round) {
+    if(round.status==="played")return true;const userMatch=round.matches.find(match=>match.userFixtureId),userFixture=userMatch?(save.schedule||[]).find(fixture=>fixture.id===userMatch.userFixtureId):null;if(userMatch&&userFixture?.status!=="played")return false;
+    round.matches.forEach(match=>{if(match===userMatch&&userFixture?.score)applyEuropeanLeagueMatch(competition,match,{homeGoals:userFixture.score.home,awayGoals:userFixture.score.away});else applyEuropeanLeagueMatch(competition,match);});round.status="played";competition.round=Math.max(competition.round,round.index+1);return true;
+  }
+
+  function simulateEuropeanWorld(save,targetDate) {
+    save.europeanWorld||=createEuropeanWorld(save);Object.values(save.europeanWorld.competitions||{}).forEach(competition=>{for(const round of competition.rounds||[]){if(round.status==="played"||round.date>targetDate)continue;if(!simulateEuropeanCompetitionRound(save,competition,round))break;}});if(save.europeanWorld.currentDate<targetDate)save.europeanWorld.currentDate=targetDate;return save.europeanWorld;
+  }
+
+  function rebuildEuropeanWorld(save) {save.europeanWorld=createEuropeanWorld(save);simulateEuropeanWorld(save,save.date||START_DATE);return save.europeanWorld;}
+
+  function europeanLeaguePosition(save,competitionKey) {
+    const competition=save?.europeanWorld?.competitions?.[competitionKey],table=europeanStandings(competition),index=table.findIndex(club=>club.id===save.clubId);return index>=0?index+1:null;
+  }
+
   function validateModPack(pack) {
     if(!pack||pack.schemaVersion!==1||typeof pack.packId!=="string"||!pack.packId.trim())throw new Error("缺少有效的 schemaVersion 或 packId");
     if(!Array.isArray(pack.leagues)||!Array.isArray(pack.clubs)||!Array.isArray(pack.players))throw new Error("leagues、clubs、players 必须是数组");
@@ -1151,13 +1237,13 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:41, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:42, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
       training:"balanced", tactic:"balanced", transferRequests:0, inboxUnread:3, continueStatus:null,
       competitionProgress:{ europe:createEuropeanProgress(club,2026), cups:{}, international:{} },
-      backgroundWorld:createBackgroundWorld(2026), worldLeague:"BRA1",majorLeagueWorld:createMajorLeagueWorld(2026,club.id),majorLeagueId:club.league,
+      backgroundWorld:createBackgroundWorld(2026), worldLeague:"BRA1",majorLeagueWorld:createMajorLeagueWorld(2026,club.id),majorLeagueId:club.league,worldCenterMode:"domestic",europeanCompetitionKey:"ucl",europeanRoundFilters:{},
       media:[
         { source:"Football Daily", title:`${person} 正式开启 ${club.name} 生涯`, body:`新赛季从 2026 年 8 月 1 日开始。外界将密切关注这段生涯的第一步。`, date:START_DATE, type:"career" },
         { source:"The Tactical Room", title:`${club.name} 季前展望：稳定性将决定上限`, body:`球队需要在密集赛程中管理体能，并在两个转会窗口做出准确判断。`, date:START_DATE, type:"analysis" }
@@ -1167,6 +1253,7 @@
       playerCareer:setup.role==="player"?createPlayerCareer(controlled,club):null,
       coachCareer:setup.role==="coach"?createCoachCareer():null
     };
+    created.europeanWorld=createEuropeanWorld(created);
     const youth=createYouthSystem(created);created.youthAcademy=youth.academy;created.youthWorld=youth.world;
     ensureMarketValuation(created);
     created.transferMarket=createTransferMarket(created.season);
@@ -1263,6 +1350,8 @@
     if ((saved.version || 1) < 6) saved.version=6;
     if(previousVersion<38||!saved.majorLeagueWorld)rebuildMajorLeagueWorld(saved);else simulateMajorLeagueWorld(saved,saved.date||START_DATE);
     saved.majorLeagueId=saved.majorLeagueWorld.leagues[saved.majorLeagueId]?saved.majorLeagueId:clubById(saved.clubId).league;
+    if(previousVersion<42||!saved.europeanWorld)rebuildEuropeanWorld(saved);else simulateEuropeanWorld(saved,saved.date||START_DATE);
+    saved.worldCenterMode=saved.worldCenterMode==="europe"?"europe":"domestic";saved.europeanCompetitionKey=saved.europeanWorld.competitions[saved.europeanCompetitionKey]?saved.europeanCompetitionKey:"ucl";saved.europeanRoundFilters=saved.europeanRoundFilters&&typeof saved.europeanRoundFilters==="object"?saved.europeanRoundFilters:{};
     saved.transferHistory=Array.isArray(saved.transferHistory)?saved.transferHistory:[];if(saved.transferMarket)repairTransferOwnership(saved,saved.transferMarket);
     if(previousVersion<8||!saved.transferMarket){saved.transferMarket=createTransferMarket(saved.season||2026);repairTransferOwnership(saved,saved.transferMarket);simulateTransferMarket(saved,saved.date||START_DATE);}
     else if(previousVersion<10)rebuildTransferMarketFromPostOpeningActivity(saved);
@@ -1292,7 +1381,7 @@
     ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
     ensureMarketValuation(saved);
     ensureClubFinances(saved);
-    saved.version=41;
+    saved.version=42;
     return saved;
   }
   function saveState() {
@@ -2231,6 +2320,22 @@
     return `<div class="form-strip">${[...form].reverse().map(result=>`<span class="${result.toLowerCase()}">${result}</span>`).join("")||`<span class="empty-form">—</span>`}</div>`;
   }
 
+  function europeanPositionZone(index) {
+    if(index<8)return {className:"europe-direct",label:"直接晋级十六强"};if(index<24)return {className:"europe-playoff",label:"淘汰赛附加赛"};return {className:"europe-out",label:"联赛阶段出局"};
+  }
+
+  function renderEuropeanCenter() {
+    state.europeanWorld||=createEuropeanWorld(state);const keys=Object.keys(EUROPEAN_COMPETITIONS);if(!state.europeanWorld.competitions[state.europeanCompetitionKey])state.europeanCompetitionKey="ucl";state.europeanRoundFilters||={};
+    const key=state.europeanCompetitionKey,config=EUROPEAN_COMPETITIONS[key],competition=state.europeanWorld.competitions[key],table=europeanStandings(competition),nextRoundIndex=competition.rounds.findIndex(round=>round.status!=="played"),storedRound=Number(state.europeanRoundFilters[key]),selectedIndex=Number.isInteger(storedRound)&&storedRound>=0&&storedRound<competition.rounds.length?storedRound:(nextRoundIndex>=0?nextRoundIndex:competition.rounds.length-1),selectedRound=competition.rounds[selectedIndex],userRow=table.find(club=>club.id===state.clubId),userPosition=userRow?table.findIndex(club=>club.id===state.clubId)+1:null,playedMatches=competition.rounds.flatMap(round=>round.matches).filter(match=>match.status==="played").length,knockoutFixtures=(state.schedule||[]).filter(fixture=>fixture.competition===config.name&&fixture.phase==="knockout").sort((a,b)=>a.date.localeCompare(b.date));
+    const matchMarkup=selectedRound.matches.map(match=>{const userMatch=match.homeId===state.clubId||match.awayId===state.clubId,score=match.status==="played"?`${match.homeGoals} - ${match.awayGoals}`:formatDate(match.date,false);return `<div class="europe-fixture ${userMatch?"user-result":""}"><span class="league-result-team">${clubBadge(match.homeId||match.home,"club-badge-result")}<b>${clubNameLink(match.home)}</b></span><strong class="${match.status==="played"?"played":"upcoming"}">${score}</strong><span class="league-result-team away">${clubBadge(match.awayId||match.away,"club-badge-result")}<b>${clubNameLink(match.away)}</b></span></div>`;}).join("");
+    return `<section class="europe-center" aria-label="欧洲赛事中心"><header class="europe-header"><img src="assets/trophies/${trophyAsset(config.fullName)}" alt="${esc(config.name)}奖杯"><div><span class="eyebrow">${state.season}/${String(state.season+1).slice(2)} · 欧洲赛事</span><h2>${esc(config.fullName)}</h2><p>36 队联赛阶段 · ${config.matches} 轮 · 更新至 ${formatDate(state.europeanWorld.currentDate)}</p></div><div class="league-live">${icon("radio")}实时模拟</div></header>
+      <nav class="league-tabs europe-tabs" role="tablist" aria-label="选择欧洲赛事">${keys.map(competitionKey=>{const item=EUROPEAN_COMPETITIONS[competitionKey],active=competitionKey===key,userInCompetition=Boolean(state.europeanWorld.competitions[competitionKey]?.clubs.some(club=>club.id===state.clubId));return `<button role="tab" aria-selected="${active}" class="league-tab ${active?"active":""}" data-europe-competition="${competitionKey}"><span>${item.name}</span>${userInCompetition?`<small>我的赛事</small>`:""}</button>`;}).join("")}</nav>
+      <div class="europe-summary"><span><b>${competition.round}</b> / ${config.matches} 轮已完成</span><span><b>${playedMatches}</b> 场已赛</span><span><b>${competition.totalGoals}</b> 粒进球</span><span>${userRow?`本队第 <b>${userPosition}</b> 名 · ${userRow.pts} 分`:`<b>未参赛</b>`}</span></div>
+      <div class="europe-layout"><section class="panel league-table-panel"><div class="panel-header"><h3>${esc(config.name)}联赛阶段积分榜</h3><span class="meta">积分、净胜球、进球数依次排名</span></div><div class="table-wrap"><table class="league-table europe-table"><thead><tr><th class="num">排名</th><th>俱乐部</th><th>近况</th><th class="num">赛</th><th class="num">胜</th><th class="num">平</th><th class="num">负</th><th class="num">进/失</th><th class="num">净胜</th><th class="num">积分</th></tr></thead><tbody>${table.map((club,index)=>{const zone=europeanPositionZone(index),isUser=club.id===state.clubId;return `<tr class="${isUser?"user-club-row":""}"><td class="num position-cell"><span class="position-mark ${zone.className}" title="${zone.label}">${index+1}</span></td><td class="league-club-cell">${clubBadge(club.id||club.name,"club-badge-table")}<div class="player-name"><strong>${isUser?"★ ":""}${clubNameLink(club.name)}</strong><span>${zone.label}</span></div></td><td>${renderLeagueForm(club.form)}</td><td class="num">${club.p}</td><td class="num">${club.w}</td><td class="num">${club.d}</td><td class="num">${club.l}</td><td class="num">${club.gf}/${club.ga}</td><td class="num">${club.gd>0?"+":""}${club.gd}</td><td class="num"><span class="rating league-points">${club.pts}</span></td></tr>`;}).join("")}</tbody></table></div><div class="league-legend europe-legend"><span><i class="europe-direct"></i>第 1–8 名：直通十六强</span><span><i class="europe-playoff"></i>第 9–24 名：淘汰赛附加赛</span><span><i class="europe-out"></i>第 25–36 名：出局</span></div></section>
+        <aside class="europe-fixtures-panel"><section class="panel"><div class="panel-header europe-round-header"><div><h3>联赛阶段对局</h3><span class="meta">${formatDate(selectedRound.date,false)} · 18 场</span></div><select class="select" id="europe-round" aria-label="选择欧战轮次">${competition.rounds.map(round=>`<option value="${round.index}" ${round.index===selectedIndex?"selected":""}>第 ${round.index+1} 轮 · ${round.status==="played"?"已赛":"未赛"}</option>`).join("")}</select></div><div class="europe-fixtures">${matchMarkup}</div></section>
+        ${knockoutFixtures.length?`<section class="panel"><div class="panel-header"><h3>本队淘汰赛路径</h3><span class="meta">已生成对局</span></div><div class="europe-knockout-list">${knockoutFixtures.map(fixture=>`<div><span>${esc(fixture.round)} · ${formatDate(fixture.date,false)}</span><strong>${fixture.home?"vs":"@"} ${clubNameLink(fixture.opponent)}${fixture.status==="played"?` · ${fixture.score.home}-${fixture.score.away}`:""}</strong></div>`).join("")}</div></section>`:""}</aside></div></section>`;
+  }
+
   function renderWorld() {
     state.majorLeagueWorld||=createMajorLeagueWorld(state.season,state.clubId);
     const world=state.majorLeagueWorld,userClub=clubById(state.clubId),leagueIds=Object.keys(LEAGUES).filter(id=>world.leagues[id]);
@@ -2239,13 +2344,17 @@
     const background=state.backgroundWorld||createBackgroundWorld(state.season),backgroundIds=Object.keys(background.leagues),packs=loadModPacks();
     if(!background.leagues[state.worldLeague])state.worldLeague=backgroundIds[0];
     const selectedBackground=background.leagues[state.worldLeague],worldHistory=ensureWorldHistory(state),leagueHistory=worldHistory.competitions[league.name]||[],europeHistory=Object.values(EUROPEAN_COMPETITIONS).flatMap(config=>(worldHistory.competitions[config.fullName]||[]).slice(0,4)).sort((a,b)=>b.season-a.season||a.name.localeCompare(b.name)),nationalHistory=Object.values(worldHistory.competitions).flat().filter(record=>record.kind==="national").sort((a,b)=>b.season-a.season||a.name.localeCompare(b.name)).slice(0,12),seasonLabel=season=>`${season}/${String(Number(season)+1).slice(2)}`,userRecord=record=>record.userStage?`${esc(record.userStage)} · ${Number(record.userPoints||0)} 分 · ${Number(record.userGoalsFor||0)}/${Number(record.userGoalsAgainst||0)}`:"未参赛";
+    const centerMode=state.worldCenterMode==="europe"?"europe":"domestic";
     return `<div class="league-page">
+      <nav class="competition-center-tabs" aria-label="选择赛事中心"><button class="${centerMode==="domestic"?"active":""}" data-world-center="domestic">国内联赛</button>${Object.values(EUROPEAN_COMPETITIONS).map(config=>`<button class="${centerMode==="europe"&&state.europeanCompetitionKey===config.key?"active":""}" data-world-center="${config.key}">${config.name}</button>`).join("")}</nav>
+      <div class="world-domestic-live" ${centerMode==="domestic"?"":"hidden"}>
       <section class="league-banner"><img src="assets/trophies/${leagueTrophyAsset(league.id)}" alt="${esc(league.short)}冠军奖杯"><div><span class="eyebrow">${state.season}/${String(state.season+1).slice(2)} · ${esc(league.country)}</span><h2>${esc(league.name)}</h2><p>${league.id===userClub.league?`${esc(userClub.name)} 所在联赛`:"五大联赛实时追踪"} · 更新至 ${formatDate(world.currentDate)}</p></div><div class="league-live">${icon("radio")}游戏内实时</div></section>
       <nav class="league-tabs" role="tablist" aria-label="选择联赛">${leagueIds.map(id=>`<button role="tab" aria-selected="${id===league.id}" class="league-tab ${id===league.id?"active":""}" data-major-league="${id}"><span>${LEAGUES[id].short}</span>${id===userClub.league?`<small>我的联赛</small>`:""}</button>`).join("")}</nav>
       <section class="stats league-stats" aria-label="联赛关键数据"><div class="stat"><div class="stat-label">领头羊</div><div class="stat-value league-team-value">${esc(leader?.name||"待定")}</div><div class="stat-context">${leader?.pts||0} 分 · 净胜 ${leader?.gd>0?"+":""}${leader?.gd||0}</div></div><div class="stat"><div class="stat-label">已完成轮次</div><div class="stat-value">${league.round}</div><div class="stat-context">共 ${matchesPlayed} 场比赛</div></div><div class="stat"><div class="stat-label">联赛进球</div><div class="stat-value">${league.totalGoals}</div><div class="stat-context">场均 ${averageGoals.toFixed(2)} 球</div></div><div class="stat"><div class="stat-label">射手榜首</div><div class="stat-value league-team-value">${league.scorers[0]?playerNameLink(league.scorers[0],{position:"ST",clubName:league.scorers[0].club}):"待定"}</div><div class="stat-context">${league.scorers[0]?.goals||0} 球${league.scorers[0]?` · ${esc(league.scorers[0].club)}`:""}</div></div></section>
       <div class="league-layout"><section class="panel league-table-panel"><div class="panel-header"><h3>实时积分榜</h3><span class="meta">胜负关系依次按积分、净胜球、进球数排列</span></div><div class="table-wrap"><table class="league-table"><thead><tr><th class="num">排名</th><th>俱乐部</th><th>近况</th><th class="num">赛</th><th class="num">胜</th><th class="num">平</th><th class="num">负</th><th class="num league-goals-col">进/失</th><th class="num">净胜</th><th class="num">积分</th></tr></thead><tbody>${table.map((club,index)=>{const zone=leaguePositionZone(league,index,table.length),isUser=club.id===state.clubId;return `<tr class="${isUser?"user-club-row":""}"><td class="num position-cell"><span class="position-mark ${zone?.className||""}" title="${zone?.label||""}">${index+1}</span></td><td class="league-club-cell">${clubBadge(club,"club-badge-table")}<div class="player-name"><strong>${isUser?"★ ":""}${clubNameLink(club.name)}</strong><span>${zone?.label||`俱乐部战力 ${club.ability}`}</span></div></td><td>${renderLeagueForm(club.form)}</td><td class="num">${club.p}</td><td class="num">${club.w}</td><td class="num">${club.d}</td><td class="num">${club.l}</td><td class="num league-goals-col">${club.gf}/${club.ga}</td><td class="num">${club.gd>0?"+":""}${club.gd}</td><td class="num"><span class="rating league-points">${club.pts}</span></td></tr>`;}).join("")}</tbody></table></div><div class="league-legend"><span><i class="champion"></i>榜首</span><span><i class="continental"></i>${league.tier===1?"欧冠区":"直接升级"}</span>${league.tier!==1?`<span><i class="playoff"></i>附加赛</span>`:""}${league.tier<3?`<span><i class="relegation"></i>降级区</span>`:""}</div></section>
         <aside class="league-sidebar"><section class="panel"><div class="panel-header"><h3>最近赛果</h3><span class="meta">${latest?`${formatDate(latest.date,false)} · 第 ${latest.round} 轮`:"等待首轮"}</span></div>${latest?`<div class="league-results">${latest.matches.map(match=>`<div class="league-result ${match.homeId===state.clubId||match.awayId===state.clubId?"user-result":""}"><span class="league-result-team">${clubBadge(match.homeId||match.home,"club-badge-result")}<b>${esc(match.home)}</b></span><strong>${match.homeGoals} - ${match.awayGoals}</strong><span class="league-result-team away">${clubBadge(match.awayId||match.away,"club-badge-result")}<b>${esc(match.away)}</b></span></div>`).join("")}</div>`:`<div class="empty">首轮比赛完成后显示赛果</div>`}</section>
-        <section class="panel"><div class="panel-header"><h3>射手榜</h3><span class="meta">前 8 名</span></div><div class="league-scorers">${league.scorers.slice(0,8).map((scorer,index)=>`<div class="league-scorer"><span class="scorer-rank">${index+1}</span><div><strong>${playerNameLink(scorer,{position:"ST",clubName:scorer.club})}</strong><small>${esc(scorer.club)}${scorer.generated?" · 模拟球员":""}</small></div><b>${scorer.goals}</b></div>`).join("")||`<div class="empty">尚无进球记录</div>`}</div></section></aside></div>
+        <section class="panel"><div class="panel-header"><h3>射手榜</h3><span class="meta">前 8 名</span></div><div class="league-scorers">${league.scorers.slice(0,8).map((scorer,index)=>`<div class="league-scorer"><span class="scorer-rank">${index+1}</span><div><strong>${playerNameLink(scorer,{position:"ST",clubName:scorer.club})}</strong><small>${esc(scorer.club)}${scorer.generated?" · 模拟球员":""}</small></div><b>${scorer.goals}</b></div>`).join("")||`<div class="empty">尚无进球记录</div>`}</div></section></aside></div></div>
+      <div class="world-europe-live" ${centerMode==="europe"?"":"hidden"}>${renderEuropeanCenter()}</div>
       <section class="panel"><div class="panel-header"><h3>${esc(league.name)} 历史赛季</h3><span class="meta">最终积分榜、冠军、升降级与射手</span></div><div class="table-wrap"><table class="player-career-table"><thead><tr><th>赛季</th><th>冠军 / 亚军</th><th>赛季规模</th><th>最佳射手</th><th>升级</th><th>降级</th></tr></thead><tbody>${leagueHistory.map(record=>`<tr><td>${seasonLabel(record.season)}</td><td><strong>${clubNameLink(record.champion)}</strong><small> / ${clubNameLink(record.runnerUp)}</small></td><td>${record.matches} 场 · ${record.goals} 球</td><td>${esc(record.topScorer||"—")} · ${record.topScorerGoals||0} 球</td><td>${(record.promoted||[]).map(name=>clubNameLink(name)).join("、")||"—"}</td><td>${(record.relegated||[]).map(name=>clubNameLink(name)).join("、")||"—"}</td></tr><tr class="season-history-row"><td colspan="6"><details class="season-history-details"><summary>${icon("table-2")}查看 ${seasonLabel(record.season)} 完整最终积分榜</summary><div class="table-wrap"><table class="league-table archived-league-table"><thead><tr><th class="num">排名</th><th>俱乐部</th><th class="num">赛</th><th class="num">胜</th><th class="num">平</th><th class="num">负</th><th class="num">进/失</th><th class="num">净胜</th><th class="num">积分</th></tr></thead><tbody>${(record.table||[]).map(row=>`<tr><td class="num">${row.position}</td><td>${clubNameLink(row.name)}</td><td class="num">${row.p}</td><td class="num">${row.w}</td><td class="num">${row.d}</td><td class="num">${row.l}</td><td class="num">${row.gf}/${row.ga}</td><td class="num">${row.gd>0?"+":""}${row.gd}</td><td class="num"><strong>${row.pts}</strong></td></tr>`).join("")}</tbody></table></div></details></td></tr>`).join("")||`<tr><td colspan="6"><div class="empty compact">完成首个赛季后生成历史档案</div></td></tr>`}</tbody></table></div></section>
       <div class="grid grid-2"><section class="panel"><div class="panel-header"><h3>欧洲赛事历史</h3><span class="meta">欧冠、欧联杯、欧协联</span></div><div class="table-wrap"><table class="player-career-table"><thead><tr><th>赛季</th><th>赛事</th><th>冠军</th><th>亚军</th><th>比赛 / 进球</th><th>本队记录</th></tr></thead><tbody>${europeHistory.map(record=>`<tr><td>${seasonLabel(record.season)}</td><td>${esc(record.shortName||record.name)}</td><td>${clubNameLink(record.champion)}</td><td>${clubNameLink(record.runnerUp)}</td><td>${record.matches} / ${record.goals}</td><td>${userRecord(record)}</td></tr>`).join("")||`<tr><td colspan="6">暂无历史赛季</td></tr>`}</tbody></table></div></section><section class="panel"><div class="panel-header"><h3>国家队赛事历史</h3><span class="meta">冠军、亚军与赛事规模</span></div><div class="table-wrap"><table class="player-career-table"><thead><tr><th>赛季</th><th>赛事</th><th>冠军</th><th>亚军</th><th>比赛 / 进球</th><th>国家队记录</th></tr></thead><tbody>${nationalHistory.map(record=>`<tr><td>${seasonLabel(record.season)}</td><td>${esc(record.name)}</td><td>${esc(record.champion||"—")}</td><td>${esc(record.runnerUp||"—")}</td><td>${record.matches} / ${record.goals}</td><td>${record.userTeam?`${esc(record.userTeam)} · ${userRecord(record)}`:"未参赛"}</td></tr>`).join("")||`<tr><td colspan="6">暂无历史赛季</td></tr>`}</tbody></table></div></section></div>
       <details class="panel league-extension"><summary>${icon("globe-2")}<span>扩展联赛与社区 MOD</span><small>${backgroundIds.length} 个后台联赛 · ${packs.length} 个 MOD</small>${icon("chevron-down")}</summary><div class="panel-body"><div class="filterbar"><select class="select" id="world-league">${backgroundIds.map(id=>`<option value="${esc(id)}" ${id===state.worldLeague?"selected":""}>${esc(background.leagues[id].name)} · ${esc(background.leagues[id].country)}</option>`).join("")}</select><button class="btn" id="import-mod">${icon("upload")}导入 MOD</button><button class="btn" id="export-mod">${icon("download")}导出数据包</button><button class="btn btn-danger" id="clear-mods" ${packs.length?"":"disabled"}>${icon("trash-2")}清除 MOD</button><input id="mod-file" type="file" accept="application/json,.json" hidden></div><div class="extension-summary"><span>${esc(selectedBackground?.name||"扩展联赛")}</span><strong>第 ${selectedBackground?.round||0} 轮</strong><small>后台模拟，不影响五大联赛正式积分榜</small></div></div></details>
@@ -2730,7 +2839,7 @@
     const careerSegment=transferCareerSegment(state,player,seller,state.date,true),careerHistory=[...(player.careerStats||[])],contract=loan?{...player.contract}:transferContract(player,{contract:offer.contract},state.season),record={id:`${loan?"loan":"transfer"}-${market.season}-${++market.sequence}`,type:loan?"loan":"transfer",season:state.season,windowKey:offer.windowKey,date:state.date,playerId:player.sourcePlayerId||player.id,playerName:player.name,position:player.position,overall:player.overall,potential:player.potential,fromId:seller.id,toId:buyer.id,fee:loan?0:offer.fee,reason:loan?"球员外租申请获批":"球员正式转会申请获批",contract,careerHistory,careerSegment};
     const budget=Number(market.budgets[buyer.id]||buyer.budget||0);if(!loan&&budget<offer.fee)return false;if(!loan){market.budgets[buyer.id]=Number(Math.max(0,budget-offer.fee).toFixed(1));market.budgets[seller.id]=Number((Number(market.budgets[seller.id]||0)+offer.fee*.82).toFixed(1));}market.clubOverrides[player.sourcePlayerId||player.id]=buyer.id;
     const moved={...player,club:buyer.id,clubId:buyer.id,joinedDate:state.date,careerStats:[...careerHistory,careerSegment],contract,weeklyWage:contract.weeklyWage,wage:contract.weeklyWage,fitness:94,morale:84,form:0,lastRating:null,ratingTotal:0,appearances:0,goals:0,assists:0,injured:0,injury:null,consecutiveStarts:0,lastMatchMinutes:0,lastMatchDate:null,lastSelectionStatus:null,transferRequestStatus:"completed"};["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{moved[key]=0;});delete moved.development;ensurePlayerDevelopment(moved,state.season);initializePlayerMarketValue(moved,state,state.date);
-    const newSquad=createSquad(buyer,moved);newSquad.forEach(item=>{ensurePlayerContract(item,state.season);ensurePlayerDevelopment(item,state.season);});const controlledIndex=newSquad.findIndex(item=>item.id==="controlled");newSquad[controlledIndex>=0?controlledIndex:0]=moved;state.clubId=buyer.id;state.squad=newSquad;state.controlledId="controlled";state.schedule=generateSchedule(buyer,state.season,moved).filter(fixture=>fixture.date>=state.date);state.played=0;state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(buyer,state.season),cups:{},international:{}};state.majorLeagueWorld=createMajorLeagueWorld(state.season,buyer.id);simulateMajorLeagueWorld(state,state.date);state.majorLeagueId=buyer.league;state.funds=Number(market.budgets[buyer.id]||buyer.budget||0);state.activeMatch=null;
+    const newSquad=createSquad(buyer,moved);newSquad.forEach(item=>{ensurePlayerContract(item,state.season);ensurePlayerDevelopment(item,state.season);});const controlledIndex=newSquad.findIndex(item=>item.id==="controlled");newSquad[controlledIndex>=0?controlledIndex:0]=moved;state.clubId=buyer.id;state.squad=newSquad;state.controlledId="controlled";state.schedule=generateSchedule(buyer,state.season,moved).filter(fixture=>fixture.date>=state.date);state.played=0;state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(buyer,state.season),cups:{},international:{}};state.majorLeagueWorld=createMajorLeagueWorld(state.season,buyer.id);simulateMajorLeagueWorld(state,state.date);state.majorLeagueId=buyer.league;rebuildEuropeanWorld(state);state.funds=Number(market.budgets[buyer.id]||buyer.budget||0);state.activeMatch=null;
     market.records.unshift(record);state.transferHistory=Array.isArray(state.transferHistory)?state.transferHistory:[];state.transferHistory.unshift(record);state.transferHistory=state.transferHistory.filter((item,index,list)=>list.findIndex(other=>other.id===item.id)===index).slice(0,500);const career=ensurePlayerCareer();career.transferOffer={...offer,status:"accepted",completedDate:state.date};career.transferOfferHistory.unshift(career.transferOffer);career.transferOfferHistory=career.transferOfferHistory.slice(0,20);career.trust=55;career.chemistry=54;career.relationships={...career.relationships,coach:52,teammates:52,captain:50};career.status="新环境适应";career.contractStance=loan?"外租效力中":"已转会";career.lastTransferDate=state.date;if(loan){career.loanParentClubId=seller.id;career.loanEndSeason=state.season;career.loanSearchUntil=null;}state.transferRequestsLog.forEach(item=>{if(item.id===offer.id)item.status="completed";});addNotification({title:loan?`租借完成：${moved.name} 加盟 ${buyer.name}`:`官方：${moved.name} 加盟 ${buyer.name}`,type:"transfer",date:state.date,detail:loan?`你将为 ${buyer.name} 效力至本赛季结束，原合同与母队归属保持不变。旧俱乐部阶段数据已经归档。`:"转会申请已获批。旧俱乐部阶段的所有数据已经归档，新俱乐部生涯从今天开始。",facts:[`${seller.name} → ${buyer.name}`,loan?"形式：赛季租借":`转会费：${money(offer.fee)}`,loan?`计划角色：${offer.contract?.role||"轮换球员"}`:`新合同至 ${contract.endSeason} 年 · ${contract.role}`]});state.media.unshift({source:"Transfer Desk",title:loan?`租借：${moved.name} 加盟 ${buyer.name}`:`官方：${moved.name} 加盟 ${buyer.name}`,body:loan?`${moved.name} 将从 ${seller.name} 租借至 ${buyer.name}，租期到本赛季结束。`:`${buyer.name} 以 ${money(offer.fee)} 从 ${seller.name} 签下 ${moved.name}。球员此前已提交正式转会申请。`,date:state.date,type:"transfer"});return true;
   }
 
@@ -3656,6 +3765,9 @@
     document.querySelectorAll(".league-club-cell,.league-result-team,.transfer-club,.match-club,.match-team-title,.report-team-head strong").forEach(element=>element.addEventListener("click",event=>{if(event.target.closest("button"))return;let label=(element.querySelector(".player-name strong,.league-result-team b,.transfer-club b,.match-team-title h3,.report-team-head strong")||element).textContent.replace(/^★\s*/,"").trim();if(element.classList.contains("match-club")){label=label.replace(/^[A-Z]{2,5}/,"").replace(/[A-Z]{2,5}$/ ,"").trim();}openClubProfile(label);}));
     document.querySelectorAll("[data-club-profile]").forEach(button=>button.addEventListener("click",()=>{const club=clubProfileRegistry.get(button.dataset.clubProfile);if(club)openClubProfile(club);}));
     document.querySelectorAll("[data-major-league]").forEach(button=>button.addEventListener("click",()=>{state.majorLeagueId=button.dataset.majorLeague;saveState();render();}));
+    document.querySelectorAll("[data-world-center]").forEach(button=>button.addEventListener("click",()=>{const target=button.dataset.worldCenter;state.worldCenterMode=target==="domestic"?"domestic":"europe";if(target!=="domestic")state.europeanCompetitionKey=target;saveState();render();}));
+    document.querySelectorAll("[data-europe-competition]").forEach(button=>button.addEventListener("click",()=>{state.europeanCompetitionKey=button.dataset.europeCompetition;saveState();render();}));
+    document.getElementById("europe-round")?.addEventListener("change",event=>{state.europeanRoundFilters||={};state.europeanRoundFilters[state.europeanCompetitionKey]=Number(event.target.value);saveState();render();});
     document.querySelectorAll("[data-transfer]").forEach(b=>b.addEventListener("click",()=>{const player=transferRecommendationRegistry[Number(b.dataset.transfer)];if(!player)return;modal={type:"transfer",player};render();}));
     document.querySelectorAll("[data-open-negotiation]").forEach(button=>button.addEventListener("click",()=>{modal={type:"negotiation",id:button.dataset.openNegotiation};render();}));
     document.querySelectorAll("[data-open-renewal]").forEach(button=>button.addEventListener("click",()=>{modal={type:"renewal",id:button.dataset.openRenewal};render();}));
@@ -3769,6 +3881,7 @@
     });
     simulateBackgroundWorld(targetDate);
     simulateMajorLeagueWorld(state,targetDate);
+    simulateEuropeanWorld(state,targetDate);
     state.date=targetDate;
     advanceYouthDevelopment(state);
     const youthEvent=runYouthIntake(state,targetDate);
@@ -4830,6 +4943,7 @@
     f.status="played";f.score={home:m.home,away:m.away};
     const scheduledFixture=state.schedule.find(item=>item.id===f.id);
     if(scheduledFixture&&scheduledFixture!==f)Object.assign(scheduledFixture,{status:"played",score:{...f.score},...(f.penalties?{penalties:{...f.penalties}}:{})});
+    simulateEuropeanWorld(state,f.date);
     state.played++;
     if(ours>theirs)state.wins++;else if(draw)state.draws++;else state.losses++;
     const league=leagueOf(clubById(state.clubId)),isLeague=f.competition===league.short;
@@ -4875,7 +4989,7 @@
     const report=createMatchReport(m,mvp,result);f.reportId=report.id;if(scheduledFixture)scheduledFixture.reportId=report.id;state.matchReports.unshift(report);state.matchReports=state.matchReports.slice(0,1200);
     addNotification({title:"医疗组：恢复计划已生成",type:"medical",date:f.date,detail:"医疗组已经根据本场出场时间、体能消耗和伤病情况生成恢复计划。下一场选人会自动考虑球员体能与赛程密度。",facts:report.injuries.length?report.injuries.map(item=>`${item.name}：${item.injury}，预计缺阵 ${item.days} 天`):["本场没有新增伤病","低体能球员将优先安排恢复训练"]});
     const reportNotification={title:`赛后分析：${ours}-${theirs} ${result}`,type:"match",date:f.date,detail:`${f.teamName||club.name} 已完成本场比赛，完整技术统计、球员评分、换人与医疗记录如下。`,reportId:report.id};addNotification(reportNotification);
-    const reportNotice=state.notifications[0];state.date=addDays(f.date,1);state.continueStatus=null;simulateMajorLeagueWorld(state,state.date);simulateBackgroundWorld(state.date);runMonthlyClubFinances(state,state.date);simulateTransferMarket(state,state.date);state.activeMatch=null;if(state.calendarRepairPending){repairCompetitionCalendar(state);delete state.calendarRepairPending;}
+    const reportNotice=state.notifications[0];state.date=addDays(f.date,1);state.continueStatus=null;simulateMajorLeagueWorld(state,state.date);simulateBackgroundWorld(state.date);simulateEuropeanWorld(state,state.date);runMonthlyClubFinances(state,state.date);simulateTransferMarket(state,state.date);state.activeMatch=null;if(state.calendarRepairPending){repairCompetitionCalendar(state);delete state.calendarRepairPending;}
     if(options.openReport&&reportNotice){reportNotice.read=true;state.inboxUnread=state.notifications.filter(item=>!item.read).length;modal={type:"notification",id:reportNotice.id};}
     saveState();render();toast(options.openReport?"已直接生成赛后分析":"比赛已记录，赛后报告已生成");
   }
@@ -4965,7 +5079,7 @@
     if(fixture.phase==="league"){
       progress.played++;progress.points+=result.ours>result.theirs?3:result.draw?1:0;progress.gf+=result.ours;progress.ga+=result.theirs;
       if(progress.played<config.matches)return;
-      progress.position=estimateEuropeanLeaguePosition(progress,club,config);
+      progress.position=europeanLeaguePosition(state,config.key)||estimateEuropeanLeaguePosition(progress,club,config);
       if(progress.position>24){progress.eliminated=true;addNotification({title:`${config.name}：联赛阶段第 ${progress.position} 名，未能晋级`,type:"competition",date:fixture.date,detail:`${config.name}联赛阶段已经结束。第 25 至 36 名直接出局，不会降入其他欧战。`,facts:[`战绩：${progress.points} 分，进 ${progress.gf} 球 / 失 ${progress.ga} 球`,`联赛阶段排名：第 ${progress.position} 名`,`赛事状态：已出局`]});return;}
       const direct=progress.position<=8,round=direct?"十六强":"淘汰赛附加赛",stageIndex=direct?1:0,opponent=scheduleEuropeanKnockoutRound(config,round,stageIndex,fixture.date,direct?35:14);
       progress.knockoutStage=stageIndex;
@@ -5079,7 +5193,7 @@
     const from=clubById(state.clubId),record={id:`loan-return-${state.season}-${Date.now()}`,type:"loan-return",season:state.season,windowKey:"season-end",date:state.date,playerId:player.sourcePlayerId||player.id,playerName:player.name,position:player.position,overall:player.overall,potential:player.potential,fromId:from.id,toId:parent.id,fee:0,reason:"赛季租借结束自动回归母队",contract:{...(player.contract||{})},careerHistory:[...(player.careerStats||[])]};
     const moved={...player,club:parent.id,clubId:parent.id,joinedDate:state.date,transferRequestStatus:"none",lastSelectionStatus:null,fitness:clamp(Number(player.fitness||80)+5,25,100),morale:clamp(Number(player.morale||75)+3,25,100)};
     const squad=createSquad(parent,moved),index=squad.findIndex(item=>item.id==="controlled");if(index>=0)squad[index]=moved;else squad.push(moved);
-    state.clubId=parent.id;state.squad=squad.sort((a,b)=>positionSortRank(a.position)-positionSortRank(b.position));state.controlledId="controlled";state.schedule=generateSchedule(parent,state.season,moved).filter(fixture=>fixture.date>=state.date);state.played=0;state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(parent,state.season),cups:{},international:{}};state.majorLeagueWorld=createMajorLeagueWorld(state.season,parent.id);state.majorLeagueId=parent.league;state.funds=Number(state.transferMarket?.budgets?.[parent.id]||parent.budget||10);
+    state.clubId=parent.id;state.squad=squad.sort((a,b)=>positionSortRank(a.position)-positionSortRank(b.position));state.controlledId="controlled";state.schedule=generateSchedule(parent,state.season,moved).filter(fixture=>fixture.date>=state.date);state.played=0;state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(parent,state.season),cups:{},international:{}};state.majorLeagueWorld=createMajorLeagueWorld(state.season,parent.id);state.majorLeagueId=parent.league;rebuildEuropeanWorld(state);state.funds=Number(state.transferMarket?.budgets?.[parent.id]||parent.budget||10);
     const market=ensureTransferMarket(state);market.clubOverrides[moved.sourcePlayerId||moved.id]=parent.id;market.records.unshift(record);state.transferHistory=Array.isArray(state.transferHistory)?state.transferHistory:[];state.transferHistory.unshift(record);state.transferHistory=state.transferHistory.slice(0,500);
     career.loanParentClubId=null;career.loanEndSeason=null;career.loanSearchUntil=null;career.contractStance="租借回归";career.status="回到母队，重新竞争位置";career.trust=clamp(career.trust+2,0,100);career.chemistry=clamp(career.chemistry-3,0,100);career.relationships={...career.relationships,coach:clamp(Number(career.relationships.coach||50)-2,0,100),teammates:clamp(Number(career.relationships.teammates||50)-4,0,100)};
     addNotification({title:`租借期满：${moved.name} 回归 ${parent.name}`,type:"transfer",date:state.date,detail:`你在 ${from.name} 的租借期已经结束，母队已重新登记你的合同与注册资格。租借期间的出场、进球、助攻和评分已保留在职业档案。`,facts:[`${from.name} → ${parent.name}`,`当前合同至 ${moved.contract?.endSeason||state.season+2} 年`,`回归后角色：重新竞争` ]});state.media.unshift({source:"Transfer Desk",title:`${moved.name} 租借回归 ${parent.name}`,body:`在 ${from.name} 完成一个赛季的历练后，${moved.name} 回到母队。`,date:state.date,type:"transfer"});return true;
@@ -5097,7 +5211,7 @@
     const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3),retiredPlayers=collectSeasonRetirements(state,state.season);if(retiredPlayers.length)state.squad=state.squad.filter(player=>!retiredPlayers.includes(player));
     returnControlledPlayerFromLoan();
     const nextSeasonFinances=seasonFinancePlans(state,state.season+1,previousClubLeaguePositions(state));
-    state.season++;state.date=transitionDate;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.fixtureSeasonFilter="current";state.fixtureFilter="all";state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season,nextSeasonFinances.budgets);repairTransferOwnership(state,state.transferMarket);state.funds=Number(nextSeasonFinances.budgets[state.clubId]||clubById(state.clubId).budget||10);const financeReport=activateSeasonFinances(state,nextSeasonFinances,state.date);simulateTransferMarket(state,state.date);
+    state.season++;state.date=transitionDate;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.fixtureSeasonFilter="current";state.fixtureFilter="all";state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.europeanWorld=createEuropeanWorld(state);state.europeanRoundFilters={};state.transferMarket=createTransferMarket(state.season,nextSeasonFinances.budgets);repairTransferOwnership(state,state.transferMarket);state.funds=Number(nextSeasonFinances.budgets[state.clubId]||clubById(state.clubId).budget||10);const financeReport=activateSeasonFinances(state,nextSeasonFinances,state.date);simulateTransferMarket(state,state.date);
     state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});resetSeasonMarketValueBaseline(state);
     rolloverYouthSeason(state).forEach(graduate=>addNotification({title:`AI 教练提拔青训球员：${graduate.name}`,type:"youth",date:state.date,detail:"教练组根据年龄、当前能力、潜力和一线队名额完成了青训晋升。",facts:[`${playerRoleLabel(graduate.position)} · ${graduate.age} 岁`,`当前能力：${graduate.overall}`,`合同角色：${graduate.contract.role}`]}));
     if(state.role==="player"){
