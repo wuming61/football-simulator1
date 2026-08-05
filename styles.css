@@ -311,6 +311,10 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .notification-row.unread { box-shadow:inset 3px 0 var(--green); }
 .notification-row.unread .list-row-title::after { content:""; display:inline-block; width:6px; height:6px; margin-left:7px; border-radius:50%; background:var(--green); vertical-align:middle; }
 .notification-row .avatar .icon { width:18px; height:18px; }
+.fixture-result-row { cursor:pointer; transition:background .15s,box-shadow .15s; }
+.fixture-result-row:hover,.fixture-result-row:focus-visible { background:rgba(72,200,120,.055); box-shadow:inset 3px 0 var(--green); outline:0; }
+.fixture-result-row .list-row-sub .icon { width:11px; height:11px; vertical-align:-2px; }
+.fixture-history-panel { grid-column:1/-1; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: 0 0 auto; }
 .status-dot.amber { background: var(--amber); }
 .status-dot.red { background: var(--red); }

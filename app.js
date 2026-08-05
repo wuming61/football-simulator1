@@ -1151,7 +1151,7 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:40, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:41, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
@@ -1162,7 +1162,7 @@
         { source:"Football Daily", title:`${person} 正式开启 ${club.name} 生涯`, body:`新赛季从 2026 年 8 月 1 日开始。外界将密切关注这段生涯的第一步。`, date:START_DATE, type:"career" },
         { source:"The Tactical Room", title:`${club.name} 季前展望：稳定性将决定上限`, body:`球队需要在密集赛程中管理体能，并在两个转会窗口做出准确判断。`, date:START_DATE, type:"analysis" }
       ],
-      honors:[], history:[], worldHistory:createWorldHistory(),worldClubLeagues:Object.fromEntries(CLUBS.map(item=>[item.id,item.league])),notifications:initialNotifications(club,schedule),matchReports:[],squadSort:{key:"position",direction:"asc"},squadSearch:"",fixtureFilter:"all",
+      honors:[], history:[], worldHistory:createWorldHistory(),worldClubLeagues:Object.fromEntries(CLUBS.map(item=>[item.id,item.league])),notifications:initialNotifications(club,schedule),matchReports:[],fixtureArchives:[],fixtureSeasonFilter:"current",squadSort:{key:"position",direction:"asc"},squadSearch:"",fixtureFilter:"all",
       activeMatch:null, selectedTransfer:null, transferNegotiations:[],transferRequestsLog:[],transferHistory:[],retired:false,
       playerCareer:setup.role==="player"?createPlayerCareer(controlled,club):null,
       coachCareer:setup.role==="coach"?createCoachCareer():null
@@ -1223,6 +1223,8 @@
     }
     saved.notifications=(saved.notifications||[]).map((item,index)=>normalizeNotification(item,index,saved));
     saved.matchReports=Array.isArray(saved.matchReports)?saved.matchReports:[];
+    saved.fixtureArchives=Array.isArray(saved.fixtureArchives)?saved.fixtureArchives.map(archive=>({...archive,fixtures:Array.isArray(archive.fixtures)?archive.fixtures:[]})):[];
+    saved.fixtureSeasonFilter||="current";
     saved.squadSort||={key:"position",direction:"asc"};
     saved.squadSearch||="";
     saved.fixtureFilter||="all";
@@ -1290,7 +1292,7 @@
     ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
     ensureMarketValuation(saved);
     ensureClubFinances(saved);
-    saved.version=40;
+    saved.version=41;
     return saved;
   }
   function saveState() {
@@ -2190,15 +2192,31 @@
       <section class="panel academy-section global-youth"><div class="panel-header"><div><h3>全球青训观察</h3><span class="meta">只展示公开球探区间，不标记球员生成来源</span></div><span class="tag">${world.prospects.length} 名已记录</span></div><div class="global-youth-list">${global.map(player=>`<div><span><strong>${esc(player.name)}</strong><small>${clubNameLink(clubById(player.clubId).name)} · ${esc(player.nationality)} · ${playerRoleLabel(player.position)} · ${player.age} 岁</small></span><b>${scoutedPotentialRange(player,estimatedYouthDepartment(clubById(player.clubId)))}</b></div>`).join("")||`<div class="empty compact">下一次全球选拔日后将形成观察名单</div>`}</div></section>`;
   }
 
-  function renderFixtures() {
-    const competitions=[...new Set(state.schedule.map(fixture=>fixture.competition))],validFilter=state.fixtureFilter==="all"||competitions.includes(state.fixtureFilter);if(!validFilter)state.fixtureFilter="all";
-    const filter=state.fixtureFilter||"all",allUpcoming=state.schedule.filter(f=>f.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date)),allPlayed=state.schedule.filter(f=>f.status==="played").sort((a,b)=>b.date.localeCompare(a.date)),upcoming=filter==="all"?allUpcoming:allUpcoming.filter(f=>f.competition===filter),played=filter==="all"?allPlayed:allPlayed.filter(f=>f.competition===filter),selectedFixtures=state.schedule.filter(f=>filter==="all"||f.competition===filter),homeCount=selectedFixtures.filter(f=>f.home).length,awayCount=selectedFixtures.length-homeCount,displayLimit=filter==="all"?12:60;
-    return `<div class="page-heading"><span class="eyebrow">${state.season}/${String(state.season+1).slice(2)}</span><h2>赛程与结果</h2><p>赛程引擎保证任意两场正式比赛至少间隔 72 小时，并按联赛与杯赛规则生成。</p></div>
-      <div class="filterbar"><label for="fixture-filter">赛事</label><select class="select" id="fixture-filter" aria-label="筛选赛事"><option value="all" ${filter==="all"?"selected":""}>全部赛事 (${state.schedule.length})</option>${competitions.map(name=>`<option value="${esc(name)}" ${filter===name?"selected":""}>${esc(name)} (${state.schedule.filter(f=>f.competition===name).length})</option>`).join("")}</select><span class="tag">${filter==="all"?"全部赛事":esc(filter)} · ${selectedFixtures.length} 场 · 主 ${homeCount} / 客 ${awayCount}</span></div>
-      <div class="grid grid-2"><section class="panel"><div class="panel-header"><h3>接下来</h3><span class="meta">${upcoming.length} 场</span></div><div class="list">${upcoming.slice(0,displayLimit).map(f=>fixtureRow(f)).join("")||`<div class="empty">赛程已完成</div>`}</div></section><section class="panel"><div class="panel-header"><h3>比赛结果</h3><span class="meta">${played.length} 场</span></div><div class="list">${played.slice(0,displayLimit).map(f=>fixtureRow(f)).join("")||`<div class="empty">尚未进行比赛</div>`}</div></section></div>`;
+  function matchReportForFixture(fixture,save=state) {
+    if(!fixture||!save)return null;const reports=save.matchReports||[];
+    return (fixture.reportId&&reports.find(report=>report.id===fixture.reportId))||reports.find(report=>report.fixtureId===fixture.id)||null;
   }
-  function fixtureRow(f) {
-    const club=clubById(state.clubId); return `<div class="list-row">${clubBadge(f.opponent,"club-badge-list")}<div class="list-row-main"><div class="list-row-title">${f.home?"vs":"@"} ${clubNameLink(f.opponent)}</div><div class="list-row-sub">${esc(f.competition)} · ${esc(f.round)} · ${formatDate(f.date,false)}</div></div><div class="list-row-value">${f.status==="played"?`<strong>${f.score.home} - ${f.score.away}</strong><div class="list-row-sub">${resultLabel(f,club)}</div>`:`<span class="tag">${f.home?"主场":"客场"}</span>`}</div></div>`;
+
+  function archiveSeasonFixtures(save=state) {
+    if(!save?.schedule?.length)return null;const season=Number(save.season),fixtures=save.schedule.filter(fixture=>fixture.status==="played").map(fixture=>{const report=matchReportForFixture(fixture,save);return {...fixture,score:fixture.score?{...fixture.score}:null,penalties:fixture.penalties?{...fixture.penalties}:null,reportId:fixture.reportId||report?.id||null};});if(!fixtures.length)return null;
+    const archive={season,clubId:save.clubId,clubName:clubById(save.clubId).name,leagueId:clubById(save.clubId).league,fixtures};save.fixtureArchives=Array.isArray(save.fixtureArchives)?save.fixtureArchives:[];save.fixtureArchives=[archive,...save.fixtureArchives.filter(item=>Number(item.season)!==season)].sort((a,b)=>b.season-a.season).slice(0,30);return archive;
+  }
+
+  function selectedFixtureArchive() {
+    const key=state.fixtureSeasonFilter||"current";if(key==="current")return {season:state.season,clubId:state.clubId,clubName:clubById(state.clubId).name,fixtures:state.schedule,current:true};
+    const season=Number(key.replace("season-","")),archive=(state.fixtureArchives||[]).find(item=>Number(item.season)===season);if(archive)return {...archive,current:false};state.fixtureSeasonFilter="current";return {season:state.season,clubId:state.clubId,clubName:clubById(state.clubId).name,fixtures:state.schedule,current:true};
+  }
+
+  function renderFixtures() {
+    const archive=selectedFixtureArchive(),fixtures=archive.fixtures||[],competitions=[...new Set(fixtures.map(fixture=>fixture.competition))],validFilter=state.fixtureFilter==="all"||competitions.includes(state.fixtureFilter);if(!validFilter)state.fixtureFilter="all";
+    const filter=state.fixtureFilter||"all",allUpcoming=fixtures.filter(f=>f.status==="upcoming").sort((a,b)=>a.date.localeCompare(b.date)),allPlayed=fixtures.filter(f=>f.status==="played").sort((a,b)=>b.date.localeCompare(a.date)),upcoming=filter==="all"?allUpcoming:allUpcoming.filter(f=>f.competition===filter),played=filter==="all"?allPlayed:allPlayed.filter(f=>f.competition===filter),selectedFixtures=fixtures.filter(f=>filter==="all"||f.competition===filter),homeCount=selectedFixtures.filter(f=>f.home).length,awayCount=selectedFixtures.length-homeCount,seasonLabel=`${archive.season}/${String(Number(archive.season)+1).slice(2)}`,seasonOptions=(state.fixtureArchives||[]).map(item=>`<option value="season-${item.season}" ${state.fixtureSeasonFilter===`season-${item.season}`?"selected":""}>${item.season}/${String(Number(item.season)+1).slice(2)} · ${esc(item.clubName||clubById(item.clubId).name)}</option>`).join("");
+    return `<div class="page-heading"><span class="eyebrow">${seasonLabel}</span><h2>赛程与结果</h2><p>点击已经结束的比赛可重新查看完整赛后分析；历史赛季比赛会随存档永久保留。</p></div>
+      <div class="filterbar"><label for="fixture-season-filter">赛季</label><select class="select" id="fixture-season-filter" aria-label="选择赛季"><option value="current" ${archive.current?"selected":""}>${state.season}/${String(state.season+1).slice(2)} · 当前赛季</option>${seasonOptions}</select><label for="fixture-filter">赛事</label><select class="select" id="fixture-filter" aria-label="筛选赛事"><option value="all" ${filter==="all"?"selected":""}>全部赛事 (${fixtures.length})</option>${competitions.map(name=>`<option value="${esc(name)}" ${filter===name?"selected":""}>${esc(name)} (${fixtures.filter(f=>f.competition===name).length})</option>`).join("")}</select><span class="tag">${filter==="all"?"全部赛事":esc(filter)} · ${selectedFixtures.length} 场 · 主 ${homeCount} / 客 ${awayCount}</span></div>
+      <div class="grid grid-2">${archive.current?`<section class="panel"><div class="panel-header"><h3>接下来</h3><span class="meta">${upcoming.length} 场</span></div><div class="list">${upcoming.slice(0,60).map(f=>fixtureRow(f)).join("")||`<div class="empty">赛程已完成</div>`}</div></section>`:""}<section class="panel ${archive.current?"":"fixture-history-panel"}"><div class="panel-header"><h3>${archive.current?"比赛结果":`${seasonLabel} 比赛记录`}</h3><span class="meta">${played.length} 场 · 点击查看赛后分析</span></div><div class="list">${played.slice(0,80).map(f=>fixtureRow(f,archive.clubId)).join("")||`<div class="empty">尚未进行比赛</div>`}</div></section></div>`;
+  }
+  function fixtureRow(f,clubId=state.clubId) {
+    const club=clubById(clubId),report=f.status==="played"?matchReportForFixture(f):null,interactive=Boolean(report),content=`${clubBadge(f.opponent,"club-badge-list")}<div class="list-row-main"><div class="list-row-title">${f.home?"vs":"@"} ${clubNameLink(f.opponent)}</div><div class="list-row-sub">${esc(f.competition)} · ${esc(f.round)} · ${formatDate(f.date,false)}</div></div><div class="list-row-value">${f.status==="played"?`<strong>${f.score.home} - ${f.score.away}</strong><div class="list-row-sub">${resultLabel(f,club)}${interactive?` · 赛后分析 ${icon("chevron-right")}`:" · 报告未保存"}</div>`:`<span class="tag">${f.home?"主场":"客场"}</span>`}</div>`;
+    return interactive?`<div class="list-row fixture-result-row" role="button" tabindex="0" data-match-report="${esc(report.id)}" aria-label="查看 ${esc(f.opponent)} 比赛的赛后分析">${content}</div>`:`<div class="list-row">${content}</div>`;
   }
   function resultLabel(f) { const ours=f.home?f.score.home:f.score.away, theirs=f.home?f.score.away:f.score.home; if(f.penalties)return f.penalties.winner==="us"?"点球胜":"点球负"; return ours>theirs?"胜":ours===theirs?"平":"负"; }
 
@@ -3305,6 +3323,10 @@
     notification.read=true;state.inboxUnread=state.notifications.filter(item=>!item.read).length;modal={type:"notification",id};saveState();render();
   }
 
+  function openFixtureReport(id) {
+    const report=(state.matchReports||[]).find(item=>item.id===id);if(!report){toast("这场比赛的历史报告不可用");return;}modal={type:"matchReport",id:report.id};render();
+  }
+
   function profileAttribute(player,key,modifier=0,sourceKey=null) {
     const direct=sourceKey?Number(player[sourceKey]):Number(player[key]);
     if(Number.isFinite(direct)&&direct>0)return clamp(Math.round(direct+modifier*.35),1,99);
@@ -3541,6 +3563,10 @@
       const notification=state.notifications.find(item=>item.id===modal.id);if(!notification)return "";
       return `<div class="modal-backdrop"><div class="modal report-modal" role="dialog" aria-modal="true" aria-labelledby="notification-title"><div class="modal-header"><h2 id="notification-title">${esc(notification.title)}</h2><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body">${renderNotificationDetail(notification)}</div><div class="modal-actions"><button class="btn btn-primary" data-close-modal>完成查看</button></div></div></div>`;
     }
+    if (modal.type === "matchReport") {
+      const report=(state.matchReports||[]).find(item=>item.id===modal.id);if(!report)return "";
+      return `<div class="modal-backdrop"><div class="modal report-modal" role="dialog" aria-modal="true" aria-labelledby="fixture-report-title"><div class="modal-header"><div><span class="eyebrow">${report.season?`${report.season}/${String(Number(report.season)+1).slice(2)} · `:""}${esc(report.competition||"正式比赛")}</span><h2 id="fixture-report-title">${esc(report.homeName)} ${report.score.home}-${report.score.away} ${esc(report.awayName)}</h2></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body">${renderMatchReport(report)}</div><div class="modal-actions"><button class="btn btn-primary" data-close-modal>返回赛程</button></div></div></div>`;
+    }
     if (modal.type === "renewal") {
       const session=renewalById(modal.id);if(!session)return "";const closed=session.status!=="active",offer=session.offer;
       const patience=`<div class="patience-bar ${session.clubPatience<=30?"danger":session.clubPatience<=60?"warn":""}"><div><span>${esc(clubById(state.clubId).name)} 耐心</span><strong>${session.clubPatience}%</strong></div><i><span style="width:${session.clubPatience}%"></span></i></div>`;
@@ -3623,7 +3649,9 @@
     document.querySelectorAll("[data-promote-youth]").forEach(button=>button.addEventListener("click",()=>promoteYouthProspect(button.dataset.promoteYouth)));
     document.querySelectorAll("[data-assign-mentor]").forEach(button=>button.addEventListener("click",()=>assignYouthMentor(button.dataset.assignMentor,document.getElementById(`mentor-${button.dataset.assignMentor}`)?.value)));
     document.querySelectorAll("[data-upgrade-youth]").forEach(button=>button.addEventListener("click",()=>upgradeYouthArea(button.dataset.upgradeYouth)));
+    document.getElementById("fixture-season-filter")?.addEventListener("change",event=>{state.fixtureSeasonFilter=event.target.value;state.fixtureFilter="all";saveState();render();});
     document.getElementById("fixture-filter")?.addEventListener("change",event=>{state.fixtureFilter=event.target.value;saveState();render();});
+    document.querySelectorAll("[data-match-report]").forEach(row=>{const open=event=>{if(event.target.closest?.("[data-club-profile]"))return;if(event.type==="keydown"&&!['Enter',' '].includes(event.key))return;event.preventDefault();openFixtureReport(row.dataset.matchReport);};row.addEventListener("click",open);row.addEventListener("keydown",open);});
     document.querySelectorAll("[data-notification]").forEach(button=>button.addEventListener("click",()=>openNotification(button.dataset.notification)));
     document.querySelectorAll("[data-player-profile]").forEach(button=>button.addEventListener("click",()=>{const player=playerProfileRegistry.get(button.dataset.playerProfile);if(!player)return;modal={type:"playerProfile",player};render();}));
     document.querySelectorAll(".league-club-cell,.league-result-team,.transfer-club,.match-club,.match-team-title,.report-team-head strong").forEach(element=>element.addEventListener("click",event=>{if(event.target.closest("button"))return;let label=(element.querySelector(".player-name strong,.league-result-team b,.transfer-club b,.match-team-title h3,.report-team-head strong")||element).textContent.replace(/^★\s*/,"").trim();if(element.classList.contains("match-club")){label=label.replace(/^[A-Z]{2,5}/,"").replace(/[A-Z]{2,5}$/ ,"").trim();}openClubProfile(label);}));
@@ -4746,7 +4774,7 @@
     const recordedInjuries=(m.matchInjuries||[]).map(item=>({...item})),recordedIds=new Set(recordedInjuries.filter(item=>item.team==="ours").map(item=>item.playerId)),injuries=[...recordedInjuries,...participantIds.map(id=>matchOurPlayers(m).find(player=>player.id===id)).filter(player=>player?.injured&&!recordedIds.has(player.id)).map(player=>({team:"ours",playerId:player.id,name:player.name,injury:player.injury,days:player.injured,minute:null}))];
     const heatmapSummary=participantIds.map(id=>{const player=matchOurPlayers(m).find(item=>item.id===id),points=(m.heatmap?.[id]||[]).slice(-90);if(!player||!points.length)return null;return {id,name:player.name,position:player.position,zone:heatmapZone(player,points),intensity:clamp(Math.round(points.length/90*100),12,100),points:points.filter((_,index)=>index%3===0)};}).filter(Boolean);
     return {
-      id:`report-${f.id}-${Date.now()}`,fixtureId:f.id,date:f.date,competition:f.competition,round:f.round,result,
+      id:`report-${f.id}-${Date.now()}`,fixtureId:f.id,season:state.season,clubId:state.clubId,date:f.date,competition:f.competition,round:f.round,result,
       teamName:f.teamName||club.name,homeName:f.home?(f.teamName||club.name):f.opponent,awayName:f.home?f.opponent:(f.teamName||club.name),score:{home:m.home,away:m.away},penalties:f.penalties?{...f.penalties}:null,
       homeStats:f.home?ourStats:opponentStats,awayStats:f.home?opponentStats:ourStats,mvp:{...mvp},ratings,
       substitutions:(m.substitutions||[]).map(item=>({...item})),injuries,formation:m.formation,opponentFormation:m.opponentFormation,heatmapSummary,playerMatchPlan:m.controlledMatchPlan||null,performanceResponse:m.performanceResponse?{...m.performanceResponse,boosts:{...(m.performanceResponse.boosts||{})}}:null,teamTalks:{halfTime:Boolean(m.halfTimeTalkDone),postMatch:Boolean(m.postMatchTalkDone)}
@@ -4845,7 +4873,7 @@
     const penaltyText=f.penalties?`（点球 ${f.penalties.home}-${f.penalties.away}）`:"";
     state.media.unshift(createMatchMediaStory(m,f,ours,theirs,won,draw,result,mvp));
     const injured=lineup.find(p=>p.injured&&Math.random()<.5);if(injured)state.media.unshift({source:"Club Medical",title:`${injured.name} 将因${injured.injury}缺阵`,body:`医疗组预计恢复时间约 ${injured.injured} 天。康复质量将影响体能与能力变化。`,date:f.date,type:"injury"});
-    const report=createMatchReport(m,mvp,result);state.matchReports.unshift(report);state.matchReports=state.matchReports.slice(0,30);
+    const report=createMatchReport(m,mvp,result);f.reportId=report.id;if(scheduledFixture)scheduledFixture.reportId=report.id;state.matchReports.unshift(report);state.matchReports=state.matchReports.slice(0,1200);
     addNotification({title:"医疗组：恢复计划已生成",type:"medical",date:f.date,detail:"医疗组已经根据本场出场时间、体能消耗和伤病情况生成恢复计划。下一场选人会自动考虑球员体能与赛程密度。",facts:report.injuries.length?report.injuries.map(item=>`${item.name}：${item.injury}，预计缺阵 ${item.days} 天`):["本场没有新增伤病","低体能球员将优先安排恢复训练"]});
     const reportNotification={title:`赛后分析：${ours}-${theirs} ${result}`,type:"match",date:f.date,detail:`${f.teamName||club.name} 已完成本场比赛，完整技术统计、球员评分、换人与医疗记录如下。`,reportId:report.id};addNotification(reportNotification);
     const reportNotice=state.notifications[0];state.date=addDays(f.date,1);state.continueStatus=null;simulateMajorLeagueWorld(state,state.date);simulateBackgroundWorld(state.date);runMonthlyClubFinances(state,state.date);simulateTransferMarket(state,state.date);state.activeMatch=null;if(state.calendarRepairPending){repairCompetitionCalendar(state);delete state.calendarRepairPending;}
@@ -5062,6 +5090,7 @@
 
   function newSeason() {
     const transitionDate=state.date;
+    archiveSeasonFixtures(state);
     state.history.unshift({season:state.season,club:clubById(state.clubId).name,clubId:state.clubId,leagueId:clubById(state.clubId).league,league:LEAGUES[clubById(state.clubId).league].name,played:state.played,wins:state.wins,position:state.leaguePosition,points:state.points});
     if(state.leaguePosition===1)state.honors.unshift({name:LEAGUES[clubById(state.clubId).league].name+"冠军",season:state.season,scope:"俱乐部"});
     if(state.role==="player"&&averageRating(controlledPlayer())>=7.6)state.honors.unshift({name:"赛季最佳球员",season:state.season,scope:"个人"});
@@ -5069,7 +5098,7 @@
     const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3),retiredPlayers=collectSeasonRetirements(state,state.season);if(retiredPlayers.length)state.squad=state.squad.filter(player=>!retiredPlayers.includes(player));
     returnControlledPlayerFromLoan();
     const nextSeasonFinances=seasonFinancePlans(state,state.season+1,previousClubLeaguePositions(state));
-    state.season++;state.date=transitionDate;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season,nextSeasonFinances.budgets);repairTransferOwnership(state,state.transferMarket);state.funds=Number(nextSeasonFinances.budgets[state.clubId]||clubById(state.clubId).budget||10);const financeReport=activateSeasonFinances(state,nextSeasonFinances,state.date);simulateTransferMarket(state,state.date);
+    state.season++;state.date=transitionDate;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.fixtureSeasonFilter="current";state.fixtureFilter="all";state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.transferMarket=createTransferMarket(state.season,nextSeasonFinances.budgets);repairTransferOwnership(state,state.transferMarket);state.funds=Number(nextSeasonFinances.budgets[state.clubId]||clubById(state.clubId).budget||10);const financeReport=activateSeasonFinances(state,nextSeasonFinances,state.date);simulateTransferMarket(state,state.date);
     state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});resetSeasonMarketValueBaseline(state);
     rolloverYouthSeason(state).forEach(graduate=>addNotification({title:`AI 教练提拔青训球员：${graduate.name}`,type:"youth",date:state.date,detail:"教练组根据年龄、当前能力、潜力和一线队名额完成了青训晋升。",facts:[`${playerRoleLabel(graduate.position)} · ${graduate.age} 岁`,`当前能力：${graduate.overall}`,`合同角色：${graduate.contract.role}`]}));
     if(state.role==="player"){
