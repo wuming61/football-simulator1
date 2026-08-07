@@ -5,6 +5,8 @@
   const SAVE_KEY = "football-simulator-v0-save";
   const SAVE_INDEX_KEY = "football-simulator-save-index-v1";
   const SAVE_PREFIX = "football-simulator-save-slot-";
+  const SAVE_DB_NAME = "football-simulator-saves";
+  const SAVE_DB_STORE = "careers";
   const MOD_KEY = "football-simulator-mod-packs";
   const START_DATE = "2026-08-01";
   const PLAYER_WEEKLY_PLANS = {
@@ -299,6 +301,8 @@
   let matchTimer = null;
   let matchCanvasFrame = null;
   let busyTaskActive = false;
+  let saveDatabasePromise = null;
+  const indexedSaveQueues = new Map();
 
   const app = document.getElementById("app");
 
@@ -1314,19 +1318,52 @@
   }
 
   function saveStorageKey(id) { return id==="legacy"?SAVE_KEY:`${SAVE_PREFIX}${id}`; }
+  function supportsIndexedSaves() { return typeof indexedDB!=="undefined"; }
+  function openSaveDatabase() {
+    if(!supportsIndexedSaves())return Promise.reject(new Error("IndexedDB unavailable"));
+    if(saveDatabasePromise)return saveDatabasePromise;
+    saveDatabasePromise=new Promise((resolve,reject)=>{
+      const request=indexedDB.open(SAVE_DB_NAME,1);
+      request.onupgradeneeded=()=>{const db=request.result;if(!db.objectStoreNames.contains(SAVE_DB_STORE))db.createObjectStore(SAVE_DB_STORE);};
+      request.onsuccess=()=>resolve(request.result);
+      request.onerror=()=>reject(request.error||new Error("无法打开存档数据库"));
+      request.onblocked=()=>reject(new Error("存档数据库升级被阻止"));
+    }).catch(error=>{saveDatabasePromise=null;throw error;});
+    return saveDatabasePromise;
+  }
+  async function readIndexedSave(id) {
+    const db=await openSaveDatabase();
+    return new Promise((resolve,reject)=>{const request=db.transaction(SAVE_DB_STORE,"readonly").objectStore(SAVE_DB_STORE).get(id);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(request.error||new Error("存档读取失败"));});
+  }
+  async function writeIndexedSave(id,raw) {
+    const db=await openSaveDatabase();
+    return new Promise((resolve,reject)=>{const transaction=db.transaction(SAVE_DB_STORE,"readwrite");transaction.objectStore(SAVE_DB_STORE).put(raw,id);transaction.oncomplete=()=>resolve();transaction.onerror=()=>reject(transaction.error||new Error("存档写入失败"));transaction.onabort=()=>reject(transaction.error||new Error("存档写入中止"));});
+  }
+  async function deleteIndexedSave(id) {
+    if(!supportsIndexedSaves())return;
+    const db=await openSaveDatabase();
+    return new Promise((resolve,reject)=>{const transaction=db.transaction(SAVE_DB_STORE,"readwrite");transaction.objectStore(SAVE_DB_STORE).delete(id);transaction.oncomplete=()=>resolve();transaction.onerror=()=>reject(transaction.error||new Error("存档删除失败"));});
+  }
+  function queueIndexedSave(id,raw) {
+    const existing=indexedSaveQueues.get(id);if(existing){existing.latest=raw;return existing.promise;}
+    const queue={latest:raw,promise:null};queue.promise=(async()=>{while(queue.latest!==null){const next=queue.latest;queue.latest=null;await writeIndexedSave(id,next);}})();
+    indexedSaveQueues.set(id,queue);queue.promise.finally(()=>{if(indexedSaveQueues.get(id)===queue)indexedSaveQueues.delete(id);}).catch(()=>{});return queue.promise;
+  }
+  async function waitForIndexedSave(id) {const pending=indexedSaveQueues.get(id);if(pending)await pending.promise;}
+  async function removeSaveData(id) {await waitForIndexedSave(id).catch(()=>{});localStorage.removeItem(saveStorageKey(id));await deleteIndexedSave(id);}
   function loadSaveIndex() {
     try {
       const parsed=JSON.parse(localStorage.getItem(SAVE_INDEX_KEY)||"[]"),index=Array.isArray(parsed)?parsed:[];
       if(localStorage.getItem(SAVE_KEY)&&!index.some(item=>item.id==="legacy"))index.push({id:"legacy",updatedAt:0,legacy:true});
-      return index.filter(item=>item?.id&&localStorage.getItem(saveStorageKey(item.id))).sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0));
+      return index.filter(item=>item?.id&&(localStorage.getItem(saveStorageKey(item.id))||item.backend==="indexeddb"||item.backend==="hybrid")).sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0));
     } catch(error) { console.error("存档索引加载失败",error);return localStorage.getItem(SAVE_KEY)?[{id:"legacy",updatedAt:0,legacy:true}]:[]; }
   }
-  function saveMetadata(save,id=activeSaveId) {
-    const club=clubById(save.clubId),metadata={id,person:save.person,club:club.name,clubId:club.id,role:save.role,season:save.season,date:save.date,played:save.played||0,updatedAt:Date.now(),legacy:id==="legacy"};
+  function saveMetadata(save,id=activeSaveId,backend) {
+    const club=clubById(save.clubId),metadata={id,person:save.person,club:club.name,clubId:club.id,role:save.role,season:save.season,date:save.date,played:save.played||0,updatedAt:Date.now(),legacy:id==="legacy",backend:backend||loadSaveIndex().find(item=>item.id===id)?.backend};
     const index=loadSaveIndex().filter(item=>item.id!==id);index.unshift(metadata);localStorage.setItem(SAVE_INDEX_KEY,JSON.stringify(index));return metadata;
   }
-  function loadState(id=activeSaveId||loadSaveIndex()[0]?.id) {
-    try { const raw=id?localStorage.getItem(saveStorageKey(id)):null;if(!raw)return null;activeSaveId=id;const loaded=migrateState(JSON.parse(raw));saveMetadata(loaded,id);return loaded; } catch (error) { console.error("存档加载失败",error);return null; }
+  async function loadState(id=activeSaveId||loadSaveIndex()[0]?.id) {
+    try {if(!id)return null;await waitForIndexedSave(id);const metadata=loadSaveIndex().find(item=>item.id===id),preferIndexed=metadata?.backend==="indexeddb",indexedRaw=preferIndexed?await readIndexedSave(id):null,localRaw=localStorage.getItem(saveStorageKey(id)),raw=indexedRaw||localRaw||await readIndexedSave(id);if(!raw)return null;activeSaveId=id;const loaded=migrateState(JSON.parse(raw));saveMetadata(loaded,id,indexedRaw||!localRaw?"indexeddb":"hybrid");return loaded;} catch (error) { console.error("存档加载失败",error);toast("存档读取失败，请重试");return null; }
   }
   function migrateState(saved) {
     if (!saved) return null;
@@ -1439,10 +1476,16 @@
   function saveState() {
     if(!state)return;
     if(!activeSaveId)activeSaveId=`career-${Date.now().toString(36)}`;
-    const storageKey=saveStorageKey(activeSaveId);try{localStorage.setItem(storageKey,JSON.stringify(state));saveMetadata(state,activeSaveId);}catch(error){if(error?.name!=="QuotaExceededError")throw error;compactWorldPlayerStats(state);state.matchReports=(state.matchReports||[]).slice(0,260);state.fixtureArchives=(state.fixtureArchives||[]).slice(0,12);state.media=(state.media||[]).slice(0,40);state.notifications=(state.notifications||[]).slice(0,30);try{localStorage.setItem(storageKey,JSON.stringify(state));saveMetadata(state,activeSaveId);toast("存档数据已压缩，操作可以继续");}catch(retryError){console.error("存档压缩后仍无法保存",retryError);toast("本地存储空间不足，已保留当前页面状态");}}
+    const id=activeSaveId,storageKey=saveStorageKey(id),indexed=supportsIndexedSaves(),alreadyIndexed=loadSaveIndex().find(item=>item.id===id)?.backend==="indexeddb";let raw=JSON.stringify(state),localSaved=false;
+    if(!indexed){
+      try{localStorage.setItem(storageKey,raw);saveMetadata(state,id);return;}catch(error){if(error?.name!=="QuotaExceededError")throw error;compactWorldPlayerStats(state);state.matchReports=(state.matchReports||[]).slice(0,260);state.fixtureArchives=(state.fixtureArchives||[]).slice(0,12);state.media=(state.media||[]).slice(0,40);state.notifications=(state.notifications||[]).slice(0,30);raw=JSON.stringify(state);try{localStorage.setItem(storageKey,raw);saveMetadata(state,id);toast("存档数据已压缩，操作可以继续");}catch(retryError){console.error("存档压缩后仍无法保存",retryError);toast("本地存储空间不足，已保留当前页面状态");}return;}
+    }
+    if(!alreadyIndexed)try{localStorage.setItem(storageKey,raw);localSaved=true;}catch(error){if(error?.name!=="QuotaExceededError")console.warn("兼容存档写入失败，将使用大容量存储",error);}
+    try{saveMetadata(state,id,localSaved?"hybrid":"indexeddb");}catch(error){console.warn("存档索引暂时无法更新",error);}
+    queueIndexedSave(id,raw).then(()=>{localStorage.removeItem(storageKey);try{saveMetadata(JSON.parse(raw),id,"indexeddb");}catch(error){console.warn("存档索引更新失败",error);}}).catch(error=>{console.error("大容量存档写入失败",error);if(!localSaved)toast("存档写入失败，请稍后重试");});
   }
   function resetSave() {
-    if(activeSaveId)localStorage.removeItem(saveStorageKey(activeSaveId));
+    if(activeSaveId)removeSaveData(activeSaveId).catch(error=>console.error("存档删除失败",error));
     const index=loadSaveIndex().filter(item=>item.id!==activeSaveId);localStorage.setItem(SAVE_INDEX_KEY,JSON.stringify(index));
     state=null;activeSaveId=null;modal=null;conversationSession=null;frontScreen="menu";render();
   }
@@ -3768,8 +3811,8 @@
   function bindEvents() {
     document.getElementById("new-career")?.addEventListener("click",()=>{frontScreen="setup";render();});
     document.getElementById("cancel-new-career")?.addEventListener("click",()=>{frontScreen="menu";render();});
-    document.querySelectorAll("[data-load-save]").forEach(button=>button.addEventListener("click",()=>{state=loadState(button.dataset.loadSave);frontScreen="menu";render();}));
-    document.querySelectorAll("[data-delete-save]").forEach(button=>button.addEventListener("click",()=>{const id=button.dataset.deleteSave;if(!confirm("确定删除这个存档？此操作无法撤销。"))return;localStorage.removeItem(saveStorageKey(id));localStorage.setItem(SAVE_INDEX_KEY,JSON.stringify(loadSaveIndex().filter(item=>item.id!==id)));render();}));
+    document.querySelectorAll("[data-load-save]").forEach(button=>button.addEventListener("click",()=>{runBusyTask({title:"正在读取生涯存档",detail:"恢复赛季、阵容与比赛数据",completeLabel:"存档读取完成"},async ({progress,yieldFrame})=>{progress(25,"读取大容量存档");await yieldFrame();const loaded=await loadState(button.dataset.loadSave);if(!loaded)return;state=loaded;frontScreen="menu";progress(90,"恢复游戏页面");render();});}));
+    document.querySelectorAll("[data-delete-save]").forEach(button=>button.addEventListener("click",async()=>{const id=button.dataset.deleteSave;if(!confirm("确定删除这个存档？此操作无法撤销。"))return;try{await removeSaveData(id);}catch(error){console.error("存档删除失败",error);toast("存档删除失败，请重试");return;}localStorage.setItem(SAVE_INDEX_KEY,JSON.stringify(loadSaveIndex().filter(item=>item.id!==id)));render();}));
     document.querySelectorAll("[data-setup]").forEach(b=>b.addEventListener("click",()=>{
       setup[b.dataset.setup]=b.dataset.value;
       if (b.dataset.setup==="role") {const first=setup.role==="coach"?COACHES[0]:REAL_PLAYERS[0];setup.identity=setupIdentityId(first);setup.clubId=first.club;setup.leagueId=clubById(first.club).league;}
