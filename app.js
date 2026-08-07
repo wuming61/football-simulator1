@@ -273,6 +273,8 @@
   applyDongqiudiData();
   completeClubDirectory();
   const BASE_CLUB_LEAGUES=Object.fromEntries(CLUBS.map(club=>[club.id,club.league]));
+  const REAL_PLAYER_ID_INDEX=new Map(REAL_PLAYERS.map(player=>[player.id,player]));
+  const REAL_PLAYER_NAME_INDEX=new Map();REAL_PLAYERS.forEach(player=>[player.name,player.dqdName].filter(Boolean).forEach(name=>{const key=comparableClubName(name),list=REAL_PLAYER_NAME_INDEX.get(key)||[];if(!list.includes(player))list.push(player);REAL_PLAYER_NAME_INDEX.set(key,list);}));
 
   const FIRST = ["Alex","Mateo","Luca","Noah","Daniel","João","Theo","Elias","Samuel","Nico","Leo","Tom","Milan","Iker","Hugo","Ben","Adam","Oscar","Julian","Rafael","Marco","Felix","David","Yanis"];
   const LAST = ["Martin","Silva","Costa","Meyer","Rossi","Bernard","Wilson","Santos","Garcia","Novak","Diallo","Murphy","Keller","Lopez","Marin","Andersson","Ricci","Bauer","Fernandes","Moreau","Taylor","Pereira","Schmidt","Romero"];
@@ -334,7 +336,7 @@
     });
     const unique=new Map();
     rows.forEach((row,index)=>{
-      const key=row.id||`${row.season}|${row.clubId||row.club}|${row.endDate||row.startDate||"full"}|${row.appearances||0}|${row.goals||0}|${row.assists||0}`;
+      const key=`${row.season}|${row.clubId||row.club}|${row.endDate||row.startDate||"full"}|${row.appearances||0}|${row.goals||0}|${row.assists||0}`;
       if(!unique.has(key))unique.set(key,{...row,_order:index});
     });
     return [...unique.values()].sort((a,b)=>Number(b.season||0)-Number(a.season||0)||String(b.endDate||"").localeCompare(String(a.endDate||""))||b._order-a._order).map(({_order,...row})=>row);
@@ -351,6 +353,7 @@
     if(!local&&real){merged.age=effectivePlayerAge(real,state);merged.value=currentPlayerMarketValue(real,state);}
     const canonicalClubId=latestTransfer?.toId||(local?state.clubId:real?currentPlayerClubId(state,real):merged.clubId),canonicalClub=canonicalClubId?clubById(canonicalClubId):null;
     merged.clubId=canonicalClub?.id||merged.clubId;merged.clubName=canonicalClub?.name||merged.clubName||(resolveClub(merged.club)?.name)||merged.club||"未知俱乐部";
+    hydrateWorldPlayerStats(state,merged,merged.clubId);
     merged.transferHistory=records;merged.latestTransfer=latestTransfer||null;merged.careerStats=mergePlayerCareerStats(merged,records);
     if(latestTransfer?.contract)merged.contract={...(merged.contract||{}),...latestTransfer.contract};
     merged.contractEnd=merged.contract?.endSeason||merged.contractEnd;
@@ -431,6 +434,46 @@
   function playerRoleLabel(pos) { return POSITION_LABELS[pos]||({FB:"边后卫",DF:"后卫",WG:"边锋",MF:"中场"})[pos]||pos; }
   function positionSortRank(pos) { const index=POSITION_ORDER.indexOf(pos);return index>=0?index:99; }
   function averageRating(player) { return player?.appearances ? Number(player.ratingTotal||0)/player.appearances : 0; }
+
+  const WORLD_PLAYER_STAT_KEYS=["appearances","minutes","goals","assists","ratingTotal","keyPasses","chancesCreated","successfulDribbles","progressivePasses","tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","recoveries","pressuresWon","saves","cleanSheets","yellowCards","redCards"];
+  function emptyWorldPlayerStats() {return Object.fromEntries(WORLD_PLAYER_STAT_KEYS.map(key=>[key,0]));}
+  function ensureWorldPlayerStats(save=state) {
+    if(!save)return {season:2026,players:{},archives:{},processedMatches:{}};
+    const world=save.worldPlayerStats||(save.worldPlayerStats={season:Number(save.season||2026),players:{},archives:{},processedMatches:{}});
+    world.season=Number(world.season||save.season||2026);world.players=world.players&&typeof world.players==="object"?world.players:{};world.archives=world.archives&&typeof world.archives==="object"?world.archives:{};world.processedMatches=world.processedMatches&&typeof world.processedMatches==="object"?world.processedMatches:{};
+    return world;
+  }
+  function canonicalWorldPlayer(save,player,clubId=null) {
+    if(!player)return null;const ids=[player.sourcePlayerId,player.playerId,player.id].filter(Boolean),direct=ids.map(id=>REAL_PLAYER_ID_INDEX.get(id)).find(Boolean);if(direct)return direct;
+    const name=comparableClubName(player.name||player.playerName||"");if(!name)return null;const matches=REAL_PLAYER_NAME_INDEX.get(name)||[];if(matches.length===1)return matches[0];
+    return matches.find(candidate=>currentPlayerClubId(save,candidate)===(clubId||player.clubId||player.club))||matches[0]||null;
+  }
+  function worldPlayerKey(save,player,clubId=null) {const canonical=canonicalWorldPlayer(save,player,clubId);return canonical?.id||player?.sourcePlayerId||player?.playerId||player?.id||`name-${comparableClubName(player?.name||player?.playerName||"unknown")}`;}
+  function currentWorldSegment(record,clubId) {
+    let segment=[...(record.segments||[])].reverse().find(item=>!item.endDate&&item.clubId===clubId);if(!segment){segment={id:`world-segment-${record.season}-${record.playerId}-${clubId}-${record.segments?.length||0}`,season:record.season,clubId,club:clubById(clubId).name,startDate:record.lastTransferDate||`${record.season}-08-01`,...emptyWorldPlayerStats()};record.segments||=[];record.segments.push(segment);}return segment;
+  }
+  function ensureWorldPlayerRecord(save,player,clubId=null,seedFromPlayer=false) {
+    if(!save||!player)return null;const world=ensureWorldPlayerStats(save),canonical=canonicalWorldPlayer(save,player,clubId),id=worldPlayerKey(save,player,clubId),resolvedClubId=clubId||player.clubId||player.club||(canonical?currentPlayerClubId(save,canonical):null)||save.clubId;
+    let record=world.players[id];if(!record){record={playerId:id,name:player.name||player.playerName||canonical?.name||"未知球员",season:Number(save.season||world.season),clubId:resolvedClubId,position:player.position||canonical?.position||"CM",overall:Number(player.overall||canonical?.overall||65),...emptyWorldPlayerStats(),segments:[]};world.players[id]=record;if(seedFromPlayer)WORLD_PLAYER_STAT_KEYS.forEach(key=>{record[key]=Number(player[key]||0);});const segment=currentWorldSegment(record,resolvedClubId);if(seedFromPlayer)WORLD_PLAYER_STAT_KEYS.forEach(key=>{segment[key]=Number(record[key]||0);});}
+    record.clubId=resolvedClubId||record.clubId;record.name=player.name||player.playerName||record.name;record.position=player.position||record.position;record.overall=Number(player.overall||record.overall||65);record.segments=Array.isArray(record.segments)?record.segments:[];return record;
+  }
+  function addWorldPlayerStats(save,player,clubId,delta={},meta={}) {
+    const record=ensureWorldPlayerRecord(save,player,clubId,false);if(!record)return null;const segment=currentWorldSegment(record,clubId||record.clubId);WORLD_PLAYER_STAT_KEYS.forEach(key=>{const amount=Number(delta[key]||0);record[key]=Number(record[key]||0)+amount;segment[key]=Number(segment[key]||0)+amount;});
+    if(meta.rating!==undefined)record.lastRating=Number(meta.rating);if(meta.date)record.lastMatchDate=meta.date;return record;
+  }
+  function syncWorldPlayerSnapshot(save,player,clubId=save?.clubId) {
+    const record=ensureWorldPlayerRecord(save,player,clubId,true);if(!record)return null;const segment=currentWorldSegment(record,clubId),delta={};WORLD_PLAYER_STAT_KEYS.forEach(key=>{const next=Number(player[key]||0),previous=Number(record[key]||0);delta[key]=next-previous;record[key]=next;segment[key]=Math.max(0,Number(segment[key]||0)+delta[key]);});record.lastRating=player.lastRating??record.lastRating;record.lastMatchDate=player.lastMatchDate||record.lastMatchDate;return record;
+  }
+  function syncManagedSquadWorldStats(save=state) {(save?.squad||[]).forEach(player=>syncWorldPlayerSnapshot(save,player,save.clubId));}
+  function hydrateWorldPlayerStats(save,player,clubId=null) {
+    if(!save||!player)return player;const id=worldPlayerKey(save,player,clubId),record=ensureWorldPlayerStats(save).players[id];if(!record)return player;WORLD_PLAYER_STAT_KEYS.forEach(key=>{player[key]=Number(record[key]||0);});player.lastRating=record.lastRating??player.lastRating;player.form=record.lastRating??player.form;const archived=ensureWorldPlayerStats(save).archives[id]||[];player.careerStats=mergePlayerCareerStats({...player,careerStats:[...(player.careerStats||[]),...archived]},[]);return player;
+  }
+  function moveWorldPlayerClub(save,player,fromId,toId,date) {
+    const record=syncWorldPlayerSnapshot(save,player,fromId)||ensureWorldPlayerRecord(save,player,fromId,true);if(!record)return null;const segment=currentWorldSegment(record,fromId);segment.endDate=date;segment.partialSeason=true;segment.average=segment.appearances?Number((Number(segment.ratingTotal||0)/segment.appearances).toFixed(2)):0;record.clubId=toId;record.lastTransferDate=date;currentWorldSegment(record,toId);return record;
+  }
+  function archiveWorldPlayerSeason(save=state) {
+    const world=ensureWorldPlayerStats(save);Object.entries(world.players).forEach(([id,record])=>{const rows=(record.segments||[]).map(segment=>({...segment,endDate:segment.endDate||save.date,partialSeason:Boolean(segment.endDate),average:segment.appearances?Number((Number(segment.ratingTotal||0)/segment.appearances).toFixed(2)):0}));world.archives[id]=[...rows,...(world.archives[id]||[])].slice(0,60);});world.players={};world.processedMatches={};world.season=Number(save.season||2026)+1;return world;
+  }
 
   const MARKET_VALUE_POSITION_FACTORS={GK:.82,CB:.9,RB:.92,LB:.92,RWB:.96,LWB:.96,DM:.95,CM:1,RM:1.02,LM:1.02,AM:1.06,RW:1.09,LW:1.09,CF:1.09,ST:1.11};
   function marketQuarterKey(date=START_DATE) {const parsed=new Date(`${date}T12:00:00`),quarter=Math.floor(parsed.getMonth()/3)+1;return `${parsed.getFullYear()}-Q${quarter}`;}
@@ -1047,10 +1090,9 @@
     return pairs;
   }
 
-  function pickLeagueScorer(club) {
-    const source=DQD_TEAM_INDEX.get(club.sourceId),players=source?.players||[];
-    const preferred=players.filter(player=>player.positionGroup==="ST"),secondary=players.filter(player=>player.positionGroup==="CM"),pool=preferred.length?preferred:secondary.length?secondary:players;
-    if(pool.length){const player=pool[Math.floor(rand(0,pool.length))];return {name:player.name,generated:false};}
+  function pickLeagueScorer(club,save=state) {
+    const players=save?aiClubPlayers(save,club.id):[],preferred=players.filter(player=>["ST","CF","RW","LW"].includes(player.position)),secondary=players.filter(player=>["AM","CM","RM","LM"].includes(player.position)),pool=preferred.length?preferred:secondary.length?secondary:players;
+    if(pool.length){const player=weightedPick(pool,item=>Math.max(1,Number(item.shooting||item.overall||65)-45)*(["ST","CF"].includes(item.position)?1.3:1));return {name:player.name,playerId:worldPlayerKey(save,player,club.id),generated:false};}
     return {name:`${FIRST[Math.floor(rand(0,FIRST.length))]} ${LAST[Math.floor(rand(0,LAST.length))]}`,generated:true};
   }
 
@@ -1059,14 +1101,22 @@
     if(existing)existing.goals++;else league.scorers.push({name:scorerInfo.name,club:club.name,clubId:club.id,goals:1,generated:Boolean(scorerInfo.generated)});
   }
 
+  function simulateWorldTeamMatch(save,club,opponent,goals,goalsAgainst,date,scorerHints=[],fixtureId=null) {
+    if(!save||club.id===save.clubId)return scorerHints;const world=ensureWorldPlayerStats(save),matchKey=`${save.season}|${date}|${fixtureId||`${club.id}-${opponent.id}`}|${club.id}`;if(world.processedMatches[matchKey])return scorerHints;world.processedMatches[matchKey]=true;
+    const roster=aiClubPlayers(save,club.id).filter(player=>!player.injured);if(!roster.length)return scorerHints;const profile=aiCoachProfile(save,club.id,clubById(club.id).coach||club.id),ranked=[...roster].sort((a,b)=>(aiLineupScore(b,profile,false)+(stableScoutingUnit(`${matchKey}|${b.id}`)-.5)*4)-(aiLineupScore(a,profile,false)+(stableScoutingUnit(`${matchKey}|${a.id}`)-.5)*4)),selection=chooseFormationPlayers(ranked,null,profile.name,{profile}),starters=selection.players.length===11?selection.players:ranked.slice(0,11),bench=ranked.filter(player=>!starters.includes(player)).slice(0,5),subMinutes=bench.map((player,index)=>58+Math.floor(stableScoutingUnit(`${matchKey}|sub|${player.id}`)*27)),participants=[...starters,...bench],events=new Map(participants.map(player=>[player,{goals:0,assists:0}]));
+    const scorers=[];for(let index=0;index<goals;index++){const hint=scorerHints[index],hintPlayer=hint&&!hint.generated?participants.find(player=>comparableClubName(player.name)===comparableClubName(hint.name)):null,scorer=hintPlayer||weightedPick(participants,player=>{const unit=positionUnit(player.position),role=unit==="a"?1.65:unit==="m"?1:.22;return Math.max(1,Number(player.shooting||player.overall||65)-42)*role;});if(!scorer)continue;events.get(scorer).goals++;scorers.push({name:scorer.name,playerId:worldPlayerKey(save,scorer,club.id),generated:Boolean(scorer.generated)});if(participants.length>1&&stableScoutingUnit(`${matchKey}|assist|${index}`)<.78){const creator=weightedPick(participants.filter(player=>player!==scorer),player=>{const unit=positionUnit(player.position),role=unit==="a"?1.2:unit==="m"?1.45:.38;return Math.max(1,Number(player.passing||player.overall||65)-42)*role;});if(creator)events.get(creator).assists++;}}
+    const result=goals>goalsAgainst?1:goals===goalsAgainst?0:-1;participants.forEach(player=>{const starter=starters.includes(player),subIndex=bench.indexOf(player),minutes=starter?(bench.length&&subIndex<0&&starters.indexOf(player)<bench.length?subMinutes[starters.indexOf(player)]:90):90-subMinutes[subIndex],event=events.get(player),unit=positionUnit(player.position),abilityEdge=(Number(player.overall||65)-Number(club.ability||club.prestige||70))*.018,noise=(stableScoutingUnit(`${matchKey}|rating|${player.id}`)-.5)*.72,rating=clamp(6.35+result*.32+abilityEdge+noise+event.goals*.72+event.assists*.42-(goalsAgainst>=3&&unit==="d"?.22:0),4.6,9.7),defensive=unit==="d"||player.position==="GK",creative=unit==="m"||["RW","LW","CF"].includes(player.position),duels=Math.max(1,Math.round(minutes/13+stableScoutingUnit(`${matchKey}|duel|${player.id}`)*4)),tackles=defensive?Math.round(minutes/38+stableScoutingUnit(`${matchKey}|tackle|${player.id}`)*3):Math.round(stableScoutingUnit(`${matchKey}|tackle|${player.id}`)*2),keyPasses=creative?Math.round(stableScoutingUnit(`${matchKey}|key|${player.id}`)*3):stableScoutingUnit(`${matchKey}|key|${player.id}`)>.8?1:0,cardRoll=stableScoutingUnit(`${matchKey}|card|${player.id}`),delta={appearances:1,minutes,goals:event.goals,assists:event.assists,ratingTotal:Number(rating.toFixed(2)),keyPasses,chancesCreated:keyPasses,successfulDribbles:unit==="a"?Math.round(stableScoutingUnit(`${matchKey}|dribble|${player.id}`)*4):0,progressivePasses:creative?Math.round(minutes/18+stableScoutingUnit(`${matchKey}|progress|${player.id}`)*4):Math.round(minutes/45),tackles,tacklesWon:Math.min(tackles,Math.round(tackles*(.55+stableScoutingUnit(`${matchKey}|won|${player.id}`)*.4))),interceptions:defensive?Math.round(stableScoutingUnit(`${matchKey}|interception|${player.id}`)*4):Math.round(stableScoutingUnit(`${matchKey}|interception|${player.id}`)*2),clearances:defensive?Math.round(stableScoutingUnit(`${matchKey}|clearance|${player.id}`)*6):0,blocks:defensive?Math.round(stableScoutingUnit(`${matchKey}|block|${player.id}`)*2):0,duels,duelsWon:Math.round(duels*(.42+stableScoutingUnit(`${matchKey}|duelwon|${player.id}`)*.35)),recoveries:Math.round(minutes/18+stableScoutingUnit(`${matchKey}|recover|${player.id}`)*4),pressuresWon:Math.round(minutes/30+stableScoutingUnit(`${matchKey}|pressure|${player.id}`)*3),saves:player.position==="GK"?Math.max(0,Math.round(2+stableScoutingUnit(`${matchKey}|save|${player.id}`)*4-goalsAgainst*.45)):0,cleanSheets:player.position==="GK"&&goalsAgainst===0?1:0,yellowCards:cardRoll>.89?1:0,redCards:cardRoll>.995?1:0};addWorldPlayerStats(save,player,club.id,delta,{rating,date});});return scorers.length?scorers:scorerHints;
+  }
+
   function applyMajorLeagueMatch(league,home,away,options={}) {
     const gap=Number(home.ability||65)-Number(away.ability||65),homeGoals=options.homeGoals??poisson(clamp(1.4*Math.exp(gap/22)+.16,.18,5.5)),awayGoals=options.awayGoals??poisson(clamp(1.08*Math.exp(-gap/22),.12,4.9));
     home.p++;away.p++;home.gf+=homeGoals;home.ga+=awayGoals;away.gf+=awayGoals;away.ga+=homeGoals;
     let homeForm="D",awayForm="D";
     if(homeGoals>awayGoals){home.w++;away.l++;home.pts+=3;homeForm="W";awayForm="L";}else if(homeGoals<awayGoals){away.w++;home.l++;away.pts+=3;homeForm="L";awayForm="W";}else{home.d++;away.d++;home.pts++;away.pts++;}
     home.gd=home.gf-home.ga;away.gd=away.gf-away.ga;home.form=[homeForm,...home.form].slice(0,5);away.form=[awayForm,...away.form].slice(0,5);league.totalGoals+=homeGoals+awayGoals;
-    for(let goal=0;goal<homeGoals;goal++)addMajorScorer(league,home,options.homeScorers?.[goal]||pickLeagueScorer(home));
-    for(let goal=0;goal<awayGoals;goal++)addMajorScorer(league,away,options.awayScorers?.[goal]||pickLeagueScorer(away));
+    const save=options.save||state,date=options.date||save?.date||START_DATE,homeScorers=simulateWorldTeamMatch(save,home,away,homeGoals,awayGoals,date,options.homeScorers||[],options.fixtureId),awayScorers=simulateWorldTeamMatch(save,away,home,awayGoals,homeGoals,date,options.awayScorers||[],options.fixtureId);
+    for(let goal=0;goal<homeGoals;goal++)addMajorScorer(league,home,homeScorers?.[goal]||options.homeScorers?.[goal]||pickLeagueScorer(home,save));
+    for(let goal=0;goal<awayGoals;goal++)addMajorScorer(league,away,awayScorers?.[goal]||options.awayScorers?.[goal]||pickLeagueScorer(away,save));
     return {home:home.name,away:away.name,homeId:home.id,awayId:away.id,homeGoals,awayGoals,fixtureId:options.fixtureId||null};
   }
 
@@ -1075,19 +1125,19 @@
     league.scorers.sort((a,b)=>b.goals-a.goals||a.name.localeCompare(b.name,"zh-CN"));league.scorers=league.scorers.slice(0,30);
   }
 
-  function simulateMajorLeagueRound(league,date) {
-    const matches=pairLeagueClubs(league.clubs,league.round).map(([home,away])=>applyMajorLeagueMatch(league,home,away));
+  function simulateMajorLeagueRound(save,league,date) {
+    const matches=pairLeagueClubs(league.clubs,league.round).map(([home,away])=>applyMajorLeagueMatch(league,home,away,{save,date}));
     finishMajorLeagueRound(league,date,matches);
   }
 
   function simulateMajorLeagueWorld(save,targetDate) {
     save.majorLeagueWorld||=createMajorLeagueWorld(save.season||2026,save.clubId);
-    const world=save.majorLeagueWorld,userLeague=clubById(save.clubId).league;
-    const pending=[];Object.entries(world.leagues).forEach(([leagueId,league])=>{
+    const world=save.majorLeagueWorld,userLeague=clubById(save.clubId).league,previousCache=aiTransferRuntimeCache,ownsCache=!previousCache||previousCache.save!==save;if(ownsCache)aiTransferRuntimeCache=createAiTransferRuntimeCache(save,targetDate);
+    const pending=[];try{Object.entries(world.leagues).forEach(([leagueId,league])=>{
       league.roundDates||=leagueRoundDates(leagueId,save.season||2026,LEAGUES[leagueId]?.matches||38);if(leagueId===userLeague)return;
-      while(league.round<league.roundDates.length&&league.roundDates[league.round]<=targetDate)simulateMajorLeagueRound(league,league.roundDates[league.round]);
+      while(league.round<league.roundDates.length&&league.roundDates[league.round]<=targetDate)simulateMajorLeagueRound(save,league,league.roundDates[league.round]);
       if(league.roundDates[league.round])pending.push(league.roundDates[league.round]);
-    });
+    });}finally{if(ownsCache)aiTransferRuntimeCache=previousCache;}
     world.nextRoundDate=pending.sort()[0]||addDays(targetDate,7);
     if(world.currentDate<targetDate)world.currentDate=targetDate;
   }
@@ -1105,8 +1155,8 @@
     const ours=league.clubs.find(club=>club.id===save.clubId),opponent=league.clubs.find(club=>comparableClubName(club.name)===comparableClubName(fixture.opponent));
     if(!ours||!opponent||!fixture.score)return;
     const home=fixture.home?ours:opponent,away=fixture.home?opponent:ours,ourScorers=eventScorerList(match,true),opponentScorers=eventScorerList(match,false);
-    const actual=applyMajorLeagueMatch(league,home,away,{homeGoals:fixture.score.home,awayGoals:fixture.score.away,homeScorers:fixture.home?ourScorers:opponentScorers,awayScorers:fixture.home?opponentScorers:ourScorers,fixtureId:fixture.id});
-    const remaining=league.clubs.filter(club=>club!==ours&&club!==opponent),matches=[actual,...pairLeagueClubs(remaining,league.round).map(([homeClub,awayClub])=>applyMajorLeagueMatch(league,homeClub,awayClub))];
+    const actual=applyMajorLeagueMatch(league,home,away,{save,date:fixture.date,homeGoals:fixture.score.home,awayGoals:fixture.score.away,homeScorers:fixture.home?ourScorers:opponentScorers,awayScorers:fixture.home?opponentScorers:ourScorers,fixtureId:fixture.id});
+    const remaining=league.clubs.filter(club=>club!==ours&&club!==opponent),matches=[actual,...pairLeagueClubs(remaining,league.round).map(([homeClub,awayClub])=>applyMajorLeagueMatch(league,homeClub,awayClub,{save,date:fixture.date}))];
     league.processedFixtureIds.push(fixture.id);finishMajorLeagueRound(league,fixture.date,matches);
     const table=majorStandings(league),userRow=table.find(club=>club.id===save.clubId);save.points=userRow?.pts||0;save.leaguePosition=Math.max(1,table.findIndex(club=>club.id===save.clubId)+1);
     if(save.majorLeagueWorld.currentDate<fixture.date)save.majorLeagueWorld.currentDate=fixture.date;
@@ -1237,13 +1287,13 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:42, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:43, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
       training:"balanced", tactic:"balanced", transferRequests:0, inboxUnread:3, continueStatus:null,
       competitionProgress:{ europe:createEuropeanProgress(club,2026), cups:{}, international:{} },
-      backgroundWorld:createBackgroundWorld(2026), worldLeague:"BRA1",majorLeagueWorld:createMajorLeagueWorld(2026,club.id),majorLeagueId:club.league,worldCenterMode:"domestic",europeanCompetitionKey:"ucl",europeanRoundFilters:{},
+      backgroundWorld:createBackgroundWorld(2026), worldLeague:"BRA1",majorLeagueWorld:createMajorLeagueWorld(2026,club.id),majorLeagueId:club.league,worldCenterMode:"domestic",europeanCompetitionKey:"ucl",europeanRoundFilters:{},worldPlayerStats:{season:2026,players:{},archives:{},processedMatches:{}},
       media:[
         { source:"Football Daily", title:`${person} 正式开启 ${club.name} 生涯`, body:`新赛季从 2026 年 8 月 1 日开始。外界将密切关注这段生涯的第一步。`, date:START_DATE, type:"career" },
         { source:"The Tactical Room", title:`${club.name} 季前展望：稳定性将决定上限`, body:`球队需要在密集赛程中管理体能，并在两个转会窗口做出准确判断。`, date:START_DATE, type:"analysis" }
@@ -1257,6 +1307,7 @@
     const youth=createYouthSystem(created);created.youthAcademy=youth.academy;created.youthWorld=youth.world;
     ensureMarketValuation(created);
     created.transferMarket=createTransferMarket(created.season);
+    syncManagedSquadWorldStats(created);
     ensureClubFinances(created);
     simulateTransferMarket(created,START_DATE);
     return created;
@@ -1300,6 +1351,7 @@
       player.development||={season:saved.season||2026,startOverall:Number(player.overall||65),minutes:Math.round(Number(player.appearances||0)*75),injuryDays:0};
       ensurePlayerContract(player,saved.season||2026);
     });
+    if(previousVersion<43||!saved.worldPlayerStats){saved.worldPlayerStats={season:Number(saved.season||2026),players:{},archives:{},processedMatches:{}};syncManagedSquadWorldStats(saved);}else ensureWorldPlayerStats(saved);
     if(previousVersion<6&&saved.played>0){
       const keepers=saved.squad.filter(player=>player.position==="GK");
       if(keepers.length&&keepers.every(player=>!player.appearances)){
@@ -1348,7 +1400,7 @@
     }
     if ((saved.version || 1) < 5) saved.version=5;
     if ((saved.version || 1) < 6) saved.version=6;
-    if(previousVersion<38||!saved.majorLeagueWorld)rebuildMajorLeagueWorld(saved);else simulateMajorLeagueWorld(saved,saved.date||START_DATE);
+    if(previousVersion<43||!saved.majorLeagueWorld)rebuildMajorLeagueWorld(saved);else simulateMajorLeagueWorld(saved,saved.date||START_DATE);
     saved.majorLeagueId=saved.majorLeagueWorld.leagues[saved.majorLeagueId]?saved.majorLeagueId:clubById(saved.clubId).league;
     if(previousVersion<42||!saved.europeanWorld)rebuildEuropeanWorld(saved);else simulateEuropeanWorld(saved,saved.date||START_DATE);
     saved.worldCenterMode=saved.worldCenterMode==="europe"?"europe":"domestic";saved.europeanCompetitionKey=saved.europeanWorld.competitions[saved.europeanCompetitionKey]?saved.europeanCompetitionKey:"ucl";saved.europeanRoundFilters=saved.europeanRoundFilters&&typeof saved.europeanRoundFilters==="object"?saved.europeanRoundFilters:{};
@@ -1381,7 +1433,7 @@
     ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
     ensureMarketValuation(saved);
     ensureClubFinances(saved);
-    saved.version=42;
+    saved.version=43;
     return saved;
   }
   function saveState() {
@@ -2508,13 +2560,13 @@
   }
 
   function createAiTransferRuntimeCache(save,date) {
-    const byClub=new Map(),sellerRoleGroups=new Map(),playerClubIds=new Map();REAL_PLAYERS.forEach(player=>{const clubId=ensureTransferMarket(save).clubOverrides[player.id]||player.club,snapshot={...player,age:effectivePlayerAge(player,save),value:currentPlayerMarketValue(player,save)};playerClubIds.set(player.id,clubId);if(!byClub.has(clubId))byClub.set(clubId,[]);byClub.get(clubId).push(snapshot);const key=`${clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});byClub.set(save.clubId,save.squad||[]);[...sellerRoleGroups.keys()].filter(key=>key.startsWith(`${save.clubId}|`)).forEach(key=>sellerRoleGroups.delete(key));(save.squad||[]).forEach(player=>{playerClubIds.set(player.id,save.clubId);const key=`${save.clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});sellerRoleGroups.forEach(group=>group.sort((a,b)=>(b.overall||0)-(a.overall||0)));return {save,date,byClub,sellerRoleGroups,playerClubIds,clubNeeds:new Map(),clubCounts:Object.fromEntries([...byClub].map(([clubId,players])=>[clubId,players.length]))};
+    const byClub=new Map(),sellerRoleGroups=new Map(),playerClubIds=new Map();REAL_PLAYERS.forEach(player=>{const clubId=ensureTransferMarket(save).clubOverrides[player.id]||player.club,snapshot=hydrateWorldPlayerStats(save,{...player,age:effectivePlayerAge(player,save),value:currentPlayerMarketValue(player,save)},clubId);playerClubIds.set(player.id,clubId);if(!byClub.has(clubId))byClub.set(clubId,[]);byClub.get(clubId).push(snapshot);const key=`${clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(snapshot);});byClub.set(save.clubId,save.squad||[]);[...sellerRoleGroups.keys()].filter(key=>key.startsWith(`${save.clubId}|`)).forEach(key=>sellerRoleGroups.delete(key));(save.squad||[]).forEach(player=>{playerClubIds.set(player.id,save.clubId);const key=`${save.clubId}|${positionUnit(player.position)}`;if(!sellerRoleGroups.has(key))sellerRoleGroups.set(key,[]);sellerRoleGroups.get(key).push(player);});sellerRoleGroups.forEach(group=>group.sort((a,b)=>(b.overall||0)-(a.overall||0)));return {save,date,byClub,sellerRoleGroups,playerClubIds,clubNeeds:new Map(),clubCounts:Object.fromEntries([...byClub].map(([clubId,players])=>[clubId,players.length]))};
   }
 
   function aiClubPlayers(save,clubId) {
     if(clubId===save.clubId)return save.squad||[];
     if(aiTransferRuntimeCache?.save===save)return aiTransferRuntimeCache.byClub.get(clubId)||[];
-    return REAL_PLAYERS.filter(player=>currentPlayerClubId(save,player)===clubId).map(player=>({...player,age:effectivePlayerAge(player,save),value:currentPlayerMarketValue(player,save)}));
+    return REAL_PLAYERS.filter(player=>currentPlayerClubId(save,player)===clubId).map(player=>hydrateWorldPlayerStats(save,{...player,age:effectivePlayerAge(player,save),value:currentPlayerMarketValue(player,save)},clubId));
   }
 
   function aiSquadNeeds(save,clubId) {
@@ -2735,9 +2787,9 @@
   }
 
   function transferCareerSegment(save,player,club,date,statsTracked=true) {
-    const appearances=Number(player.appearances||0),start=Number(player.development?.startOverall||player.overall||65),end=Number(player.overall||65);
-    const segment={id:`career-transfer-${save.season}-${player.sourcePlayerId||player.id}-${date}-${club.id}`,season:save.season,club:club.name,clubId:club.id,appearances,goals:Number(player.goals||0),assists:Number(player.assists||0),average:Number((appearances?averageRating(player):0).toFixed(2)),overallStart:start,overallEnd:end,change:end-start,partialSeason:true,endDate:date,dataUnavailable:!statsTracked};
-    ["keyPasses","chancesCreated","successfulDribbles","progressivePasses","tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","recoveries","pressuresWon","saves","cleanSheets"].forEach(key=>{segment[key]=Number(player[key]||0);});
+    const worldRecord=ensureWorldPlayerStats(save).players[worldPlayerKey(save,player,club.id)],worldSegment=worldRecord?.segments?.find(item=>item.clubId===club.id&&!item.endDate),source=worldSegment||player,appearances=Number(source.appearances||0),start=Number(player.development?.startOverall||player.overall||65),end=Number(player.overall||65);
+    const segment={id:`career-transfer-${save.season}-${player.sourcePlayerId||player.id}-${date}-${club.id}`,season:save.season,club:club.name,clubId:club.id,appearances,goals:Number(source.goals||0),assists:Number(source.assists||0),average:Number((appearances?(Number(source.ratingTotal||0)/appearances):0).toFixed(2)),overallStart:start,overallEnd:end,change:end-start,partialSeason:true,endDate:date,dataUnavailable:!statsTracked};
+    ["keyPasses","chancesCreated","successfulDribbles","progressivePasses","tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","recoveries","pressuresWon","saves","cleanSheets","yellowCards","redCards"].forEach(key=>{segment[key]=Number(source[key]||0);});
     return segment;
   }
 
@@ -2748,18 +2800,18 @@
 
   function addUserSquadSigning(save,sourcePlayer,transferData={}) {
     if(save.squad.some(player=>comparableClubName(player.name)===comparableClubName(sourcePlayer.name)))return;
-    const signing={...sourcePlayer,id:`ai-signing-${sourcePlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,sourcePlayerId:sourcePlayer.id,club:save.clubId,clubId:save.clubId,joinedDate:transferData.date||save.date,careerStats:transferData.careerStats||sourcePlayer.careerStats||[],contract:transferData.contract||sourcePlayer.contract,fitness:94,morale:86,form:0,lastRating:null,ratingTotal:0,appearances:0,goals:0,assists:0,injured:0,injury:null};
-    ["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{signing[key]=0;});
+    const signing={...sourcePlayer,id:`ai-signing-${sourcePlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,sourcePlayerId:sourcePlayer.id,club:save.clubId,clubId:save.clubId,joinedDate:transferData.date||save.date,careerStats:transferData.careerStats||sourcePlayer.careerStats||[],contract:transferData.contract||sourcePlayer.contract,fitness:94,morale:86,injured:0,injury:null};
+    hydrateWorldPlayerStats(save,signing,save.clubId);
     ensurePlayerDevelopment(signing,save.season);ensurePlayerContract(signing,save.season);save.squad.push(signing);initializePlayerMarketValue(signing,save,transferData.date||save.date);
   }
 
   function completeTransfer(save,rumor,date,forced=false) {
-    const market=ensureTransferMarket(save),userSquadPlayer=rumor.fromId===save.clubId?(save.squad||[]).find(player=>sameTransferPlayer(player,rumor)):null,canonical=REAL_PLAYERS.find(player=>player.id===rumor.playerId)||canonicalTransferPlayer(save,rumor.fromId,userSquadPlayer||rumor),sourcePlayer=userSquadPlayer||canonical;
+    const market=ensureTransferMarket(save),userSquadPlayer=rumor.fromId===save.clubId?(save.squad||[]).find(player=>sameTransferPlayer(player,rumor)):null,canonical=REAL_PLAYER_ID_INDEX.get(rumor.playerId)||canonicalTransferPlayer(save,rumor.fromId,userSquadPlayer||rumor),sourcePlayer=userSquadPlayer||(canonical?hydrateWorldPlayerStats(save,{...canonical},rumor.fromId):null);
     const validSource=sourcePlayer&&(rumor.fromId===save.clubId?Boolean(userSquadPlayer):Boolean(canonical&&currentPlayerClubId(save,canonical)===rumor.fromId));if(!validSource||userSquadPlayer?.id===save.controlledId){rumor.status="collapsed";return false;}
     const buyer=clubById(rumor.toId),seller=clubById(rumor.fromId),budget=Number(market.budgets[buyer.id]||0),successChance=clamp(.58+(buyer.prestige-seller.prestige)/120+(rumor.confidence-50)/130,.38,.94);
     if(!forced&&(budget<rumor.fee||Math.random()>successChance)){rumor.status="collapsed";if(rumor.fromId===save.clubId||rumor.toId===save.clubId)reportTransferStory(save,`${rumor.playerName} 的转会谈判暂时停止`,`相关俱乐部未能在费用、阵容计划或球员意愿上达成一致，这笔交易目前不会继续推进。`,date,true);return false;}
-    const careerSegment=transferCareerSegment(save,sourcePlayer,seller,date,Boolean(userSquadPlayer)),careerHistory=[...(sourcePlayer.careerStats||[])],newContract=transferContract(sourcePlayer,rumor,save.season);
-    market.budgets[buyer.id]=Number(Math.max(0,budget-rumor.fee).toFixed(1));market.budgets[seller.id]=Number((Number(market.budgets[seller.id]||0)+rumor.fee*.82).toFixed(1));market.clubOverrides[(canonical||sourcePlayer).id]=buyer.id;
+    const statsTracked=Boolean(userSquadPlayer||ensureWorldPlayerStats(save).players[worldPlayerKey(save,sourcePlayer,seller.id)]),careerSegment=transferCareerSegment(save,sourcePlayer,seller,date,statsTracked),careerHistory=[...(sourcePlayer.careerStats||[])],newContract=transferContract(sourcePlayer,rumor,save.season);
+    moveWorldPlayerClub(save,sourcePlayer,seller.id,buyer.id,date);market.budgets[buyer.id]=Number(Math.max(0,budget-rumor.fee).toFixed(1));market.budgets[seller.id]=Number((Number(market.budgets[seller.id]||0)+rumor.fee*.82).toFixed(1));market.clubOverrides[(canonical||sourcePlayer).id]=buyer.id;
     if(buyer.id===save.clubId)addUserSquadSigning(save,canonical||sourcePlayer,{date,contract:newContract,careerStats:[...careerHistory,careerSegment]});
     if(seller.id===save.clubId)save.squad=save.squad.filter(player=>player.id===save.controlledId||!sameTransferPlayer(player,sourcePlayer));
     if(buyer.id===save.clubId)save.funds=Number(Math.max(0,Number(save.funds||0)-rumor.fee).toFixed(1));
@@ -2836,11 +2888,11 @@
 
   function completeControlledPlayerTransfer(offer) {
     const player=controlledPlayer(),market=ensureTransferMarket(state),seller=clubById(state.clubId),buyer=clubById(offer.toId),loan=Boolean(offer.loan);if(!player||!buyer)return false;
-    const careerSegment=transferCareerSegment(state,player,seller,state.date,true),careerHistory=[...(player.careerStats||[])],contract=loan?{...player.contract}:transferContract(player,{contract:offer.contract},state.season),record={id:`${loan?"loan":"transfer"}-${market.season}-${++market.sequence}`,type:loan?"loan":"transfer",season:state.season,windowKey:offer.windowKey,date:state.date,playerId:player.sourcePlayerId||player.id,playerName:player.name,position:player.position,overall:player.overall,potential:player.potential,fromId:seller.id,toId:buyer.id,fee:loan?0:offer.fee,reason:loan?"球员外租申请获批":"球员正式转会申请获批",contract,careerHistory,careerSegment};
+    syncWorldPlayerSnapshot(state,player,seller.id);const careerSegment=transferCareerSegment(state,player,seller,state.date,true),careerHistory=[...(player.careerStats||[])],contract=loan?{...player.contract}:transferContract(player,{contract:offer.contract},state.season),record={id:`${loan?"loan":"transfer"}-${market.season}-${++market.sequence}`,type:loan?"loan":"transfer",season:state.season,windowKey:offer.windowKey,date:state.date,playerId:player.sourcePlayerId||player.id,playerName:player.name,position:player.position,overall:player.overall,potential:player.potential,fromId:seller.id,toId:buyer.id,fee:loan?0:offer.fee,reason:loan?"球员外租申请获批":"球员正式转会申请获批",contract,careerHistory,careerSegment};
     const budget=Number(market.budgets[buyer.id]||buyer.budget||0);if(!loan&&budget<offer.fee)return false;if(!loan){market.budgets[buyer.id]=Number(Math.max(0,budget-offer.fee).toFixed(1));market.budgets[seller.id]=Number((Number(market.budgets[seller.id]||0)+offer.fee*.82).toFixed(1));}market.clubOverrides[player.sourcePlayerId||player.id]=buyer.id;
-    const moved={...player,club:buyer.id,clubId:buyer.id,joinedDate:state.date,careerStats:[...careerHistory,careerSegment],contract,weeklyWage:contract.weeklyWage,wage:contract.weeklyWage,fitness:94,morale:84,form:0,lastRating:null,ratingTotal:0,appearances:0,goals:0,assists:0,injured:0,injury:null,consecutiveStarts:0,lastMatchMinutes:0,lastMatchDate:null,lastSelectionStatus:null,transferRequestStatus:"completed"};["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{moved[key]=0;});delete moved.development;ensurePlayerDevelopment(moved,state.season);initializePlayerMarketValue(moved,state,state.date);
-    const newSquad=createSquad(buyer,moved);newSquad.forEach(item=>{ensurePlayerContract(item,state.season);ensurePlayerDevelopment(item,state.season);});const controlledIndex=newSquad.findIndex(item=>item.id==="controlled");newSquad[controlledIndex>=0?controlledIndex:0]=moved;state.clubId=buyer.id;state.squad=newSquad;state.controlledId="controlled";state.schedule=generateSchedule(buyer,state.season,moved).filter(fixture=>fixture.date>=state.date);state.played=0;state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(buyer,state.season),cups:{},international:{}};state.majorLeagueWorld=createMajorLeagueWorld(state.season,buyer.id);simulateMajorLeagueWorld(state,state.date);state.majorLeagueId=buyer.league;rebuildEuropeanWorld(state);state.funds=Number(market.budgets[buyer.id]||buyer.budget||0);state.activeMatch=null;
-    market.records.unshift(record);state.transferHistory=Array.isArray(state.transferHistory)?state.transferHistory:[];state.transferHistory.unshift(record);state.transferHistory=state.transferHistory.filter((item,index,list)=>list.findIndex(other=>other.id===item.id)===index).slice(0,500);const career=ensurePlayerCareer();career.transferOffer={...offer,status:"accepted",completedDate:state.date};career.transferOfferHistory.unshift(career.transferOffer);career.transferOfferHistory=career.transferOfferHistory.slice(0,20);career.trust=55;career.chemistry=54;career.relationships={...career.relationships,coach:52,teammates:52,captain:50};career.status="新环境适应";career.contractStance=loan?"外租效力中":"已转会";career.lastTransferDate=state.date;if(loan){career.loanParentClubId=seller.id;career.loanEndSeason=state.season;career.loanSearchUntil=null;}state.transferRequestsLog.forEach(item=>{if(item.id===offer.id)item.status="completed";});addNotification({title:loan?`租借完成：${moved.name} 加盟 ${buyer.name}`:`官方：${moved.name} 加盟 ${buyer.name}`,type:"transfer",date:state.date,detail:loan?`你将为 ${buyer.name} 效力至本赛季结束，原合同与母队归属保持不变。旧俱乐部阶段数据已经归档。`:"转会申请已获批。旧俱乐部阶段的所有数据已经归档，新俱乐部生涯从今天开始。",facts:[`${seller.name} → ${buyer.name}`,loan?"形式：赛季租借":`转会费：${money(offer.fee)}`,loan?`计划角色：${offer.contract?.role||"轮换球员"}`:`新合同至 ${contract.endSeason} 年 · ${contract.role}`]});state.media.unshift({source:"Transfer Desk",title:loan?`租借：${moved.name} 加盟 ${buyer.name}`:`官方：${moved.name} 加盟 ${buyer.name}`,body:loan?`${moved.name} 将从 ${seller.name} 租借至 ${buyer.name}，租期到本赛季结束。`:`${buyer.name} 以 ${money(offer.fee)} 从 ${seller.name} 签下 ${moved.name}。球员此前已提交正式转会申请。`,date:state.date,type:"transfer"});return true;
+    moveWorldPlayerClub(state,player,seller.id,buyer.id,state.date);const moved={...player,club:buyer.id,clubId:buyer.id,joinedDate:state.date,careerStats:[...careerHistory,careerSegment],contract,weeklyWage:contract.weeklyWage,wage:contract.weeklyWage,fitness:94,morale:84,injured:0,injury:null,consecutiveStarts:0,lastMatchMinutes:0,lastMatchDate:null,lastSelectionStatus:null,transferRequestStatus:"completed"};delete moved.development;ensurePlayerDevelopment(moved,state.season);initializePlayerMarketValue(moved,state,state.date);
+    const newSquad=createSquad(buyer,moved);newSquad.forEach(item=>{hydrateWorldPlayerStats(state,item,buyer.id);ensurePlayerContract(item,state.season);ensurePlayerDevelopment(item,state.season);});const controlledIndex=newSquad.findIndex(item=>item.id==="controlled");newSquad[controlledIndex>=0?controlledIndex:0]=moved;state.clubId=buyer.id;state.squad=newSquad;state.controlledId="controlled";state.schedule=generateSchedule(buyer,state.season,moved).filter(fixture=>fixture.date>=state.date);const buyerLeague=state.majorLeagueWorld?.leagues?.[buyer.league],buyerStanding=buyerLeague?.clubs?.find(item=>item.id===buyer.id),buyerTable=buyerLeague?majorStandings(buyerLeague):[];state.played=Number(buyerStanding?.p||0);state.wins=Number(buyerStanding?.w||0);state.draws=Number(buyerStanding?.d||0);state.losses=Number(buyerStanding?.l||0);state.points=Number(buyerStanding?.pts||0);state.leaguePosition=Math.max(1,buyerTable.findIndex(item=>item.id===buyer.id)+1);state.competitionProgress={europe:createEuropeanProgress(buyer,state.season),cups:{},international:{}};state.majorLeagueId=buyer.league;rebuildEuropeanWorld(state);state.funds=Number(market.budgets[buyer.id]||buyer.budget||0);state.activeMatch=null;
+    market.records.unshift(record);state.transferHistory=Array.isArray(state.transferHistory)?state.transferHistory:[];state.transferHistory.unshift(record);state.transferHistory=state.transferHistory.filter((item,index,list)=>list.findIndex(other=>other.id===item.id)===index).slice(0,500);const career=ensurePlayerCareer();career.transferOffer={...offer,status:"accepted",completedDate:state.date};career.transferOfferHistory.unshift(career.transferOffer);career.transferOfferHistory=career.transferOfferHistory.slice(0,20);career.trust=55;career.chemistry=54;career.relationships={...career.relationships,coach:52,teammates:52,captain:50};career.status="新环境适应";career.contractStance=loan?"外租效力中":"已转会";career.lastTransferDate=state.date;if(loan){career.loanParentClubId=seller.id;career.loanEndSeason=state.season;career.loanSearchUntil=null;}state.transferRequestsLog.forEach(item=>{if(item.id===offer.id)item.status="completed";});addNotification({title:loan?`租借完成：${moved.name} 加盟 ${buyer.name}`:`官方：${moved.name} 加盟 ${buyer.name}`,type:"transfer",date:state.date,detail:loan?`你将为 ${buyer.name} 效力至本赛季结束，原合同与母队归属保持不变。当季累计数据继续保留，并按两家俱乐部分段记录。`:"转会申请已获批。当季出场、进球、助攻、评分及细分数据全部延续，同时开始记录新俱乐部阶段。",facts:[`${seller.name} → ${buyer.name}`,`当季累计：${moved.appearances||0} 场 · ${moved.goals||0} 球 · ${moved.assists||0} 助攻`,loan?"形式：赛季租借":`转会费：${money(offer.fee)}`,loan?`计划角色：${offer.contract?.role||"轮换球员"}`:`新合同至 ${contract.endSeason} 年 · ${contract.role}`]});state.media.unshift({source:"Transfer Desk",title:loan?`租借：${moved.name} 加盟 ${buyer.name}`:`官方：${moved.name} 加盟 ${buyer.name}`,body:loan?`${moved.name} 将从 ${seller.name} 租借至 ${buyer.name}，租期到本赛季结束。`:`${buyer.name} 以 ${money(offer.fee)} 从 ${seller.name} 签下 ${moved.name}。球员此前已提交正式转会申请。`,date:state.date,type:"transfer"});return true;
   }
 
   function acceptPlayerTransferOffer(id) {const offer=ensurePlayerCareer()?.transferOffer;if(!offer||offer.id!==id||offer.status!=="active")return;if(!completeControlledPlayerTransfer(offer)){toast("买方预算或报价状态已发生变化");return;}modal=null;saveState();render();toast(offer.loan?"租借已经完成，新的出场竞争开始了":"转会已经完成，欢迎来到新俱乐部");}
@@ -3574,7 +3626,7 @@
     const average=roster.length?Math.round(roster.reduce((sum,p)=>sum+Number(p.overall||0),0)/roster.length):0,totalValue=roster.reduce((sum,p)=>sum+currentPlayerMarketValue(p,state),0);
     return `<div class="modal-backdrop"><div class="modal club-profile-modal" role="dialog" aria-modal="true" aria-labelledby="club-profile-title"><div class="modal-header club-profile-header"><div class="club-profile-badge">${clubBadge(club,"club-badge-profile-modal")}</div><div><span>${esc(league?.short||"俱乐部")}${league?.country?` · ${esc(league.country)}`:""}</span><h2 id="club-profile-title">${esc(club.name)}</h2><p>${esc(club.city||"城市资料待更新")} · ${esc(club.stadium||"主场资料待更新")} · 主教练 ${esc(club.coach||"资料待更新")}</p></div><button class="btn btn-icon btn-ghost" data-close-modal aria-label="关闭">${icon("x")}</button></div><div class="modal-body club-profile-body">
       <section class="club-profile-summary"><div><label>俱乐部声望</label><strong>${club.prestige||"—"}</strong></div><div><label>阵容人数</label><strong>${roster.length}</strong></div><div><label>平均能力</label><strong>${average||"—"}</strong></div><div><label>阵容总身价</label><strong>${money(totalValue)}</strong></div><div><label>当前排名</label><strong>${rank||"—"}${rank?` / ${table.length}`:""}</strong></div><div><label>本赛季积分</label><strong>${standing?.pts??"—"}</strong></div></section>
-      <section class="club-profile-section"><div class="club-profile-section-head"><h3>一线队阵容</h3><span>按位置排序 · ${roster.length} 人</span></div><div class="table-wrap"><table class="club-roster-table"><thead><tr><th>球员</th><th>位置</th><th class="num">年龄</th><th class="num">能力 / 潜力</th><th class="num">身价</th></tr></thead><tbody>${roster.map(player=>`<tr><td class="player-name"><strong>${playerNameLink(player,{clubName:club.name})}</strong><span>${player.nationality?esc(player.nationality):"球员"}</span></td><td><span class="tag">${playerRoleLabel(player.position)}</span></td><td class="num">${player.age||"—"}</td><td class="num"><span class="rating">${player.overall||"—"}</span> / ${player.potential||player.overall||"—"}</td><td class="num">${money(currentPlayerMarketValue(player,state))}</td></tr>`).join("")||`<tr><td colspan="5"><div class="empty compact">暂无可用阵容数据</div></td></tr>`}</tbody></table></div></section>
+      <section class="club-profile-section"><div class="club-profile-section-head"><h3>一线队阵容</h3><span>按位置排序 · ${roster.length} 人 · 本赛季模拟数据</span></div><div class="table-wrap"><table class="club-roster-table"><thead><tr><th>球员</th><th>位置</th><th class="num">年龄</th><th class="num">能力 / 潜力</th><th class="num">出场</th><th class="num">进球 / 助攻</th><th class="num">评分</th><th class="num">身价</th></tr></thead><tbody>${roster.map(player=>`<tr><td class="player-name"><strong>${playerNameLink(player,{clubName:club.name})}</strong><span>${player.nationality?esc(player.nationality):"球员"}</span></td><td><span class="tag">${playerRoleLabel(player.position)}</span></td><td class="num">${player.age||"—"}</td><td class="num"><span class="rating">${player.overall||"—"}</span> / ${player.potential||player.overall||"—"}</td><td class="num">${player.appearances||0}</td><td class="num">${player.goals||0} / ${player.assists||0}</td><td class="num">${player.appearances?averageRating(player).toFixed(2):"—"}</td><td class="num">${money(currentPlayerMarketValue(player,state))}</td></tr>`).join("")||`<tr><td colspan="8"><div class="empty compact">暂无可用阵容数据</div></td></tr>`}</tbody></table></div></section>
       <section class="club-profile-grid"><div class="club-profile-section"><div class="club-profile-section-head"><h3>俱乐部荣誉</h3><span>历史资料与存档实绩</span></div><div class="club-honors">${honors.map(item=>`<div class="club-honor"><img src="assets/trophies/${item.asset||"league.png"}" alt=""><div><strong>${esc(item.name)}</strong><span>${item.count} 次${item.seasons?.length?` · 存档：${item.seasons.map(season=>`${season}/${String(season+1).slice(2)}`).join("、")}`:` · ${item.source||"历史资料"}`}</span></div></div>`).join("")||`<p class="report-copy">暂无已记录荣誉。</p>`}</div></div><div class="club-profile-section"><div class="club-profile-section-head"><h3>近期状态</h3><span>${standing?`${standing.w}胜 ${standing.d}平 ${standing.l}负`:"当前赛季"}</span></div><div class="club-form-row"><div><label>战绩</label><strong>${standing?`${standing.w}-${standing.d}-${standing.l}`:"—"}</strong></div><div><label>进失球</label><strong>${standing?`${standing.gf} / ${standing.ga}`:"—"}</strong></div><div><label>近况</label><strong>${standing?.form?.length?standing.form.map(item=>`<i class="form-dot ${item}"></i>`).join(""):"—"}</strong></div></div></div></section>
     </div></div></div>`;
   }
@@ -4965,6 +5017,7 @@
       const events=m.playerEvents?.[p.id]||{goals:0,assists:0,mistakes:0,yellow:0,red:0,ratingDelta:0};
       if(f.international){p.internationalGoals=Number(p.internationalGoals||0)+(events.goals||0);p.internationalAssists=Number(p.internationalAssists||0)+(events.assists||0);}else{p.goals+=(events.goals||0);p.assists+=(events.assists||0);}
       ["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=Number(p[key]||0)+Number(events[key]||0);});
+      p.yellowCards=Number(p.yellowCards||0)+Number(events.yellow||0);p.redCards=Number(p.redCards||0)+Number(events.red||0);
       p.lastRating=Number(clamp(m.liveRatings?.[p.id]??(p.id==="controlled"?m.playerRating:6),1,10).toFixed(2));
       p.form=p.lastRating;if(f.international)p.internationalRatingTotal=Number((Number(p.internationalRatingTotal||0)+p.lastRating).toFixed(2));else p.ratingTotal=Number((Number(p.ratingTotal||0)+p.lastRating).toFixed(2));
       addMatchDevelopmentProgress(p,p.lastRating,minutes,state);
@@ -4975,6 +5028,7 @@
         ensurePlayerDevelopment(p,state.season).injuryDays+=detail.days;
       }
     });
+    if(!f.international)syncManagedSquadWorldStats(state);
     if(!f.international)state.squad.filter(player=>!participantIds.includes(player.id)&&!player.injured&&["核心主力","常规主力"].includes(player.contract?.role)).forEach(player=>{if(Math.random()<.38)player.morale=clamp(Number(player.morale||75)-1,25,100);});
     const ourBest=[...matchParticipants].filter(player=>matchMinutesPlayed(m,player.id)>0).sort((a,b)=>(m.liveRatings[b.id]||0)-(m.liveRatings[a.id]||0))[0],opponentBest=(m.opponentPlayers||[]).filter(player=>(m.opponentInitialLineupIds||[]).includes(player.id)||m.substitutions.some(item=>item.team==="opponent"&&item.inId===player.id)).sort((a,b)=>(m.opponentRatings[b.id]||0)-(m.opponentRatings[a.id]||0))[0];
     const mvp=opponentBest&&(m.opponentRatings[opponentBest.id]||0)>(m.liveRatings[ourBest?.id]||0)?{id:opponentBest.id,name:opponentBest.name,rating:m.opponentRatings[opponentBest.id],ours:false}:{id:ourBest?.id,name:ourBest?.name||"待评定",rating:m.liveRatings[ourBest?.id]||6,ours:true};m.mvpId=mvp.id;
@@ -5208,11 +5262,12 @@
     if(state.leaguePosition===1)state.honors.unshift({name:LEAGUES[clubById(state.clubId).league].name+"冠军",season:state.season,scope:"俱乐部"});
     if(state.role==="player"&&averageRating(controlledPlayer())>=7.6)state.honors.unshift({name:"赛季最佳球员",season:state.season,scope:"个人"});
     archiveWorldSeasonAndApplyPromotion(state);
+    syncManagedSquadWorldStats(state);archiveWorldPlayerSeason(state);
     const developmentResults=state.squad.map(settlePlayerSeason),growthLeaders=developmentResults.filter(item=>item.change!==0).sort((a,b)=>b.change-a.change).slice(0,3),retiredPlayers=collectSeasonRetirements(state,state.season);if(retiredPlayers.length)state.squad=state.squad.filter(player=>!retiredPlayers.includes(player));
     returnControlledPlayerFromLoan();
     const nextSeasonFinances=seasonFinancePlans(state,state.season+1,previousClubLeaguePositions(state));
     state.season++;state.date=transitionDate;state.schedule=generateSchedule(clubById(state.clubId),state.season);state.fixtureSeasonFilter="current";state.fixtureFilter="all";state.wins=0;state.draws=0;state.losses=0;state.points=0;state.leaguePosition=1;state.competitionProgress={europe:createEuropeanProgress(clubById(state.clubId),state.season),cups:{},international:{}};state.backgroundWorld=createBackgroundWorld(state.season);state.worldLeague=Object.keys(state.backgroundWorld.leagues)[0]||"BRA1";state.majorLeagueWorld=createMajorLeagueWorld(state.season,state.clubId);state.majorLeagueId=clubById(state.clubId).league;state.europeanWorld=createEuropeanWorld(state);state.europeanRoundFilters={};state.transferMarket=createTransferMarket(state.season,nextSeasonFinances.budgets);repairTransferOwnership(state,state.transferMarket);state.funds=Number(nextSeasonFinances.budgets[state.clubId]||clubById(state.clubId).budget||10);const financeReport=activateSeasonFinances(state,nextSeasonFinances,state.date);simulateTransferMarket(state,state.date);
-    state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});resetSeasonMarketValueBaseline(state);
+    state.squad.forEach(p=>{p.age++;p.appearances=0;p.goals=0;p.assists=0;p.form=0;p.lastRating=null;p.ratingTotal=0;p.fitness=95;p.consecutiveStarts=0;p.lastMatchMinutes=0;p.lastMatchDate=null;p.lastSelectionStatus=null;["tackles","tacklesWon","interceptions","clearances","blocks","duels","duelsWon","saves","cleanSheets","keyPasses","chancesCreated","successfulDribbles","progressivePasses","recoveries","pressuresWon","yellowCards","redCards"].forEach(key=>{p[key]=0;});ensurePlayerDevelopment(p,state.season);});syncManagedSquadWorldStats(state);resetSeasonMarketValueBaseline(state);
     rolloverYouthSeason(state).forEach(graduate=>addNotification({title:`AI 教练提拔青训球员：${graduate.name}`,type:"youth",date:state.date,detail:"教练组根据年龄、当前能力、潜力和一线队名额完成了青训晋升。",facts:[`${playerRoleLabel(graduate.position)} · ${graduate.age} 岁`,`当前能力：${graduate.overall}`,`合同角色：${graduate.contract.role}`]}));
     if(state.role==="player"){
       const career=ensurePlayerCareer(),player=controlledPlayer();career.trainingDays=0;career.weeklyPlanChanges=0;career.weeklyPlanSetDate=state.date;career.matchPlan="balanced";career.matchPlanFixtureId=null;career.pendingIssues=[];career.story=null;career.nextStoryDate=addDays(state.date,10);career.selectionStreak=0;career.benchStreak=0;career.seasonObjectives=createPlayerObjectives(player);career.objectiveProgress={appearances:0,ratings:0,goals:0,assists:0,trust:Math.round(career.trust)};career.requests=career.requests.filter(item=>item.status==="pending");
