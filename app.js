@@ -441,6 +441,7 @@
     if(!save)return {season:2026,players:{},archives:{},processedMatches:{}};
     const world=save.worldPlayerStats||(save.worldPlayerStats={season:Number(save.season||2026),players:{},archives:{},processedMatches:{}});
     world.season=Number(world.season||save.season||2026);world.players=world.players&&typeof world.players==="object"?world.players:{};world.archives=world.archives&&typeof world.archives==="object"?world.archives:{};world.processedMatches=world.processedMatches&&typeof world.processedMatches==="object"?world.processedMatches:{};
+    Object.values(world.players).forEach(record=>{record.segments=Array.isArray(record.segments)?record.segments.filter(segment=>segment?.endDate):[];});const processed=Object.keys(world.processedMatches);if(processed.length>240)world.processedMatches=Object.fromEntries(processed.slice(-240).map(key=>[key,true]));
     return world;
   }
   function canonicalWorldPlayer(save,player,clubId=null) {
@@ -449,31 +450,30 @@
     return matches.find(candidate=>currentPlayerClubId(save,candidate)===(clubId||player.clubId||player.club))||matches[0]||null;
   }
   function worldPlayerKey(save,player,clubId=null) {const canonical=canonicalWorldPlayer(save,player,clubId);return canonical?.id||player?.sourcePlayerId||player?.playerId||player?.id||`name-${comparableClubName(player?.name||player?.playerName||"unknown")}`;}
-  function currentWorldSegment(record,clubId) {
-    let segment=[...(record.segments||[])].reverse().find(item=>!item.endDate&&item.clubId===clubId);if(!segment){segment={id:`world-segment-${record.season}-${record.playerId}-${clubId}-${record.segments?.length||0}`,season:record.season,clubId,club:clubById(clubId).name,startDate:record.lastTransferDate||`${record.season}-08-01`,...emptyWorldPlayerStats()};record.segments||=[];record.segments.push(segment);}return segment;
-  }
   function ensureWorldPlayerRecord(save,player,clubId=null,seedFromPlayer=false) {
     if(!save||!player)return null;const world=ensureWorldPlayerStats(save),canonical=canonicalWorldPlayer(save,player,clubId),id=worldPlayerKey(save,player,clubId),resolvedClubId=clubId||player.clubId||player.club||(canonical?currentPlayerClubId(save,canonical):null)||save.clubId;
-    let record=world.players[id];if(!record){record={playerId:id,name:player.name||player.playerName||canonical?.name||"未知球员",season:Number(save.season||world.season),clubId:resolvedClubId,position:player.position||canonical?.position||"CM",overall:Number(player.overall||canonical?.overall||65),...emptyWorldPlayerStats(),segments:[]};world.players[id]=record;if(seedFromPlayer)WORLD_PLAYER_STAT_KEYS.forEach(key=>{record[key]=Number(player[key]||0);});const segment=currentWorldSegment(record,resolvedClubId);if(seedFromPlayer)WORLD_PLAYER_STAT_KEYS.forEach(key=>{segment[key]=Number(record[key]||0);});}
+    let record=world.players[id];if(!record){record={playerId:id,name:player.name||player.playerName||canonical?.name||"未知球员",season:Number(save.season||world.season),clubId:resolvedClubId,position:player.position||canonical?.position||"CM",overall:Number(player.overall||canonical?.overall||65),...emptyWorldPlayerStats(),segments:[]};world.players[id]=record;if(seedFromPlayer)WORLD_PLAYER_STAT_KEYS.forEach(key=>{record[key]=Number(player[key]||0);});}
     record.clubId=resolvedClubId||record.clubId;record.name=player.name||player.playerName||record.name;record.position=player.position||record.position;record.overall=Number(player.overall||record.overall||65);record.segments=Array.isArray(record.segments)?record.segments:[];return record;
   }
   function addWorldPlayerStats(save,player,clubId,delta={},meta={}) {
-    const record=ensureWorldPlayerRecord(save,player,clubId,false);if(!record)return null;const segment=currentWorldSegment(record,clubId||record.clubId);WORLD_PLAYER_STAT_KEYS.forEach(key=>{const amount=Number(delta[key]||0);record[key]=Number(record[key]||0)+amount;segment[key]=Number(segment[key]||0)+amount;});
+    const record=ensureWorldPlayerRecord(save,player,clubId,false);if(!record)return null;WORLD_PLAYER_STAT_KEYS.forEach(key=>{const amount=Number(delta[key]||0);record[key]=Number(record[key]||0)+amount;});
     if(meta.rating!==undefined)record.lastRating=Number(meta.rating);if(meta.date)record.lastMatchDate=meta.date;return record;
   }
   function syncWorldPlayerSnapshot(save,player,clubId=save?.clubId) {
-    const record=ensureWorldPlayerRecord(save,player,clubId,true);if(!record)return null;const segment=currentWorldSegment(record,clubId),delta={};WORLD_PLAYER_STAT_KEYS.forEach(key=>{const next=Number(player[key]||0),previous=Number(record[key]||0);delta[key]=next-previous;record[key]=next;segment[key]=Math.max(0,Number(segment[key]||0)+delta[key]);});record.lastRating=player.lastRating??record.lastRating;record.lastMatchDate=player.lastMatchDate||record.lastMatchDate;return record;
+    const record=ensureWorldPlayerRecord(save,player,clubId,true);if(!record)return null;WORLD_PLAYER_STAT_KEYS.forEach(key=>{record[key]=Number(player[key]||0);});record.lastRating=player.lastRating??record.lastRating;record.lastMatchDate=player.lastMatchDate||record.lastMatchDate;return record;
   }
   function syncManagedSquadWorldStats(save=state) {(save?.squad||[]).forEach(player=>syncWorldPlayerSnapshot(save,player,save.clubId));}
   function hydrateWorldPlayerStats(save,player,clubId=null) {
     if(!save||!player)return player;const id=worldPlayerKey(save,player,clubId),record=ensureWorldPlayerStats(save).players[id];if(!record)return player;WORLD_PLAYER_STAT_KEYS.forEach(key=>{player[key]=Number(record[key]||0);});player.lastRating=record.lastRating??player.lastRating;player.form=record.lastRating??player.form;const archived=ensureWorldPlayerStats(save).archives[id]||[];player.careerStats=mergePlayerCareerStats({...player,careerStats:[...(player.careerStats||[]),...archived]},[]);return player;
   }
   function moveWorldPlayerClub(save,player,fromId,toId,date) {
-    const record=syncWorldPlayerSnapshot(save,player,fromId)||ensureWorldPlayerRecord(save,player,fromId,true);if(!record)return null;const segment=currentWorldSegment(record,fromId);segment.endDate=date;segment.partialSeason=true;segment.average=segment.appearances?Number((Number(segment.ratingTotal||0)/segment.appearances).toFixed(2)):0;record.clubId=toId;record.lastTransferDate=date;currentWorldSegment(record,toId);return record;
+    const record=syncWorldPlayerSnapshot(save,player,fromId)||ensureWorldPlayerRecord(save,player,fromId,true);if(!record)return null;const segment={...Object.fromEntries(WORLD_PLAYER_STAT_KEYS.map(key=>[key,Number(record[key]||0)])),id:`world-segment-${record.season}-${record.playerId}-${fromId}-${date}`,season:record.season,clubId:fromId,club:clubById(fromId).name,startDate:record.lastTransferDate||`${record.season}-08-01`,endDate:date,partialSeason:true,average:record.appearances?Number((Number(record.ratingTotal||0)/record.appearances).toFixed(2)):0};record.segments=[...(record.segments||[]),segment].slice(-8);record.clubId=toId;record.lastTransferDate=date;return record;
   }
   function archiveWorldPlayerSeason(save=state) {
-    const world=ensureWorldPlayerStats(save);Object.entries(world.players).forEach(([id,record])=>{const rows=(record.segments||[]).map(segment=>({...segment,endDate:segment.endDate||save.date,partialSeason:Boolean(segment.endDate),average:segment.appearances?Number((Number(segment.ratingTotal||0)/segment.appearances).toFixed(2)):0}));world.archives[id]=[...rows,...(world.archives[id]||[])].slice(0,60);});world.players={};world.processedMatches={};world.season=Number(save.season||2026)+1;return world;
+    const world=ensureWorldPlayerStats(save);Object.entries(world.players).forEach(([id,record])=>{const current={...Object.fromEntries(WORLD_PLAYER_STAT_KEYS.map(key=>[key,Number(record[key]||0)])),id:`world-season-${record.season}-${id}-${record.clubId}`,season:record.season,clubId:record.clubId,club:clubById(record.clubId).name,endDate:save.date,partialSeason:false,average:record.appearances?Number((Number(record.ratingTotal||0)/record.appearances).toFixed(2)):0},rows=[...(record.segments||[]),current];world.archives[id]=[...rows,...(world.archives[id]||[])].slice(0,24);});world.players={};world.processedMatches={};world.season=Number(save.season||2026)+1;return world;
   }
+
+  function compactWorldPlayerStats(save=state) {const world=ensureWorldPlayerStats(save);world.processedMatches=Object.fromEntries(Object.keys(world.processedMatches||{}).slice(-120).map(key=>[key,true]));world.archives=Object.fromEntries(Object.entries(world.archives||{}).map(([id,rows])=>[id,(rows||[]).slice(0,12).map(row=>{const compact={...row};WORLD_PLAYER_STAT_KEYS.forEach(key=>{if(!compact[key])delete compact[key];});delete compact.name;delete compact.overall;delete compact.position;return compact;})]));Object.values(world.players||{}).forEach(record=>{record.segments=(record.segments||[]).slice(-4);});return world;}
 
   const MARKET_VALUE_POSITION_FACTORS={GK:.82,CB:.9,RB:.92,LB:.92,RWB:.96,LWB:.96,DM:.95,CM:1,RM:1.02,LM:1.02,AM:1.06,RW:1.09,LW:1.09,CF:1.09,ST:1.11};
   function marketQuarterKey(date=START_DATE) {const parsed=new Date(`${date}T12:00:00`),quarter=Math.floor(parsed.getMonth()/3)+1;return `${parsed.getFullYear()}-Q${quarter}`;}
@@ -1287,7 +1287,7 @@
       : { name:person, overall:70, tactics:72, people:70, youth:68, transfers:69 };
     const schedule=generateSchedule(club,2026,controlled);
     const created={
-      version:43, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
+      version:44, role:setup.role, origin:setup.origin, person, clubId:club.id, date:START_DATE, season:2026, view:"home",
       funds:club.budget, reputation:setup.role === "coach" ? coachProfile.overall : controlled.overall,
       squad, coachProfile, controlledId:setup.role === "player" ? "controlled" : null,
       schedule, played:0, wins:0, draws:0, losses:0, points:0, leaguePosition:1,
@@ -1433,13 +1433,13 @@
     ensureYouthSystem(saved);if(!["home","squad","fixtures","world","academy","transfers","media","career","profile"].includes(saved.view))saved.view="home";
     ensureMarketValuation(saved);
     ensureClubFinances(saved);
-    saved.version=43;
+    saved.version=44;
     return saved;
   }
   function saveState() {
     if(!state)return;
     if(!activeSaveId)activeSaveId=`career-${Date.now().toString(36)}`;
-    localStorage.setItem(saveStorageKey(activeSaveId),JSON.stringify(state));saveMetadata(state,activeSaveId);
+    const storageKey=saveStorageKey(activeSaveId);try{localStorage.setItem(storageKey,JSON.stringify(state));saveMetadata(state,activeSaveId);}catch(error){if(error?.name!=="QuotaExceededError")throw error;compactWorldPlayerStats(state);state.matchReports=(state.matchReports||[]).slice(0,260);state.fixtureArchives=(state.fixtureArchives||[]).slice(0,12);state.media=(state.media||[]).slice(0,40);state.notifications=(state.notifications||[]).slice(0,30);try{localStorage.setItem(storageKey,JSON.stringify(state));saveMetadata(state,activeSaveId);toast("存档数据已压缩，操作可以继续");}catch(retryError){console.error("存档压缩后仍无法保存",retryError);toast("本地存储空间不足，已保留当前页面状态");}}
   }
   function resetSave() {
     if(activeSaveId)localStorage.removeItem(saveStorageKey(activeSaveId));
